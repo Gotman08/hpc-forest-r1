@@ -1,0 +1,54 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <algorithm>\n#include <cstdint>\n#include <iostream>\n#include <utility>\n#include <vector>\n\n#if defined(__aarch64__)\n#include <arm_neon.h>\n#endif\n\nusing namespace std;\n\nconstexpr int32_t MOD = 1000000007;\n\n#if defined(__aarch64__)\nstatic inline int32x4_t reduce_mod(int32x4_t values, int32x4_t mod_vec) {\n    uint32x4_t ge_mask = vcgeq_s32(values, mod_vec);\n    uint32x4_t mod_bits = vreinterpretq_u32_s32(mod_vec);\n    int32x4_t correction = vreinterpretq_s32_u32(vandq_u32(ge_mask, mod_bits));\n    return vsubq_s32(values, correction);\n}\n\nstatic inline int32x4_t scan_four(const vector<int32_t>& previous, int offset,\n                                  int32x4_t zero, int32x4_t mod_vec) {\n    int32x4_t values = vld1q_s32(previous.data() + offset);\n    values = vaddq_s32(values, vextq_s32(zero, values, 3));\n    values = reduce_mod(values, mod_vec);\n    values = vaddq_s32(values, vextq_s32(zero, values, 2));\n    return reduce_mod(values, mod_vec);\n}\n\nstatic inline int32x4_t add_carry(int32x4_t values, int32_t carry,\n                                  int32x4_t mod_vec) {\n    values = vaddq_s32(values, vdupq_n_s32(carry));\n    return reduce_mod(values, mod_vec);\n}\n#endif\n\nstatic inline void fill_open_segment(vector<int32_t>& row, int begin, int end) {\n    int j = begin;\n    int32_t carry = (begin == 0) ? 0 : row[begin - 1];\n\n#if defined(__aarch64__)\n    const int32x4_t zero = vdupq_n_s32(0);\n    const int32x4_t mod_vec = vdupq_n_s32(MOD);\n    for (; j + 8 <= end; j += 8) {\n        const int32x4_t first = scan_four(row, j, zero, mod_vec);\n        const int32x4_t second = scan_four(row, j + 4, zero, mod_vec);\n        const int32x4_t first_result = add_carry(first, carry, mod_vec);\n        const int32x4_t second_result =\n            add_carry(second, vgetq_lane_s32(first_result, 3), mod_vec);\n        vst1q_s32(row.data() + j, first_result);\n        vst1q_s32(row.data() + j + 4, second_result);\n        carry = vgetq_lane_s32(second_result, 3);\n    }\n    for (; j + 4 <= end; j += 4) {\n        int32x4_t values = scan_four(row, j, zero, mod_vec);\n        values = add_carry(values, carry, mod_vec);\n        vst1q_s32(row.data() + j, values);\n        carry = vgetq_lane_s32(values, 3);\n    }\n#endif\n\n    for (; j < end; ++j) {\n        int32_t value = row[j] + carry;\n        if (value >= MOD) value -= MOD;\n        row[j] = value;\n        carry = value;\n    }\n}\n\nstatic int mod_pow(int base, int exponent) {\n    int64_t result = 1;\n    int64_t factor = base;\n    while (exponent > 0) {\n        if (exponent & 1) result = result * factor % MOD;\n        factor = factor * factor % MOD;\n        exponent >>= 1;\n    }\n    return static_cast<int>(result);\n}\n\nstatic int binomial(int total, int chosen, const vector<int>& factorial,\n                    const vector<int>& inverse_factorial) {\n    if (chosen < 0 || chosen > total) return 0;\n    int64_t result = factorial[total];\n    result = result * inverse_factorial[chosen] % MOD;\n    result = result * inverse_factorial[total - chosen] % MOD;\n    return static_cast<int>(result);\n}\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n\n    int n, m;\n    if (!(cin >> n >> m)) return 0;\n\n    vector<vector<int32_t>> blocked_by_row(n);\n    for (int k = 0; k < m; ++k) {\n        int row, column;\n        cin >> row >> column;\n        blocked_by_row[row].push_back(column);\n    }\n\n    uint64_t obstacle_count = 0;\n    for (auto& row : blocked_by_row) {\n        sort(row.begin(), row.end());\n        row.erase(unique(row.begin(), row.end()), row.end());\n        obstacle_count += static_cast<uint64_t>(row.size());\n    }\n\n    const bool blocked_start = binary_search(blocked_by_row[0].begin(),\n                                              blocked_by_row[0].end(), 0);\n    const bool blocked_finish = binary_search(blocked_by_row[n - 1].begin(),\n                                               blocked_by_row[n - 1].end(), n - 1);\n    if (blocked_start || blocked_finish) {\n        cout << 0 << '\\n';\n        return 0;\n    }\n    if (n == 1) {\n        cout << 1 << '\\n';\n        return 0;\n    }\n\n    const uint64_t sparse_pair_work = obstacle_count * (obstacle_count + 1) / 2;\n    const uint64_t dense_cell_work = static_cast<uint64_t>(n) * static_cast<uint64_t>(n);\n\n    if (sparse_pair_work <= dense_cell_work / 1024) {\n        vector<pair<int, int>> obstacles;\n        obstacles.reserve(static_cast<size_t>(obstacle_count));\n        for (int row = 0; row < n; ++row) {\n            for (int32_t column : blocked_by_row[row]) {\n                obstacles.emplace_back(row, static_cast<int>(column));\n            }\n        }\n\n        const int max_path_length = 2 * n - 2;\n        vector<int> factorial(static_cast<size_t>(max_path_length) + 1);\n        vector<int> inverse_factorial(static_cast<size_t>(max_path_length) + 1);\n        factorial[0] = 1;\n        for (int i = 1; i <= max_path_length; ++i) {\n            factorial[i] = static_cast<int>(\n                static_cast<int64_t>(factorial[i - 1]) * i % MOD);\n        }\n        inverse_factorial[max_path_length] =\n            mod_pow(factorial[max_path_length], MOD - 2);\n        for (int i = max_path_length; i > 0; --i) {\n            inverse_factorial[i - 1] = static_cast<int>(\n                static_cast<int64_t>(inverse_factorial[i]) * i % MOD);\n        }\n\n        vector<int> ways_to_obstacle(obstacles.size());\n        for (size_t i = 0; i < obstacles.size(); ++i) {\n            const int row = obstacles[i].first;\n            const int column = obstacles[i].second;\n            int ways = binomial(row + column, row, factorial, inverse_factorial);\n\n            for (size_t j = 0; j < i; ++j) {\n                const int previous_row = obstacles[j].first;\n                const int previous_column = obstacles[j].second;\n                if (previous_row > row || previous_column > column) continue;\n\n                const int segment_paths = binomial(\n                    (row - previous_row) + (column - previous_column),\n                    row - previous_row, factorial, inverse_factorial);\n                const int paths_through_previous = static_cast<int>(\n                    static_cast<int64_t>(ways_to_obstacle[j]) * segment_paths % MOD);\n                ways -= paths_through_previous;\n                if (ways < 0) ways += MOD;\n            }\n            ways_to_obstacle[i] = ways;\n        }\n\n        int answer = binomial(2 * n - 2, n - 1, factorial, inverse_factorial);\n        for (size_t i = 0; i < obstacles.size(); ++i) {\n            const int row = obstacles[i].first;\n            const int column = obstacles[i].second;\n            const int segment_paths = binomial(\n                (n - 1 - row) + (n - 1 - column), n - 1 - row,\n                factorial, inverse_factorial);\n            const int paths_through_obstacle = static_cast<int>(\n                static_cast<int64_t>(ways_to_obstacle[i]) * segment_paths % MOD);\n            answer -= paths_through_obstacle;\n            if (answer < 0) answer += MOD;\n        }\n        cout << answer << '\\n';\n        return 0;\n    }\n\n    vector<int32_t> dp(n, 0);\n    dp[0] = 1;\n    for (int row = 0; row < n; ++row) {\n        int begin = 0;\n        for (int32_t blocked_column_value : blocked_by_row[row]) {\n            const int blocked_column = static_cast<int>(blocked_column_value);\n            fill_open_segment(dp, begin, blocked_column);\n            dp[blocked_column] = 0;\n            begin = blocked_column + 1;\n        }\n        fill_open_segment(dp, begin, n);\n    }\n\n    cout << dp[n - 1] << '\\n';\n    return 0;\n}\n",
+        "path": "src/solution.cpp"
+      }
+    ],
+    "hypothesis": "Combining the sparse inclusion-exclusion path with a one-row in-place dense recurrence and the four-lane segmented NEON scan may reduce dense-path memory footprint while retaining an alternative for sufficiently sparse obstacles. The complete program should be evaluated end to end.",
+    "notes": "The dense fallback processes each vector group before overwriting its input, so the in-place row retains the previous-row values needed by subsequent groups. No commands were executed; correctness and performance are for controller evaluation.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [
+      "8768334437d34eae",
+      "c9812ab370824cc1",
+      "b8f2c96bf81d4c93"
+    ],
+    "transformations": [
+      "Use sorted and deduplicated per-row obstacle lists, with explicit blocked-endpoint and N=1 handling.",
+      "Select factorial-based obstacle inclusion-exclusion only when estimated pair work is at most one 1024th of dense grid work; otherwise use the dense fallback.",
+      "Use an in-place single DP row for the dense recurrence, processing each segment left-to-right and resetting at blocked cells.",
+      "Retain the four-lane AArch64 segmented prefix scan, two-group unroll, carry propagation, and scalar fallback."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "8ad8ba9433ff41dcbbb6d444364de4ef",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "b7720b7861f342cf90823975b71c42011d94198351cfeb3f4b32fb7295e691dd",
+  "session_id": "5f1e1aa8bb2540ccbec7326b662069b6",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "fe9aeff20681f2e44009977790cb118e9656972fa942ae2b391397d4bfa4f8cf",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 0,
+        "input_tokens": 26535,
+        "output_tokens": 8379,
+        "reasoning_output_tokens": 5848
+      }
+    ],
+    "llm_calls": 1,
+    "model_requested": "gpt-6-luna",
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 34914,
+    "tool_events": []
+  }
+}

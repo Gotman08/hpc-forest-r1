@@ -1,0 +1,49 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <algorithm>\n#include <iostream>\n#include <vector>\n\nusing namespace std;\n\nconst int MOD = 1000000007;\n\nint main() {\n    int n, m;\n    cin >> n >> m;\n\n    vector<vector<int>> blockedColumns(n);\n    for (int c = 0; c < m; ++c) {\n        int row, column;\n        cin >> row >> column;\n        blockedColumns[row].push_back(column);\n    }\n    for (auto& row : blockedColumns) {\n        sort(row.begin(), row.end());\n    }\n\n    vector<int> rowA(n, 0), rowB(n, 0);\n    vector<int>* prev = &rowA;\n    vector<int>* cur = &rowB;\n\n    int running = 0;\n    const vector<int>& firstRowBlocks = blockedColumns[0];\n    auto block = firstRowBlocks.begin();\n    for (int j = 0; j < n; ++j) {\n        const bool isBlocked = block != firstRowBlocks.end() && *block == j;\n        if (isBlocked) {\n            running = 0;\n            do {\n                ++block;\n            } while (block != firstRowBlocks.end() && *block == j);\n        } else if (j == 0) {\n            running = 1;\n        }\n        (*prev)[j] = running;\n    }\n\n    // Small grids avoid the synchronization cost of a parallel team.\n    if (n < 4096) {\n        for (int i = 1; i < n; ++i) {\n            const vector<int>& obstacles = blockedColumns[i];\n            auto obstacle = obstacles.begin();\n            int prefix = 0;\n            for (int j = 0; j < n; ++j) {\n                const bool isBlocked = obstacle != obstacles.end() && *obstacle == j;\n                if (isBlocked) {\n                    prefix = 0;\n                    (*cur)[j] = 0;\n                    do {\n                        ++obstacle;\n                    } while (obstacle != obstacles.end() && *obstacle == j);\n                } else {\n                    prefix += (*prev)[j];\n                    if (prefix >= MOD) prefix -= MOD;\n                    (*cur)[j] = prefix;\n                }\n            }\n            swap(prev, cur);\n        }\n    } else {\n        const int chunks = min(4, n);\n        vector<int> firstBlocked(chunks, -1);\n        vector<int> localEnd(chunks, 0);\n        vector<int> incoming(chunks, 0);\n\n        // Each chunk computes a local segmented prefix. A short serial scan of\n        // chunk summaries supplies the carry into each chunk; only values\n        // before that chunk's first obstacle need the carry added afterward.\n        #pragma omp parallel num_threads(4)\n        {\n            for (int i = 1; i < n; ++i) {\n                const vector<int>& obstacles = blockedColumns[i];\n\n                #pragma omp for schedule(static)\n                for (int t = 0; t < chunks; ++t) {\n                    const int lo = (n * t) / chunks;\n                    const int hi = (n * (t + 1)) / chunks;\n                    auto obstacle = lower_bound(obstacles.begin(), obstacles.end(), lo);\n                    int prefix = 0;\n                    int first = -1;\n\n                    for (int j = lo; j < hi; ++j) {\n                        const bool isBlocked = obstacle != obstacles.end() && *obstacle == j;\n                        if (isBlocked) {\n                            if (first == -1) first = j;\n                            prefix = 0;\n                            (*cur)[j] = 0;\n                            do {\n                                ++obstacle;\n                            } while (obstacle != obstacles.end() && *obstacle == j);\n                        } else {\n                            prefix += (*prev)[j];\n                            if (prefix >= MOD) prefix -= MOD;\n                            (*cur)[j] = prefix;\n                        }\n                    }\n                    firstBlocked[t] = first;\n                    localEnd[t] = prefix;\n                }\n\n                #pragma omp single\n                {\n                    int carry = 0;\n                    for (int t = 0; t < chunks; ++t) {\n                        incoming[t] = carry;\n                        if (firstBlocked[t] == -1) {\n                            carry += localEnd[t];\n                            if (carry >= MOD) carry -= MOD;\n                        } else {\n                            carry = localEnd[t];\n                        }\n                    }\n                }\n\n                #pragma omp for schedule(static)\n                for (int t = 0; t < chunks; ++t) {\n                    const int lo = (n * t) / chunks;\n                    const int hi = (n * (t + 1)) / chunks;\n                    const int stop = firstBlocked[t] == -1 ? hi : firstBlocked[t];\n                    for (int j = lo; j < stop; ++j) {\n                        int value = (*cur)[j] + incoming[t];\n                        if (value >= MOD) value -= MOD;\n                        (*cur)[j] = value;\n                    }\n                }\n\n                #pragma omp single\n                {\n                    swap(prev, cur);\n                }\n            }\n        }\n    }\n\n    cout << (*prev)[n - 1] << '\\n';\n    return 0;\n}\n",
+        "path": "src/solution.cpp"
+      }
+    ],
+    "hypothesis": "For wide grids, statically work-sharing each row as four independent segmented-prefix chunks can parallelize the dense DP while a constant-size carry scan preserves values across chunk boundaries. A sequential path avoids OpenMP synchronization overhead on smaller grids, and storing obstacles by row reduces mask storage from O(n²) to O(n + m).",
+    "notes": "Source-only experiment for the supplied four-core ARM64/GCC target. Correctness relies on the row recurrence and exact carry propagation; no execution or benchmark was performed. OpenMP directives provide parallel execution when the build enables OpenMP and remain semantically safe if directives are ignored.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace the n-by-n blocked-cell mask with sorted blocked-column lists per row, using O(n + m) obstacle storage.",
+      "Keep the row dependency sequential and implement each wide row as four statically scheduled local segmented prefix scans, followed by a serial scan of chunk summaries and parallel carry correction before the next row.",
+      "Use a sequential row scan below a fixed grid-size threshold to avoid parallel-team and synchronization overhead for small workloads."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "cf26979f80074162968e1b379c5c9a9b",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "c3e9cc305a05c05cd8e68f4ea1c8b6d0dda1f41e280b661c768992c3fc5ca249",
+  "session_id": "5f1e1aa8bb2540ccbec7326b662069b6",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "c48eaa557b97c31b2d9bc77af56205ce11010a6c1c5c0c01114e9311569e5a18",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 0,
+        "input_tokens": 10994,
+        "output_tokens": 10440,
+        "reasoning_output_tokens": 8933
+      }
+    ],
+    "llm_calls": 1,
+    "model_requested": "gpt-6-luna",
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 21434,
+    "tool_events": []
+  }
+}

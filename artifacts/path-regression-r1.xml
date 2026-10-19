@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="6.428" timestamp="2026-10-19T19:54:55.884781+02:00" hostname="BIgPcFix"><testcase classname="tests.test_gitops" name="test_imported_non_executable_runner_is_clean_and_executable" time="1.974" /><testcase classname="tests.test_gitops" name="test_git_snapshot_survives_long_path_without_persisting_settings" time="0.034"><failure message="hpc_forest.core.InfrastructureError: Git command failed (init): fatal: cannot change to 'C:\Users\nicol\Documents\Codex\2026-10-19\alors-pour-commencer-j-aimerais-bien-2\R1\artifacts\tmp-path-regression-r1\test_git_snapshot_survives_lon0\long-path\nested-component\nested-component\nested-component\nested-component\nested-component\nested-component\snapshot': Filename too long">repo = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-19/alors-pour-commencer-j-aimerais-bien-2/R1/artifacts/tmp-path-re...g-path/nested-component/nested-component/nested-component/nested-component/nested-component/nested-component/snapshot')
+binary = False, args = ('init', '-b', 'main')
+
+    def git(repo: Path, *args: str, binary: bool = False):
+        command = ["git"]
+        if os.name == "nt":
+            # Scope long-path support to this command; never change the user's Git config.
+            command += ["-c", "core.longpaths=true"]
+        command += ["-C", str(repo), *args]
+        try:
+&gt;           result = subprocess.run(
+                command,
+                capture_output=True,
+                check=True,
+                text=not binary,
+                encoding=None if binary else "utf-8",
+                timeout=120,
+            )
+
+src\hpc_forest\gitops.py:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+input = None, capture_output = True, timeout = 120, check = True
+popenargs = (['git', '-c', 'core.longpaths=true', '-C', 'C:\\Users\\nicol\\Documents\\Codex\\2026-10-19\\alors-pour-commencer-j-ai...nt\\nested-component\\nested-component\\nested-component\\nested-component\\nested-component\\snapshot', 'init', ...],)
+kwargs = {'text': True, 'encoding': 'utf-8', 'stdout': -1, 'stderr': -1}
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output &amp; stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+&gt;               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['git', '-c', 'core.longpaths=true', '-C', 'C:\\Users\\nicol\\Documents\\Codex\\2026-10-19\\alors-pour-commencer-j-aimerais-bien-2\\R1\\artifacts\\tmp-path-regression-r1\\test_git_snapshot_survives_lon0\\long-path\\nested-component\\nested-component\\nested-component\\nested-component\\nested-component\\nested-component\\snapshot', 'init', '-b', 'main']' returned non-zero exit status 128.
+
+C:\Users\nicol\AppData\Local\Programs\Python\Python313\Lib\subprocess.py:577: CalledProcessError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-19/alors-pour-commencer-j-aimerais-bien-2/R1/artifacts/tmp-path-regression-r1/test_git_snapshot_survives_lon0')
+
+    @pytest.mark.skipif(os.name != "nt", reason="Windows Git path-length regression")
+    def test_git_snapshot_survives_long_path_without_persisting_settings(tmp_path):
+        source = tmp_path / "source"
+        (source / "src").mkdir(parents=True)
+        (source / "src" / "main.c").write_text("int main(void) { return 0; }\n")
+        destination = tmp_path / "long-path"
+        while len(str(destination)) &lt; 260:
+            destination /= "nested-component"
+        destination /= "snapshot"
+&gt;       commit = initialize_source(source, destination)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_gitops.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\hpc_forest\gitops.py:39: in initialize_source
+    git(destination, "init", "-b", "main")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+repo = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-19/alors-pour-commencer-j-aimerais-bien-2/R1/artifacts/tmp-path-re...g-path/nested-component/nested-component/nested-component/nested-component/nested-component/nested-component/snapshot')
+binary = False, args = ('init', '-b', 'main')
+
+    def git(repo: Path, *args: str, binary: bool = False):
+        command = ["git"]
+        if os.name == "nt":
+            # Scope long-path support to this command; never change the user's Git config.
+            command += ["-c", "core.longpaths=true"]
+        command += ["-C", str(repo), *args]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                check=True,
+                text=not binary,
+                encoding=None if binary else "utf-8",
+                timeout=120,
+            )
+            return result.stdout if binary else result.stdout.strip()
+        except (OSError, subprocess.SubprocessError) as exc:
+            detail = getattr(exc, "stderr", "")
+&gt;           raise InfrastructureError(f"Git command failed ({args[0]}): {detail or exc}") from exc
+E           hpc_forest.core.InfrastructureError: Git command failed (init): fatal: cannot change to 'C:\Users\nicol\Documents\Codex\2026-10-19\alors-pour-commencer-j-aimerais-bien-2\R1\artifacts\tmp-path-regression-r1\test_git_snapshot_survives_lon0\long-path\nested-component\nested-component\nested-component\nested-component\nested-component\nested-component\snapshot': Filename too long
+
+src\hpc_forest\gitops.py:29: InfrastructureError</failure></testcase><testcase classname="tests.test_node_harness" name="test_controller_creates_one_tree_node_and_settles_all_inner_calls" time="3.250" /></testsuite></testsuites>

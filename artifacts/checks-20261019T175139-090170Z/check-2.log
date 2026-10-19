@@ -1,0 +1,43 @@
+..................................................................sss... [ 30%]
+........................................................................ [ 60%]
+.............F.......................................................... [ 90%]
+.......................                                                  [100%]
+================================== FAILURES ===================================
+______ test_controller_creates_one_tree_node_and_settles_all_inner_calls ______
+
+tmp_path = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-19/alors-pour-commencer-j-aimerais-bien-2/R1/artifacts/checks-20261019T175139-090170Z/tmp/test_controller_creates_one_tr0')
+config = {'problem': 'matmul', 'method': 'H', 'backend': 'codex', 'seed': 23, ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000119AA3FE820>
+
+    def test_controller_creates_one_tree_node_and_settles_all_inner_calls(tmp_path, config, monkeypatch):
+        source, trusted = tmp_path / "source", tmp_path / "validation"
+        make_files(source, trusted)
+        root = tmp_path / "campaign"
+        config["backend"] = "codex"
+        config["roles"] = ["A"]
+        config["harness"].update(enabled=True, max_attempts=2, call_token_ceiling=1000)
+        config["budget"].update(mission_tokens=2000, generation_seconds=30, max_workers=1)
+        config["protocol"]["benchmark"] = ["{python}", "-c", "import time; time.sleep(.005)"]
+        monkeypatch.setattr("hpc_forest.controller.compiler_identity", lambda: {"fixture": "python-compiler"})
+        create_workspace(root, config, source, trusted)
+        with Controller(root) as controller:
+            controller.backend = Scripted(["RESULT =\n", "RESULT = 7\n# generated repair\n"])
+            controller.run(max_batches=1)
+            trials = controller.db.rows("SELECT * FROM trials")
+            assert len(trials) == 1
+            outcome = json.loads(trials[0]["result"])
+>           assert outcome["status"] == "valid" and len(outcome["times"]) == 2
+E           AssertionError: assert ('infrastructure_error' == 'valid'
+E             
+E             - valid
+E             + infrastructure_error)
+
+tests\test_node_harness.py:262: AssertionError
+---------------------------- Captured stdout call -----------------------------
+A 9d3a37930bf346e2: infrastructure_error
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_contracts.py:127: gcc is unavailable
+SKIPPED [1] tests\test_contracts.py:180: gcc is unavailable
+SKIPPED [1] tests\test_contracts.py:180: g++ is unavailable
+FAILED tests/test_node_harness.py::test_controller_creates_one_tree_node_and_settles_all_inner_calls
+1 failed, 235 passed, 3 skipped in 81.95s (0:01:21)

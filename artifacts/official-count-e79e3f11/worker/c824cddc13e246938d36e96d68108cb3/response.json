@@ -1,0 +1,49 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <iostream>\n#include <vector>\n#include <algorithm>\n\nusing namespace std;\n\nconst int MOD = 1000000007;\n\nint main() {\n    int n, m;\n    cin >> n >> m;\n    vector<vector<bool> > blockedCells(n, vector<bool>(n, false));\n    for (int c = 0; c < m; c++) {\n        int i, j;\n        cin >> i >> j;\n        blockedCells[i][j] = true;\n    }\n\n    if (n < 256) {\n        vector<vector<int> > dp(2, vector<int>(n, 0));\n\n        if (!blockedCells[0][0])\n            dp[0][0] = 1;\n\n        for (int j = 1; j < n; j++)\n            if (!blockedCells[0][j]) dp[0][j] = dp[0][j - 1];\n        dp[1][n - 1] = dp[0][n - 1];\n\n        for (int i = 1; i < n; i++) {\n            for (int j = 0; j < n; j++) {\n                int ans = 0;\n                if (!blockedCells[i][j]) {\n                    ans = dp[0][j];\n                    if (j != 0) ans += dp[1][j - 1];\n                }\n                dp[1][j] = ans % MOD;\n            }\n            for (int j = 0; j < n; j++) dp[0][j] = dp[1][j];\n        }\n\n        cout << dp[1][n - 1] << endl;\n        return 0;\n    }\n\n    vector<int> previous(n, 0), current(n, 0);\n    if (!blockedCells[0][0]) previous[0] = 1;\n\n    auto updateCell = [&](int row, int diagonal) {\n        const int column = diagonal - row;\n        if (blockedCells[row][column]) {\n            current[row] = 0;\n            return;\n        }\n\n        int value = 0;\n        if (row > 0) value = previous[row - 1];\n        if (column > 0) value += previous[row];\n        if (value >= MOD) value -= MOD;\n        current[row] = value;\n    };\n\n    #pragma omp parallel\n    {\n        for (int diagonal = 1; diagonal <= 2 * n - 2; diagonal++) {\n            const int firstRow = max(0, diagonal - (n - 1));\n            const int lastRow = min(n - 1, diagonal);\n\n            #pragma omp for schedule(static)\n            for (int row = firstRow; row <= lastRow; row++)\n                updateCell(row, diagonal);\n\n            #pragma omp single\n            {\n                previous.swap(current);\n            }\n        }\n    }\n\n    cout << previous[n - 1] << endl;\n}\n",
+        "path": "src/solution.cpp"
+      }
+    ],
+    "hypothesis": "For sufficiently large grids, independent cells on each anti-diagonal can be distributed with static OpenMP worksharing; synchronization is needed only between dependent diagonals. Retaining the original row-wise implementation below a size threshold avoids parallel overhead on small workloads.",
+    "notes": "The anti-diagonal recurrence uses two O(n) buffers and applies the modulus after combining the at-most-two predecessor values. The controller should evaluate correctness and performance.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Kept the original row-wise DP for n < 256 to preserve the low-overhead path for small workloads.",
+      "For larger n, computed the DP in anti-diagonal wavefront order so cells within each diagonal can be processed independently.",
+      "Used one OpenMP parallel region with static worksharing per diagonal and synchronization before swapping the two rolling buffers."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "c824cddc13e246938d36e96d68108cb3",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "943da7448b07bb35b3d025100a759fcef2ccac26a57d83814b711fdd1b47978f",
+  "session_id": "e79e3f1196a544a39258efe6a905e99f",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "2236c92cb0049dd978bed5bbbe41f288b1c9f1391b0701237d57c7df5e1ee4f9",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 10752,
+        "input_tokens": 12973,
+        "output_tokens": 10885,
+        "reasoning_output_tokens": 9977
+      }
+    ],
+    "llm_calls": 1,
+    "model_requested": "gpt-6-luna",
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 23858,
+    "tool_events": []
+  }
+}

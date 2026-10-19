@@ -1,0 +1,49 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <algorithm>\n#include <iostream>\n#include <vector>\n\nusing namespace std;\n\nstatic const long long MOD = 1000000007LL;\n\nstruct Point {\n    int row;\n    int col;\n    long long ways;\n};\n\nstatic long long mod_pow(long long base, long long exponent) {\n    long long result = 1;\n    while (exponent > 0) {\n        if (exponent & 1LL) result = result * base % MOD;\n        base = base * base % MOD;\n        exponent >>= 1LL;\n    }\n    return result;\n}\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n\n    int n, m;\n    if (!(cin >> n >> m)) return 0;\n\n    vector<Point> blocked;\n    blocked.reserve(static_cast<size_t>(m));\n    for (int i = 0; i < m; ++i) {\n        int row, col;\n        cin >> row >> col;\n        blocked.push_back({row, col, 0});\n    }\n\n    sort(blocked.begin(), blocked.end(), [](const Point& a, const Point& b) {\n        if (a.row != b.row) return a.row < b.row;\n        return a.col < b.col;\n    });\n    blocked.erase(unique(blocked.begin(), blocked.end(), [](const Point& a, const Point& b) {\n        return a.row == b.row && a.col == b.col;\n    }), blocked.end());\n\n    for (const Point& point : blocked) {\n        if ((point.row == 0 && point.col == 0) ||\n            (point.row == n - 1 && point.col == n - 1)) {\n            cout << 0 << '\\n';\n            return 0;\n        }\n    }\n\n    const long long blocker_count = static_cast<long long>(blocked.size());\n    const long long sparse_pairs = blocker_count * (blocker_count - 1) / 2;\n    const long long dense_cells = static_cast<long long>(n) * n;\n\n    // Use the obstacle recurrence when its pair scan is estimated cheaper;\n    // otherwise retain a contiguous, one-row dynamic-programming fallback.\n    if (sparse_pairs <= dense_cells / 4) {\n        const int limit = 2 * n - 2;\n        vector<long long> factorial(static_cast<size_t>(limit) + 1, 1);\n        vector<long long> inverse_factorial(static_cast<size_t>(limit) + 1, 1);\n        for (int i = 1; i <= limit; ++i) {\n            factorial[i] = factorial[i - 1] * i % MOD;\n        }\n        if (limit >= 0) {\n            inverse_factorial[limit] = mod_pow(factorial[limit], MOD - 2);\n            for (int i = limit; i > 0; --i) {\n                inverse_factorial[i - 1] = inverse_factorial[i] * i % MOD;\n            }\n        }\n\n        const auto choose = [&](int total, int selected) -> long long {\n            if (selected < 0 || selected > total) return 0;\n            return factorial[total] * inverse_factorial[selected] % MOD *\n                   inverse_factorial[total - selected] % MOD;\n        };\n\n        for (size_t i = 0; i < blocked.size(); ++i) {\n            Point& current = blocked[i];\n            long long ways = choose(current.row + current.col, current.row);\n\n            for (size_t j = 0; j < i; ++j) {\n                const Point& previous = blocked[j];\n                if (previous.row <= current.row && previous.col <= current.col) {\n                    const int row_delta = current.row - previous.row;\n                    const int col_delta = current.col - previous.col;\n                    const long long paths = choose(row_delta + col_delta, row_delta);\n                    ways -= previous.ways * paths % MOD;\n                    if (ways < 0) ways += MOD;\n                }\n            }\n            current.ways = ways;\n        }\n\n        long long answer = choose(2 * n - 2, n - 1);\n        for (const Point& point : blocked) {\n            const int row_delta = n - 1 - point.row;\n            const int col_delta = n - 1 - point.col;\n            const long long paths = choose(row_delta + col_delta, row_delta);\n            answer -= point.ways * paths % MOD;\n            if (answer < 0) answer += MOD;\n        }\n        cout << answer << '\\n';\n        return 0;\n    }\n\n    vector<int> dp(static_cast<size_t>(n), 0);\n    size_t obstacle_index = 0;\n    for (int row = 0; row < n; ++row) {\n        size_t row_end = obstacle_index;\n        while (row_end < blocked.size() && blocked[row_end].row == row) ++row_end;\n\n        size_t row_obstacle = obstacle_index;\n        for (int col = 0; col < n; ++col) {\n            if (row_obstacle < row_end && blocked[row_obstacle].col == col) {\n                dp[col] = 0;\n                ++row_obstacle;\n            } else {\n                long long ways = dp[col];\n                if (col > 0) ways += dp[col - 1];\n                if (ways >= MOD) ways -= MOD;\n                dp[col] = static_cast<int>(ways);\n            }\n        }\n        obstacle_index = row_end;\n    }\n\n    cout << dp[n - 1] << '\\n';\n    return 0;\n}\n",
+        "path": "src/solution.cpp"
+      }
+    ],
+    "hypothesis": "Sparse obstacle counting will avoid the baseline's quadratic-size blocked-grid storage and can reduce work substantially when there are few blocked cells. An adaptive one-row DP fallback limits the risk of scanning all obstacle pairs when their count is comparatively large.",
+    "notes": "No commands were run and no measurements are claimed. The fallback retains O(N²) work but uses O(N+M) memory; the sparse recurrence uses O(M²) pair work and O(N+M) memory after deduplication.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace the N-by-N blocked-cell matrix with a sorted, deduplicated contiguous list of blocked coordinates.",
+      "For a modest obstacle-pair count, use binomial path counts and subtract paths through earlier dominating obstacles.",
+      "Select a one-dimensional, row-major in-place DP fallback when the estimated pair scan is not favorable."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "75787c5ca3bf4a6d8fdd4ef26225a615",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "dbebdd2d138b0aecdd30e0ce4e57f5d85d31e4b28feb1fdd9f35168c6dccd02c",
+  "session_id": "e79e3f1196a544a39258efe6a905e99f",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "74aceb62a5b0d8af476d08332f589435abec1aaeccb82c5fcb3d1db4e711e303",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4224,
+        "input_tokens": 10931,
+        "output_tokens": 8045,
+        "reasoning_output_tokens": 6510
+      }
+    ],
+    "llm_calls": 1,
+    "model_requested": "gpt-6-luna",
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 18976,
+    "tool_events": []
+  }
+}

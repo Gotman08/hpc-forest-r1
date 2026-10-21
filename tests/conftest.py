@@ -19,9 +19,14 @@ def need_compiler():
 @pytest.fixture
 def config():
     c = load_config()
+    # Keep the original hard-deadline contract covered; the new default lifecycle
+    # has its own explicit finish_started_config fixture and end-to-end tests.
+    c["completion"] = {"policy": "hard"}
     c["budget"].update(
-        search_slots=6, confirmation_slots=3, wall_seconds=600, infrastructure_retries=0
+        search_slots=6, confirmation_slots=3, wall_seconds=600, infrastructure_retries=0,
+        tokens=300000, mission_tokens=16000,
     )
+    c["harness"]["call_token_ceiling"] = 16000
     c["schedule"].update(cycles=1, trials_per_role_per_cycle=1, integrations_per_cycle=2)
     c["protocol"].update(
         repetitions=2,
@@ -30,6 +35,14 @@ def config():
         benchmark=["{binary}", "96", "17", "2"],
     )
     return c
+
+
+@pytest.fixture
+def finish_started_config(config):
+    config["completion"] = {"policy": "finish-started", "postprocess_tokens": None}
+    config["budget"].update(tokens=None, mission_tokens=None)
+    config["harness"]["call_token_ceiling"] = None
+    return config
 
 
 @pytest.fixture

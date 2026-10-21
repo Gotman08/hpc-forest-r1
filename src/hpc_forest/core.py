@@ -132,11 +132,11 @@ def run_process(
     argv: list[str],
     cwd: Path,
     log: Path,
-    timeout: float,
+    timeout: float | None,
     env: dict[str, str] | None = None,
     stdin: str | None = None,
 ) -> ProcessResult:
-    if timeout <= 0:
+    if timeout is not None and timeout <= 0:
         raise BudgetExhausted("Wall-clock deadline reached")
     log.parent.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
@@ -165,17 +165,19 @@ def run_process(
             # POSIX communicate(timeout=...) polls waitpid with sleeps up to 50 ms
             # when stdout/stderr are files. A watchdog enforces the same limit while
             # the caller observes process completion through a blocking wait.
-            watchdog = threading.Timer(timeout, expire)
-            watchdog.daemon = True
-            watchdog.start()
+            watchdog = threading.Timer(timeout, expire) if timeout is not None else None
+            if watchdog is not None:
+                watchdog.daemon = True
+                watchdog.start()
             try:
                 process.communicate(None if stdin is None else stdin.encode())
             except BaseException:
                 _terminate_owned(process)
                 raise
             finally:
-                watchdog.cancel()
-                watchdog.join()
+                if watchdog is not None:
+                    watchdog.cancel()
+                    watchdog.join()
     except OSError as exc:
         raise InfrastructureError(f"Could not execute {argv[0]}: {exc}") from exc
     result = ProcessResult(
@@ -224,6 +226,7 @@ class Mission:
     sources: list[str] = field(default_factory=list)
     source_commits: list[str] = field(default_factory=list)
     transformations: dict[str, Any] = field(default_factory=dict)
+    budget_phase: str = "search"
 
 
 @dataclass

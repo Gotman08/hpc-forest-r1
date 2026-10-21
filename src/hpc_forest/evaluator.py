@@ -24,6 +24,7 @@ from .core import (
     verify_protected,
 )
 from .gitops import ensure_clean, git
+from .support.budgets import expired, time_left
 
 
 def target_identity(config: dict) -> dict:
@@ -50,8 +51,36 @@ def target_identity(config: dict) -> dict:
     }
 
 
+def _child_rusage() -> dict[str, float | int] | None:
+    """Global child counters for diagnostics; never a candidate resource measurement."""
+    try:
+        import resource
+
+        ru = resource.getrusage(resource.RUSAGE_CHILDREN)
+        return {
+            "utime": float(ru.ru_utime),
+            "stime": float(ru.ru_stime),
+            "minflt": int(ru.ru_minflt),
+        }
+    except (ImportError, OSError, AttributeError):
+        return None
+
+
+def _summarize_rusage(samples: list[dict[str, float | int]]) -> dict[str, float | int]:
+    return {
+        "user_seconds": round(statistics.mean(float(s["user_seconds"]) for s in samples), 6),
+        "sys_seconds": round(statistics.mean(float(s["sys_seconds"]) for s in samples), 6),
+        "cpu_utilization_ratio": round(
+            statistics.mean(float(s["cpu_utilization_ratio"]) for s in samples), 4
+        ),
+        "minor_page_faults": round(
+            statistics.mean(float(s["minor_page_faults"]) for s in samples), 1
+        ),
+    }
+
+
 class Evaluator:
-    def __init__(self, root: Path, config: dict, manifest: dict, protocol_id: str, deadline: float):
+    def __init__(self, root: Path, config: dict, manifest: dict, protocol_id: str, deadline: float | None):
         self.root, self.config = root, config
         self.protocol = config["protocol"]
         self.manifest, self.protocol_id, self.deadline = manifest, protocol_id, deadline
@@ -64,7 +93,7 @@ class Evaluator:
 
     def _timeout(self, build=False) -> float:
         limit = self.protocol["build_timeout_seconds" if build else "timeout_seconds"]
-        return min(limit, self.deadline - time.time())
+        return time_left(self.deadline, limit)
 
     def _variables(self, worktree: Path, build: Path, phase: str) -> dict:
         return {
@@ -77,16 +106,19 @@ class Evaluator:
         }
 
     def _run(self, name, variables, log, build=False):
-        return run_process(
+        limit = float(self.protocol["build_timeout_seconds" if build else "timeout_seconds"])
+        remaining = time_left(self.deadline, limit)
+        result = run_process(
             expand_command(self.protocol[name], **variables),
             Path(variables["worktree"]),
             log,
-            self._timeout(build),
+            min(limit, remaining),
             self.protocol["environment"],
         )
+        result.budget_shortened = bool(result.timed_out and self.deadline is not None and remaining < limit)
+        return result
 
-    def _prepare(self, experiment: str, epoch: int, worktree: Path, commit: str, phase: str,
-                 *, warmups: bool = True):
+    def _build(self, experiment: str, epoch: int, worktree: Path, commit: str, phase: str):
         verify_protected(self.root / "trusted", self.manifest)
         ensure_clean(worktree, commit)
         tree_hash = git(worktree, "rev-parse", "HEAD^{tree}")
@@ -103,6 +135,10 @@ class Evaluator:
         outcome.logs.append(built.log)
         if built.returncode == 70:
             raise InfrastructureError("Compiler/toolchain unavailable; inspect build log")
+        if getattr(built, "budget_shortened", False):
+            outcome.status, outcome.correct, outcome.score = "cancelled_budget", None, None
+            outcome.reason = "Campaign wall-clock budget exhausted before candidate build timeout"
+            return outcome, variables, logs
         if built.returncode or built.timed_out:
             outcome.status, outcome.correct, outcome.score = "build_failed", False, 0.0
             outcome.reason = "Build failed or exceeded candidate timeout"
@@ -110,10 +146,19 @@ class Evaluator:
         if not Path(variables["binary"]).is_file():
             raise InfrastructureError("Successful build did not produce the contracted executable")
         outcome.binary_sha256 = file_digest(Path(variables["binary"]))
+        return outcome, variables, logs
+
+    def _check(self, outcome: Outcome, variables: dict, logs: Path, *, warmups: bool = True):
+        if outcome.status in {"build_failed", "cancelled_budget"}:
+            return outcome, variables, logs
         checked = self._run("check", variables, logs / "correctness.log")
         outcome.logs.append(checked.log)
         if checked.returncode == 70:
             raise InfrastructureError("Correctness runner infrastructure failed")
+        if getattr(checked, "budget_shortened", False):
+            outcome.status, outcome.correct, outcome.score = "cancelled_budget", None, None
+            outcome.reason = "Campaign wall-clock budget exhausted before candidate check timeout"
+            return outcome, variables, logs
         if checked.returncode or checked.timed_out:
             outcome.status, outcome.correct, outcome.score = "incorrect", False, 0.0
             outcome.reason = "Protected correctness checks failed"
@@ -136,24 +181,75 @@ class Evaluator:
         for i in range(self.protocol["warmups"] if warmups else 0):
             result = self._run("benchmark", variables, logs / f"warmup-{i}.log")
             outcome.logs.append(result.log)
+            if getattr(result, "budget_shortened", False):
+                outcome.status, outcome.correct, outcome.score = "cancelled_budget", None, None
+                outcome.reason = "Campaign wall-clock budget exhausted during warmup"
+                return outcome, variables, logs
             if result.returncode or result.timed_out:
                 outcome.status, outcome.correct, outcome.score = "runtime_failed", False, 0.0
                 return outcome, variables, logs
         return outcome, variables, logs
 
+    def _prepare(self, experiment: str, epoch: int, worktree: Path, commit: str, phase: str,
+                 *, warmups: bool = True):
+        outcome, variables, logs = self._build(experiment, epoch, worktree, commit, phase)
+        return self._check(outcome, variables, logs, warmups=warmups)
+
     def _sample(self, item, index: int) -> None:
         outcome, variables, logs = item
         if file_digest(Path(variables["binary"])) != outcome.binary_sha256:
             raise InfrastructureError("Executable changed after compilation")
+        before_ru = _child_rusage()
         result = self._run("benchmark", variables, logs / f"sample-{index}.log")
+        after_ru = _child_rusage()
         if file_digest(Path(variables["binary"])) != outcome.binary_sha256:
             raise InfrastructureError("Executable changed during benchmarking")
         outcome.logs.append(result.log)
-        if result.returncode or result.timed_out:
+        if getattr(result, "budget_shortened", False):
+            outcome.status, outcome.correct, outcome.score = "cancelled_budget", None, None
+            outcome.reason = "Campaign wall-clock budget exhausted during benchmark sample"
+            outcome.times.clear()
+            variables.pop("_rusage_samples", None)
+        elif result.returncode or result.timed_out:
             outcome.status, outcome.correct, outcome.score = "runtime_failed", False, 0.0
             outcome.times.clear()
+            variables.pop("_rusage_samples", None)
         else:
             outcome.times.append(result.seconds)
+            if before_ru is not None and after_ru is not None:
+                user_s = max(0.0, float(after_ru["utime"]) - float(before_ru["utime"]))
+                sys_s = max(0.0, float(after_ru["stime"]) - float(before_ru["stime"]))
+                ratio = (user_s + sys_s) / result.seconds if result.seconds > 0 else 0.0
+                variables.setdefault("_rusage_samples", []).append(
+                    {
+                        "user_seconds": round(user_s, 6),
+                        "sys_seconds": round(sys_s, 6),
+                        "cpu_utilization_ratio": round(ratio, 4),
+                        "minor_page_faults": max(
+                            0, int(after_ru["minflt"]) - int(before_ru["minflt"])
+                        ),
+                    }
+                )
+
+    @staticmethod
+    def _record_rusage(item) -> None:
+        outcome, variables, logs = item
+        samples = variables.get("_rusage_samples")
+        if outcome.correct is True and samples:
+            try:
+                # RUSAGE_CHILDREN may include concurrent compilers and other children.
+                # Keep these counters out of correctness logs, model feedback and selection.
+                payload = {
+                    "scope": "controller_children_during_benchmark_windows",
+                    "candidate_process_only": False,
+                    "excluded_from_selection_and_feedback": True,
+                    "window_deltas": _summarize_rusage(samples),
+                }
+                (logs / "process-counters-diagnostic.json").write_text(
+                    json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8"
+                )
+            except OSError:
+                pass
 
     @staticmethod
     def _finalize(outcome: Outcome, baseline: float | None) -> Outcome:
@@ -174,6 +270,7 @@ class Evaluator:
                     if item[0].correct is not True:
                         break
                     self._sample(item, i)
+                self._record_rusage(item)
                 ensure_clean(worktree, commit)
                 return self._finalize(item[0], baseline)
             finally:
@@ -181,6 +278,19 @@ class Evaluator:
 
     def precheck(self, experiment: str, epoch: int, worktree: Path, commit: str) -> Outcome:
         """Development-only compile/check: no benchmark, holdout, cache, or tree reward."""
+        try:
+            outcome, variables, logs = self._build(experiment, epoch, worktree, commit, "search")
+        except BudgetExhausted as exc:
+            raise BudgetExhausted("Development check expired waiting for target") from exc
+        if outcome.status == "cancelled_budget":
+            raise BudgetExhausted("Development check expired waiting for target")
+        if outcome.status == "build_failed":
+            if expired(self.deadline):
+                raise BudgetExhausted("Development check expired waiting for target")
+            ensure_clean(worktree, commit)
+            outcome.score = None
+            verify_protected(self.root / "trusted", self.manifest)
+            return outcome
         lock = FileLock(self.lock_path)
         while True:
             try:
@@ -189,12 +299,13 @@ class Evaluator:
             except InfrastructureError as exc:
                 if not str(exc).startswith("Resource already locked:"):
                     raise
-                if time.time() >= self.deadline:
+                if expired(self.deadline):
                     raise BudgetExhausted("Development check expired waiting for target") from exc
-                time.sleep(min(0.05, max(0, self.deadline - time.time())))
+                time.sleep(max(0, time_left(self.deadline, 0.05)))
         try:
-            outcome, _, _ = self._prepare(
-                experiment, epoch, worktree, commit, "search", warmups=False)
+            outcome, _, _ = self._check(outcome, variables, logs, warmups=False)
+            if outcome.status == "cancelled_budget":
+                raise BudgetExhausted("Development check expired waiting for target")
             ensure_clean(worktree, commit)
             if outcome.correct:
                 outcome.status = "development_valid"
@@ -224,6 +335,8 @@ class Evaluator:
                     for key in order:
                         if items[key][0].correct is True:
                             self._sample(items[key], repeat)
+                for item in items.values():
+                    self._record_rusage(item)
                 for candidate in candidates:
                     ensure_clean(Path(candidate["worktree"]), candidate["commit"])
                 reference = next((items[c["id"]][0] for c in candidates if c.get("baseline")), None)

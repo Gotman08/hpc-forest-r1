@@ -38,6 +38,35 @@ def test_matched_reports_compare_confirmed_gain(config):
     assert result["gain_fractions"] == {"reference": 0.7, "binary": 0.8}
 
 
+def test_mother_selected_forest_is_a_different_experiment_from_fixed_roles(config):
+    left, right = report(config, False, 3.0), report(config, True, 2.0)
+    left["config"]["forest"] = {"policy": "mother"}
+    result = comparison.compare(left, right)
+    assert not result["comparison_admissible"] and not result["checks"]["forest"]
+
+
+def test_mandatory_final_g_needs_its_own_verifiable_confirmation(config):
+    config["completion"] = {"policy": "finish-started", "confirm_final_g": True}
+    left, right = report(config, False, 3.0), report(config, True, 2.0)
+    for value in (left, right):
+        value["phase_costs"] = {"search": {"tokens_used": 100, "unknown_usage_calls": 0},
+                                "postprocess": {"tokens_used": 0, "unknown_usage_calls": 0},
+                                "confirmation": {"tokens_used": 0, "unknown_usage_calls": 0}}
+        value["postprocess"] = {"status": "complete", "mission_id": "final",
+                                 "outcome": {"commit": "final-commit"}, "mother_required": False}
+        value["experiments"].append({"id": "final", "role": "G", "budget_phase": "postprocess"})
+    result = comparison.compare(left, right)
+    assert not result["comparison_admissible"]
+    assert not result["checks"]["binary_final_g_confirmation"]
+    for value in (left, right):
+        outcome = {"correct": True, "commit": "final-commit", "mean_seconds": 8}
+        value["evaluations"].append({"phase": "confirmation", "experiment_id": "final", "outcome": outcome})
+        value["final_g_confirmation"] = {"status": "confirmed", "experiment_id": "final", "outcome": outcome.copy()}
+    assert comparison.compare(left, right)["comparison_admissible"]
+    right["final_g_confirmation"]["outcome"]["mean_seconds"] = 0.1
+    assert not comparison.compare(left, right)["comparison_admissible"]
+
+
 def test_native_session_paths_differ_without_changing_model_settings(config):
     config["backend"] = "codex"
     config["codex"] = {"model": "gpt-6-luna", "reasoning_effort": "max",
@@ -69,3 +98,47 @@ def test_unmatched_or_unconfirmed_reports_cannot_declare_a_winner(config, change
     result = comparison.compare(left, right)
     assert not result["comparison_admissible"]
     assert result["winner_for_this_pair"] is None
+
+
+def test_mother_failure_in_events_or_section_blocks_comparison_winner(config):
+    left, right = report(config, False, 3.0), report(config, True, 2.0)
+    left["events"] = [
+        {"kind": "mother_usage", "payload": '{"phase":"preparation","status":"model_or_interface_failure"}'}
+    ]
+    result = comparison.compare(left, right)
+    assert not result["comparison_admissible"]
+    assert not result["checks"]["reference_transport"]
+    assert result["winner_for_this_pair"] is None
+
+
+def test_finish_started_comparison_checks_final_integration_and_separate_costs(config):
+    config["completion"] = {"policy": "finish-started", "postprocess_tokens": 786432}
+    left, right = report(config, False, 3.0), report(config, True, 2.0)
+    for value in (left, right):
+        value["phase_costs"] = {"search": {"tokens_used": 100, "unknown_usage_calls": 0},
+                                "postprocess": {"tokens_used": 200, "unknown_usage_calls": 0},
+                                "confirmation": {"tokens_used": 0, "unknown_usage_calls": 0}}
+        value["costs"]["tokens_used"] = 300
+        value["postprocess"] = {"status": "complete", "mission_id": "final-g", "mother_required": True,
+                                 "mother": {"status": "complete"}}
+        value["experiments"].append({"id": "final-g", "role": "G", "budget_phase": "postprocess", "state": "valid"})
+    assert comparison.compare(left, right)["comparison_admissible"]
+    right["postprocess"]["mother"]["status"] = "interrupted_not_replayed"
+    assert not comparison.compare(left, right)["comparison_admissible"]
+    right["postprocess"]["mother"]["status"] = "complete"
+    right["costs"]["tokens_used"] += 1
+    assert not comparison.compare(left, right)["checks"]["binary_phase_accounting"]
+    right["epochs"] = [{"id": 1}, {"id": 2}]
+    right["phase_costs"]["postprocess"]["tokens_used"] = comparison.postprocess_token_limit(config) + 1
+    right["costs"]["tokens_used"] = right["phase_costs"]["postprocess"]["tokens_used"] + 100
+    assert comparison.compare(left, right)["comparison_admissible"]
+    for value in (left, right):
+        value["config"]["budget"]["tokens"] = None
+        value["config"]["completion"]["postprocess_tokens"] = None
+        value["phase_costs"]["search"]["tokens_used"] = 10000000
+        value["phase_costs"]["postprocess"]["tokens_used"] = 20000000
+        value["costs"]["tokens_used"] = 30000000
+    assert comparison.compare(left, right)["comparison_admissible"]
+    right["phase_costs"]["search"]["unknown_usage_calls"] = 1
+    assert not comparison.compare(left, right)["comparison_admissible"]
+

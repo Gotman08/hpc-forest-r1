@@ -71,6 +71,15 @@ def commit_candidate(
     return git(worktree, "rev-parse", "HEAD"), git(worktree, "rev-parse", "HEAD^{tree}")
 
 
+def worktree_tree_hash(worktree: Path) -> str:
+    git(worktree, "add", "--", "src")
+    try:
+        return git(worktree, "write-tree")
+    finally:
+        git(worktree, "reset", "--quiet", "HEAD", "--", "src")
+
+
 def ensure_clean(worktree: Path, commit: str) -> None:
     if git(worktree, "rev-parse", "HEAD") != commit or git(worktree, "status", "--porcelain"):
         raise InfrastructureError("Evaluation requires an unchanged exact commit")
+

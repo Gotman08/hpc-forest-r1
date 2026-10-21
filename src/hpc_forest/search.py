@@ -9,6 +9,7 @@ import pickle
 import time
 import uuid
 from dataclasses import asdict
+from pathlib import Path
 
 import numpy as np
 import treequest as tq
@@ -30,6 +31,25 @@ def unpack(blob: bytes, sha: str | None = None):
         raise InfrastructureError("Corrupt local TreeQuest checkpoint")
     # Local controller database only. Never unpickle checkpoints supplied by an agent or a URL.
     return pickle.loads(blob)
+
+
+def _extract_roofline(outcome: Outcome) -> dict:
+    metrics: dict = {}
+    for name in (outcome.logs or [])[:2]:
+        try:
+            path = Path(name)
+            if not path.is_file():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError, TypeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        vec = data.get("vectorization")
+        if isinstance(vec, list):
+            metrics["vec_optimized"] = sum(1 for line in vec if "optimized:" in str(line))
+            metrics["vec_missed"] = sum(1 for line in vec if "missed:" in str(line))
+    return metrics
 
 
 class Search:
@@ -106,10 +126,15 @@ class Search:
         ordinal: int,
         worktree: str,
         slot_id: str,
+        *,
+        budget_phase: str = "search",
     ) -> Mission:
         if self.db.one("SELECT id FROM trials WHERE tree_id=? AND state='pending'", (tree_id,)):
             raise ForestError("Only one pending trial per local tree; parallelize across trees")
         row, (state, rng) = self._tree(tree_id)
+        slot = self.db.one("SELECT phase FROM slots WHERE id=?", (slot_id,))
+        if slot is None or slot["phase"] != budget_phase:
+            raise ForestError("Mission and reservation belong to different budget phases")
         global_rng = np.random.get_state()
         try:
             np.random.set_state(rng)
@@ -130,6 +155,7 @@ class Search:
             depth=parent["depth"] + 1 if parent else 1,
             ordinal=ordinal,
             worktree=worktree,
+            budget_phase=budget_phase,
         )
         blob = pack(state, next_rng)
         with self.db.connection:
@@ -180,6 +206,9 @@ class Search:
             if self.binary:
                 node.update(status=outcome.status, correct=outcome.correct,
                             mean_seconds=outcome.mean_seconds)
+                roofline = _extract_roofline(outcome)
+                if roofline:
+                    node["roofline"] = roofline
             if not mission.trial_id.startswith("enumeration-"):
                 state = self.algo.tell(state, mission.trial_id, (node, outcome.score))
             status = "completed" if outcome.score is not None else outcome.status
@@ -202,8 +231,8 @@ class Search:
             if outcome.status != "duplicate":
                 self.db.connection.execute(
                     "INSERT OR IGNORE INTO evaluations(experiment_id,epoch,phase,cache_key,payload,created)"
-                    " VALUES(?,?,'search',?,?,?)",
-                    (mission.id, mission.epoch, outcome.cache_key, result, time.time()),
+                    " VALUES(?,?,?,?,?,?)",
+                    (mission.id, mission.epoch, mission.budget_phase, outcome.cache_key, result, time.time()),
                 )
             if mission.role == "G":
                 self.db.connection.execute(
@@ -257,6 +286,13 @@ class Search:
                 Outcome("cancelled_interrupted", reason="Interrupted mission; slot retained"),
             )
             config = self.db.get("config")
-            self.db.settle_tokens(row["slot_id"], 0 if config["backend"] == "recipe" else None)
+            slot = self.db.one(
+                "SELECT tokens_settled FROM slots WHERE id=?",
+                (row["slot_id"],),
+            )
+            if slot and not slot["tokens_settled"]:
+                self.db.settle_tokens(
+                    row["slot_id"], 0 if config["backend"] == "recipe" else None
+                )
             self.db.event("recovered_cancellation", {"experiment_id": mission.id})
         return len(pending)

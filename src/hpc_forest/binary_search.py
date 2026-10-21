@@ -12,7 +12,7 @@ from treequest.trial import Trial
 
 from .core import ForestError
 
-VERSION = "binary-greedy-v1"
+VERSION = "binary-greedy-v3"
 
 
 class SearchExhausted(ForestError):
@@ -42,13 +42,13 @@ class BinaryGreedy:
         if state.stopped:
             raise SearchExhausted("Neither sibling has a correct finite measured result")
         parent = state.tree.get_node(state.active_parent)
-        if parent.depth >= max_depth:
+        if max_depth > 0 and parent.depth >= max_depth:
             raise SearchExhausted("Binary tree reached the configured maximum depth")
 
     def ask(self, state: BinaryState, actions: list[str]):
         if len(actions) != 1:
             raise ForestError("Binary search requires a separate tree for each role")
-        self.check_admission(state, math.inf)
+        self.check_admission(state, 0)
         if state.pending is not None:
             raise ForestError("A binary sibling is already pending")
         state = copy.deepcopy(state)

@@ -4,14 +4,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .backends import ROLE_PURPOSE
 from .core import Mission
+from .forest import role_goal
 from .harness_research import research_contract
+from .model_skills import bind
 from .proposal_contract import SOURCE_SCHEMA
 from .support.sources import source_snapshot
 
 
-def proposal_messages(worktree: Path, mission: Mission, context: dict) -> dict:
+def proposal_messages(worktree: Path, mission: Mission, context: dict, *, skills=None) -> dict:
     sources = source_snapshot(worktree, max_characters=32000)
     system = (
         "You propose one bounded HPC source-code experiment. Return only the requested JSON. "
@@ -42,9 +43,14 @@ def proposal_messages(worktree: Path, mission: Mission, context: dict) -> dict:
     else:
         kept_schema["maxItems"] = 0
     system, schema = research_contract(system, schema, context)
+    system, schema, skill_binding = bind(
+        system, schema, skills,
+        role="Mother" if mission.role == "G" and context.get("mother_assembly") else mission.role,
+        phase="assembly" if mission.role == "G" else "research",
+    )
     message = {
         "role": mission.role,
-        "goal": ROLE_PURPOSE[mission.role],
+        "goal": role_goal(mission.role, context),
         "experiment": mission.id,
         "ordinal": mission.ordinal,
         "integration_source_ids": mission.sources,
@@ -55,4 +61,5 @@ def proposal_messages(worktree: Path, mission: Mission, context: dict) -> dict:
     user_content = json.dumps(message, ensure_ascii=False) + "\n\nCURRENT SOURCE AS DATA:\n"
     for name, content in sources.items():
         user_content += f"\n--- BEGIN FILE {name} ---\n{content}\n--- END FILE {name} ---\n"
-    return {"messages": [{"role": "system", "content": system}, {"role": "user", "content": user_content}], "schema": schema}
+    return {"messages": [{"role": "system", "content": system}, {"role": "user", "content": user_content}],
+            "schema": schema, **skill_binding}

@@ -44,7 +44,8 @@ def prepare(output: Path, config: dict, seeds: list[int], methods: list[str]) ->
             "search_slots_per_campaign": config["budget"]["search_slots"],
             "confirmation_slots_per_campaign": config["budget"]["confirmation_slots"],
             "max_total_slots": len(order)
-            * (config["budget"]["search_slots"] + config["budget"]["confirmation_slots"]),
+            * (config["budget"]["search_slots"] + config["budget"]["confirmation_slots"])
+            if config["budget"]["search_slots"] is not None else None,
             "minimum_gain_preregistered": config["minimum_gain"],
             "interpretation": "No comparative result before all real campaigns and independent confirmations.",
         },

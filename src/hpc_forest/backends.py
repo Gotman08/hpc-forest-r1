@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .core import InfrastructureError, Mission, atomic_json, run_process
+from .forest import role_goal
+from .support.budgets import generation_deadline, time_left
 
 ROLE_KEYS = {
     "A": ["LAYOUT", "TILE"],
@@ -90,7 +91,7 @@ class CodexBackend:
         response = logs / "agent-result.json"
         prompt = (
             f"You are a bounded HPC experiment worker for role {mission.role}.\n"
-            f"Purpose: {ROLE_PURPOSE[mission.role]}.\n"
+            f"Purpose: {role_goal(mission.role, context)}.\n"
             "You are not alone in this project. Do not revert or modify another experiment.\n"
             "Edit only files under src/ in THIS worktree. Never commit, change Git metadata, "
             "modify tests, run external jobs, or change controller permissions.\n"
@@ -125,7 +126,7 @@ class CodexBackend:
             args,
             Path(mission.worktree),
             logs / "codex.jsonl",
-            min(config["budget"]["generation_seconds"], context["deadline"] - time.time()),
+            time_left(generation_deadline(context, config["budget"]["generation_seconds"])),
             stdin=prompt,
         )
         usage_events = []

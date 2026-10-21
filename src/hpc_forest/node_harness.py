@@ -21,9 +21,10 @@ from .core import (
     verify_protected,
 )
 from .evaluator import Evaluator
-from .gitops import assert_allowed_changes, git, initialize_source
+from .gitops import assert_allowed_changes, git, initialize_source, worktree_tree_hash
 from .harness_research import DocumentationReader
-from .support.budgets import generation_deadline, search_deadline
+from .registry import Registry
+from .support.budgets import expired, generation_deadline, search_deadline, unlimited_tokens
 from .support.sources import SourceLimitExceeded, source_snapshot
 
 
@@ -57,18 +58,20 @@ class NodeHarness:
         attempts = settings["max_attempts"]
         ceiling = settings["call_token_ceiling"]
         reservation = config["budget"]["mission_tokens"]
-        if reservation < attempts * ceiling:
+        observe_only = unlimited_tokens(config)
+        if not observe_only and reservation < attempts * ceiling:
             raise InfrastructureError("Reserve every possible harness call before admitting a node")
         # All local work shares the original mission deadline and confirmation reserve.
-        deadline = min(
-            generation_deadline(context, config["budget"]["generation_seconds"]),
-            search_deadline(context["deadline"], config["budget"]["confirmation_seconds"]),
-        )
+        deadline = generation_deadline(context, config["budget"]["generation_seconds"])
+        if deadline is not None:
+            deadline = min(deadline, search_deadline(
+                context["deadline"], config["budget"]["confirmation_seconds"]))
         journal = root / "logs" / mission.id / "node-harness.json"
         if journal.exists():
             raise InfrastructureError("This harness episode already started; never replay model calls")
         manifest = protected_manifest(root / "trusted")
         history, total_tokens = [], 0
+        seen_digests: dict[str, str] = {}
         bounded, usage_unknown = False, False
         last = Generated()
         source_ids, source_commits = list(mission.sources), list(mission.source_commits)
@@ -97,6 +100,8 @@ class NodeHarness:
                  "journal": str(journal), "automatic_measured_feedback_only": not bool(reader),
                  "research_enabled": bool(reader),
                  "research_actions": sum("research_results" in h for h in history),
+                 "observed_tokens": total_tokens,
+                 "token_accounting": "unknown" if usage_unknown else "upper_bound" if bounded else "exact",
                  "contract_rejected": last.usage.get("contract_rejected", False)},
                 last.error, last.infrastructure_error, bounded)
 
@@ -110,7 +115,7 @@ class NodeHarness:
                     raise InfrastructureError("This backend has no structured documentation action")
                 reader = DocumentationReader(settings["research"], journal.parent / "research", deadline)
             for number in range(1, attempts + 1):
-                if time.time() >= deadline:
+                if expired(deadline):
                     if not history:
                         last = Generated(0, error="No development time remains")
                         return result()
@@ -123,11 +128,12 @@ class NodeHarness:
                 child.id = f"{mission.id}-h{number:02d}"
                 child.sources, child.source_commits = list(source_ids), list(source_commits)
                 call_config, call_context = copy.deepcopy(config), copy.deepcopy(context)
-                call_config["budget"]["mission_tokens"] = ceiling
-                call_config["budget"]["generation_seconds"] = max(0.001, deadline - time.time())
+                call_config["budget"]["mission_tokens"] = None if observe_only else ceiling
+                if deadline is not None:
+                    call_config["budget"]["generation_seconds"] = max(0.001, deadline - time.time())
                 call_context["deadline"] = deadline
                 call_context["generation_deadline"] = deadline
-                call_context["remaining_tokens"] = min(
+                call_context["remaining_tokens"] = None if observe_only else min(
                     reservation - total_tokens, context.get("remaining_tokens", reservation))
                 call_context.setdefault("automatic_observations", {})["node_development"] = {
                     "attempt": number, "remaining_attempts": attempts - number + 1,
@@ -144,9 +150,12 @@ class NodeHarness:
                 try:
                     last = self.backend.generate(child, call_context, call_config, root)
                 except Exception as exc:
-                    # The service may have accepted the call. Charge its ceiling and stop.
-                    total_tokens += ceiling
-                    bounded = True
+                    # The service may have accepted the call. Never invent exact usage.
+                    if observe_only:
+                        usage_unknown = True
+                    else:
+                        total_tokens += ceiling
+                        bounded = True
                     record.update(state="generation_interrupted", error=type(exc).__name__)
                     last = Generated(error="Model interface interrupted; inspect generation logs",
                                      infrastructure_error=True)
@@ -157,15 +166,22 @@ class NodeHarness:
                 record["generation_error"] = last.error
                 if last.tokens is None:
                     usage_unknown = True
-                    last.error, last.infrastructure_error = "Model usage is unknown", True
+                    if not observe_only:
+                        last.error, last.infrastructure_error = "Model usage is unknown", True
                 elif type(last.tokens) is not int or last.tokens < 0:
-                    total_tokens += ceiling
-                    bounded = True
-                    last.error, last.infrastructure_error = "Invalid model usage", True
+                    if observe_only:
+                        usage_unknown = True
+                    else:
+                        total_tokens += ceiling
+                        bounded = True
+                        last.error, last.infrastructure_error = "Invalid model usage", True
+                elif observe_only and last.tokens_upper_bound:
+                    # A historical reservation is not a bound on an uncapped call.
+                    usage_unknown = True
                 else:
                     total_tokens += last.tokens
                     bounded |= last.tokens_upper_bound
-                    if last.tokens > ceiling:
+                    if not observe_only and last.tokens > ceiling:
                         last.error, last.infrastructure_error = "Model exceeded its call reservation", True
                 record["tokens"] = last.tokens
                 persist("generation_complete")
@@ -173,7 +189,7 @@ class NodeHarness:
                 assert_allowed_changes(worktree)
                 if git(worktree, "rev-parse", "HEAD") != mission.base_commit:
                     raise CandidateRejected("A model changed the mission's Git parent")
-                if last.infrastructure_error or usage_unknown:
+                if last.infrastructure_error or (usage_unknown and not observe_only):
                     return result()
                 if last.error:
                     record["state"] = "generation_failed"
@@ -193,6 +209,39 @@ class NodeHarness:
                 source_files = _source_snapshot(worktree)
                 record["source_digest"] = digest(source_files)
                 atomic_json(journal.parent / f"harness-source-{number:02d}.json", source_files)
+                tree_hash = worktree_tree_hash(worktree)
+                duplicate_of = seen_digests.get(record["source_digest"])
+                if not duplicate_of and (root / "registry.sqlite3").is_file():
+                    cache_key = digest(
+                        {"tree": tree_hash, "protocol": context["protocol_id"], "epoch": mission.epoch}
+                    )
+                    db = Registry(root / "registry.sqlite3")
+                    try:
+                        cached = db.cached(cache_key)
+                    finally:
+                        db.close()
+                    if cached:
+                        duplicate_of = cached["experiment_id"]
+                seen_digests.setdefault(record["source_digest"], child.id)
+                if duplicate_of:
+                    record["development_outcome"] = {
+                        "status": "duplicate_candidate",
+                        "correct": False,
+                        "tree_hash": tree_hash,
+                        "duplicate_of": duplicate_of,
+                        "reason": f"Same source/tree as {duplicate_of}; propose a distinct transformation",
+                    }
+                    record["measured_diagnostics"] = [{
+                        "path": "node-harness/deduplication",
+                        "text": (
+                            f"Duplicate candidate detected (identical to {duplicate_of}). "
+                            "Modify src/ with a materially distinct optimization."
+                        ),
+                        "truncated": False,
+                    }]
+                    record["state"] = "development_failed"
+                    persist(record["state"])
+                    continue
                 # The development checker sees a private source snapshot, never the mutable
                 # candidate directory or a confirmation phase. Its score is never backpropagated.
                 probe = root / "harness-probes" / mission.id / f"attempt-{number:02d}"

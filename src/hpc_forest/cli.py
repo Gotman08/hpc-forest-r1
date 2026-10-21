@@ -6,20 +6,62 @@ import json
 import platform
 import shutil
 import sys
+import time
 from pathlib import Path
 
+from .adaptive_budget import parse_duration, record_timing
 from .config import load_config
 from .controller import Controller, create_workspace
-from .core import ForestError
+from .core import ForestError, atomic_json
+from .forest import model_selected
 from .knowledge import Knowledge, serve_mcp
 from .pilot import execute, prepare
 from .registry import Registry
 from .reporting import package, report
+from .support.budgets import adaptive
 from .toolchain import compiler_identity
 
 
 def emit(value):
     print(json.dumps(value, ensure_ascii=False, indent=2))
+
+
+def complete_local(controller, root: Path) -> dict:
+    """Publish a truthful completion receipt even when final delivery fails."""
+    done = {"pipeline_complete": False, "target_deadline": controller.db.get("deadline")}
+    try:
+        done["best_confirmed"] = controller.confirm()
+        started = time.time()
+        done["report"] = str(report(root))
+        done["package"] = str(package(root, root / "submission.zip"))
+        record_timing(controller.db, "archive", time.time() - started)
+        state = controller.status()
+        done["final_g_confirmation"] = state.get("final_g_confirmation")
+        done["pipeline_complete"] = ((state.get("postprocess") or {}).get("status") == "complete"
+                                     and (done["final_g_confirmation"] or {}).get("status") in {"confirmed", "rejected"})
+        if model_selected(controller.config):
+            done["forest_plan"] = state["forest_plan"]
+            tried = {row["role"] for row in controller.db.rows("SELECT role FROM trials WHERE epoch=?",
+                                                             (state["epoch"],))}
+            done["pipeline_complete"] &= bool(state["forest_plan"]) and all(
+                child["role"] in tried for child in state["forest_plan"]["children"])
+            done["pipeline_complete"] &= not any(json.loads(row["result"] or "{}").get("status")
+                in {None, "infrastructure_error", "cancelled_budget", "cancelled_interrupted", "generation_failed"}
+                for row in controller.db.rows("SELECT result FROM trials WHERE epoch=?", (state["epoch"],)))
+        return done
+    except (ForestError, OSError, ValueError) as exc:
+        done["error"] = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        key = f"pipeline_finished:{controller.db.get('current_epoch')}"
+        done["finished_at"] = controller.db.get(key) or time.time()
+        if done["pipeline_complete"]:
+            controller.db.set(key, done["finished_at"])
+        done["overrun_seconds"] = max(0, done["finished_at"] - done["target_deadline"])
+        atomic_json(root / "DONE.json", done)
+        if model_selected(getattr(controller, "config", {})):
+            atomic_json(Path(controller.config["codex"]["mailbox_dir"]) / "DONE.json",
+                        {**done, "session_id": controller.config["codex"]["session_id"]})
 
 
 def parser():
@@ -39,6 +81,11 @@ def parser():
                       help="Enable/disable greedy binary trees in a new campaign")
     init.add_argument("--source", type=Path)
     init.add_argument("--validation", type=Path)
+    init.add_argument("--duration", type=parse_duration,
+                      help="Target duration: 30m, 2h, 5h, 24h; admitted work may finish later")
+    init.add_argument("--mother-trees", action="store_true",
+                      help="Mother chooses N subjects; all N AB-MCTS trees run concurrently")
+    init.add_argument("--statement", type=Path, help="Problem text supplied to Mother as data")
     run = sub.add_parser("run", help="Run or resume bounded search")
     run.add_argument("workspace", type=Path)
     run.add_argument("--max-batches", type=int)
@@ -117,6 +164,21 @@ def main(argv=None) -> int:
                 config["method"] = args.method
             if args.backend:
                 config["backend"] = args.backend
+            if args.duration is not None:
+                config["budget"].update(wall_seconds=args.duration, tokens=None,
+                                        mission_tokens=None, search_slots=None, max_depth=0)
+                config["schedule"]["cycles"] = None
+                config["completion"].update(policy="finish-started", reserve_policy="adaptive",
+                                             confirm_final_g=True, postprocess_tokens=None)
+                config["harness"]["call_token_ceiling"] = None
+            if args.mother_trees:
+                from .model_skills import policy as skills_policy
+
+                config["forest"] = {"policy": "mother", "conversation": "persistent", "integration": "pairwise"}
+                config["skills"] = skills_policy()
+                config["schedule"].update(trials_per_role_per_cycle=1, integrations_per_cycle=0)
+            if args.statement:
+                config.setdefault("forest", {})["statement"] = args.statement.read_text(encoding="utf-8")
             emit(
                 {
                     "workspace": str(
@@ -129,8 +191,13 @@ def main(argv=None) -> int:
                 if args.command == "run":
                     if args.max_batches is not None and args.max_batches < 1:
                         raise ForestError("--max-batches must be positive")
-                    emit(controller.run(args.max_batches))
-                    if args.confirm:
+                    state = controller.run(args.max_batches)
+                    emit(state)
+                    if args.confirm or (adaptive(controller.config) and state["status"] != "checkpointed"):
+                        if adaptive(controller.config):
+                            done = complete_local(controller, args.workspace)
+                            emit(done)
+                            return 0 if done["pipeline_complete"] else 1
                         emit(controller.confirm())
                 elif args.command == "status":
                     emit(controller.status())

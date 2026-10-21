@@ -31,6 +31,7 @@ LIMITS = {"wall_seconds": 1200, "tokens": 600000, "generation_seconds": 120}
 
 def config_for(url, slug, target, prepared):
     c = load_config()
+    c["completion"] = {"policy": "hard"}  # Historical finite comparison contract.
     c.update(problem=slug, backend="ollama", method="H", seed=23, target_id=target)
     c["budget"].update(
         search_slots=1 + SCHEDULE["cycles"] * (3 * SCHEDULE["trials_per_role_per_cycle"] + SCHEDULE["integrations_per_cycle"]),

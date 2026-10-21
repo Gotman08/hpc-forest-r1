@@ -96,13 +96,13 @@ def measured_observations(db: Registry, root: Path, mission: Mission) -> dict:
     recent = [
         observation(row["id"])
         for row in db.rows(
-            "SELECT id FROM trials WHERE epoch=? AND role=? AND result IS NOT NULL ORDER BY created DESC,id DESC LIMIT 3",
+            "SELECT id FROM trials WHERE epoch=? AND role=? AND result IS NOT NULL ORDER BY created DESC,rowid DESC LIMIT 3",
             (mission.epoch, mission.role),
         ) if allowed is None or row["id"] in allowed
     ]
     history = []
     for row in db.rows(
-        "SELECT id,result FROM trials WHERE epoch=? AND role=? AND result IS NOT NULL ORDER BY created DESC,id DESC LIMIT 32",
+        "SELECT id,result FROM trials WHERE epoch=? AND role=? AND result IS NOT NULL ORDER BY created DESC,rowid DESC LIMIT 32",
         (mission.epoch, mission.role),
     ):
         if allowed is not None and row["id"] not in allowed:

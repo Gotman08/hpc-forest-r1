@@ -75,6 +75,27 @@ class Scripted:
         return Generated(100, {"llm_calls": 1})
 
 
+@pytest.mark.parametrize("first_tokens", [2000000, None, "historical_bound"])
+def test_uncapped_episode_repairs_even_after_large_or_missing_usage(episode, first_tokens):
+    mission, context, config, root = episode
+    config["budget"].update(tokens=None, mission_tokens=None)
+    config["harness"]["call_token_ceiling"] = None
+    context.update(deadline=None, deadline_policy="finish-started", remaining_tokens=None)
+    def broken(mission, context):
+        (Path(mission.worktree) / "src/main.py").write_text("RESULT =\n")
+        return Generated(1000 if first_tokens == "historical_bound" else first_tokens,
+                         {"llm_calls": 1}, tokens_upper_bound=first_tokens == "historical_bound")
+    backend = Scripted([broken, "RESULT = 7\n"])
+    generated = NodeHarness(backend).generate(mission, context, config, root)
+    assert generated.error is None and not generated.infrastructure_error
+    assert len(backend.contexts) == 2 and generated.usage["development_evaluations"] == 2
+    exact = type(first_tokens) is int
+    assert generated.tokens == (first_tokens + 100 if exact else None)
+    assert generated.usage["observed_tokens"] == (first_tokens if exact else 0) + 100
+    assert not generated.tokens_upper_bound
+    assert all(item["remaining_tokens"] is None for item in backend.contexts)
+
+
 def test_model_repairs_real_compile_error_without_rewarding_local_attempts(episode):
     mission, context, config, root = episode
     backend = Scripted(["RESULT =\n", "RESULT = 7\n# fixture repair by model\n", "unused"])
@@ -130,6 +151,45 @@ def test_development_target_wait_honors_the_deadline(episode):
     evaluator = Evaluator(root, config, protected_manifest(root / "trusted"), "fixture", time.time() + .1)
     with FileLock(evaluator.lock_path), pytest.raises(BudgetExhausted, match="waiting for target"):
         evaluator.precheck("expired", 1, Path(mission.worktree), mission.base_commit)
+
+
+def test_precheck_build_failure_does_not_wait_for_target_lock(episode):
+    mission, _, config, root = episode
+    (Path(mission.worktree) / "src/main.py").write_text("RESULT =\n", encoding="utf8")
+    commit = initialize_source(Path(mission.worktree), tmp_path := root / "probe-broken")
+    evaluator = Evaluator(
+        root, config, protected_manifest(root / "trusted"), "fixture", time.time() + 10
+    )
+    with FileLock(evaluator.lock_path):
+        outcome = evaluator.precheck("compile-only", 1, tmp_path, commit)
+    assert outcome.status == "build_failed" and outcome.score is None
+
+
+def test_evaluator_keeps_global_child_counters_out_of_feedback(episode, monkeypatch):
+    mission, _, config, root = episode
+    calls = [
+        {"utime": 1.0, "stime": 0.1, "maxrss_kb": 4096, "minflt": 10},
+        {"utime": 1.015, "stime": 0.105, "maxrss_kb": 8192, "minflt": 25},
+        {"utime": 1.02, "stime": 0.11, "maxrss_kb": 8192, "minflt": 30},
+        {"utime": 1.04, "stime": 0.115, "maxrss_kb": 12288, "minflt": 50},
+    ]
+    monkeypatch.setattr("hpc_forest.evaluator._child_rusage", lambda: calls.pop(0))
+    evaluator = Evaluator(
+        root, config, protected_manifest(root / "trusted"), "fixture", time.time() + 10
+    )
+    outcome = evaluator.evaluate("rusage-trial", 1, Path(mission.worktree), mission.base_commit, 0.01)
+    assert outcome.status == "valid"
+    check_data = json.loads(Path(outcome.logs[1]).read_text(encoding="utf8"))
+    assert "rusage" not in check_data
+    diagnostic = Path(outcome.logs[1]).parent / "process-counters-diagnostic.json"
+    assert str(diagnostic) not in outcome.logs
+    data = json.loads(diagnostic.read_text(encoding="utf8"))
+    assert data["candidate_process_only"] is False
+    assert data["excluded_from_selection_and_feedback"] is True
+    assert data["scope"] == "controller_children_during_benchmark_windows"
+    assert "max_rss_kb" not in data["window_deltas"]
+    assert data["window_deltas"]["user_seconds"] > 0
+
 
 
 @pytest.mark.parametrize("usage,expected,bounded", [(None, None, False), (1100, 1100, False), (-1, 1000, True)])
@@ -282,3 +342,34 @@ def test_workspace_freezes_the_research_corpus_inside_its_protected_files(tmp_pa
     assert Path(frozen_config["harness"]["research"]["corpus"]) == frozen
     (tmp_path / "external-corpus.json").write_text("changed outside the campaign")
     assert frozen.read_text() != "changed outside the campaign"
+
+
+def test_early_deduplication_in_harness_allows_repair_instead_of_dying_as_duplicate(
+    tmp_path, config, monkeypatch
+):
+    source, trusted = tmp_path / "source", tmp_path / "validation"
+    make_files(source, trusted)
+    root = tmp_path / "campaign"
+    config["backend"] = "codex"
+    config["roles"] = ["A"]
+    config["harness"].update(enabled=True, max_attempts=2, call_token_ceiling=1000)
+    config["budget"].update(mission_tokens=2000, generation_seconds=30, max_workers=1)
+    config["protocol"]["benchmark"] = ["{python}", "-c", "import time; time.sleep(.005)"]
+    monkeypatch.setattr(
+        "hpc_forest.controller.compiler_identity", lambda: {"fixture": "python-compiler"}
+    )
+    create_workspace(root, config, source, trusted)
+    with Controller(root) as controller:
+        # Attempt 1 reproduces baseline ("RESULT = 7\n"), which is caught early as duplicate_candidate;
+        # Attempt 2 proposes a distinct source that wins a valid outer evaluation.
+        backend = Scripted(["RESULT = 7\n", "RESULT = 7\n# distinct proposal after duplicate\n"])
+        controller.backend = backend
+        controller.run(max_batches=1)
+        trials = controller.db.rows("SELECT * FROM trials")
+        assert len(trials) == 1
+        outcome = json.loads(trials[0]["result"])
+        assert outcome["status"] == "valid"
+        prev = backend.contexts[1]["automatic_observations"]["node_development"]["previous_attempts"]
+        assert prev[0]["development_outcome"]["status"] == "duplicate_candidate"
+        assert prev[0]["development_outcome"]["duplicate_of"] == "baseline-e1"
+

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from hpc_forest.binary_search import enabled
 from hpc_forest.core import atomic_json, digest
+from hpc_forest.support.budgets import finish_started, mandatory_final_g, postprocess_token_limit
 
 
 def confirmation_verified(report: dict) -> bool:
@@ -30,11 +31,33 @@ def confirmation_verified(report: dict) -> bool:
             and math.isclose(best.get("improvement_fraction", -1), improvement, abs_tol=1e-12))
 
 
+def _mother_clean(report: dict) -> bool:
+    for event in report.get("events", []):
+        if event.get("kind") != "mother_usage":
+            continue
+        payload = event.get("payload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except ValueError:
+                return False
+        if not isinstance(payload, dict) or payload.get("status") != "complete":
+            return False
+    mother = report.get("mother")
+    if isinstance(mother, dict):
+        for phase in ("preparation", "synthesis"):
+            entry = mother.get(phase)
+            if isinstance(entry, dict) and entry.get("status") != "complete":
+                return False
+    return True
+
+
 def compare(reference: dict, binary: dict) -> dict:
     left, right = reference["config"], binary["config"]
     checks = {key: left.get(key) == right.get(key) for key in
               ("problem", "method", "backend", "seed", "roles", "budget", "schedule",
-               "protocol", "compiler", "harness", "minimum_gain")}
+               "protocol", "compiler", "harness", "minimum_gain", "completion")}
+    checks["forest"] = left.get("forest", {"policy": "fixed"}) == right.get("forest", {"policy": "fixed"})
     backend = left["backend"]
     if backend in ("codex", "ollama"):
         def model_settings(config):
@@ -52,10 +75,44 @@ def compare(reference: dict, binary: dict) -> dict:
     for name, report in (("reference", reference), ("binary", binary)):
         checks[name + "_confirmation"] = confirmation_verified(report)
         costs = report.get("costs", {})
+        if finish_started(report["config"]):
+            phase_costs = report.get("phase_costs", {})
+            costs = phase_costs.get("search", {})
+            post_costs = phase_costs.get("postprocess", {})
+            post_limit = postprocess_token_limit(report["config"])
+            post = report.get("postprocess") or {}
+            final_trial = next((trial for trial in report.get("experiments", [])
+                                if trial.get("id") == post.get("mission_id")), {})
+            checks[name + "_postprocess"] = (
+                post.get("status") == "complete"
+                and final_trial.get("role") == "G" and final_trial.get("budget_phase") == "postprocess"
+                and (not post.get("mother_required") or (post.get("mother") or {}).get("status") == "complete")
+                and post_costs.get("unknown_usage_calls", 1) == 0
+                and (post_limit is None or post_costs.get("tokens_used", math.inf) <= post_limit
+                     * max(1, len(report.get("epochs", []))))
+            )
+            checks[name + "_phase_accounting"] = (
+                report.get("costs", {}).get("tokens_used") == sum(
+                    phase_costs.get(phase, {}).get("tokens_used", math.inf)
+                    for phase in ("search", "postprocess", "confirmation")))
+            if mandatory_final_g(report["config"]):
+                final = report.get("final_g_confirmation") or {}
+                evaluation = next((row["outcome"] for row in report.get("evaluations", [])
+                                   if row.get("phase") == "confirmation"
+                                   and row["experiment_id"] == post.get("mission_id")), None)
+                checks[name + "_final_g_confirmation"] = (
+                    final.get("status") in {"confirmed", "rejected"}
+                    and final.get("experiment_id") == post.get("mission_id")
+                    and evaluation is not None and evaluation == final.get("outcome")
+                    and evaluation.get("correct") in {True, False}
+                    and evaluation.get("commit") == post.get("outcome", {}).get("commit"))
+        token_limit = report["config"]["budget"]["tokens"]
         checks[name + "_budget"] = (costs.get("unknown_usage_calls", 1) == 0
-            and costs.get("tokens_used", math.inf) <= report["config"]["budget"]["tokens"])
-        checks[name + "_transport"] = not any(
-            r.get("state") == "infrastructure_error" for r in report.get("experiments", []))
+            and (token_limit is None or costs.get("tokens_used", math.inf) <= token_limit))
+        checks[name + "_transport"] = (
+            not any(r.get("state") == "infrastructure_error" for r in report.get("experiments", []))
+            and _mother_clean(report)
+        )
     admissible = all(checks.values())
     gains = {name: (report.get("best_confirmed") or {}).get("improvement_fraction")
              for name, report in (("reference", reference), ("binary", binary))}

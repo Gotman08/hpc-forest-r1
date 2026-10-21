@@ -15,7 +15,7 @@ from .core import CandidateRejected, InfrastructureError, Mission, atomic_json
 from .harness_research import extract_research
 from .proposal_contract import SOURCE_SCHEMA
 from .source_request import proposal_messages
-from .support.budgets import generation_deadline
+from .support.budgets import expired, generation_deadline, time_left, unlimited_tokens
 
 
 class RepetitionAborted(InfrastructureError):
@@ -39,8 +39,8 @@ def local_url(base_url: str) -> str:
     return base_url.rstrip("/")
 
 
-def request_json(base_url: str, endpoint: str, payload: dict | None, timeout: float) -> dict:
-    if timeout <= 0:
+def request_json(base_url: str, endpoint: str, payload: dict | None, timeout: float | None) -> dict:
+    if timeout is not None and timeout <= 0:
         raise InfrastructureError("No inference time remaining")
     request = urllib.request.Request(
         local_url(base_url) + endpoint,
@@ -166,7 +166,7 @@ class OllamaBackend:
         if mission.role == "G" and not context.get("sources"):
             return Generated(error="No admissible integration sources")
         deadline = generation_deadline(context, config["budget"]["generation_seconds"])
-        if time.time() >= deadline:
+        if expired(deadline):
             return Generated(
                 0, {"llm_calls": 0, "generation_not_started": "search_deadline"},
                 error="Search generation deadline reached before invocation",
@@ -193,24 +193,29 @@ class OllamaBackend:
                 **{key: settings[key] for key in ["repeat_penalty", "repeat_last_n"] if key in settings},
             },
         }
+        if unlimited_tokens(config):
+            payload["options"]["num_predict"] = -1
+            payload["options"].pop("num_ctx")
         logs = root / "logs" / mission.id
         atomic_json(logs / "ollama-request.json", payload)
         start = time.monotonic()
-        timeout = deadline - time.time()
+        timeout = time_left(deadline)
         try:
             response = request_json(settings["base_url"], "/api/chat", payload, timeout)
         except RepetitionAborted as exc:
-            # Prompt evaluation is bounded by num_ctx and prediction by num_predict.
-            # Charge their sum; do not invent exact usage or replay the request.
-            ceiling = settings["context_tokens"] + settings["max_output_tokens"]
+            # Legacy requests reserve num_ctx + num_predict. Uncapped requests
+            # have no such bound; never invent exact usage or replay the request.
+            ceiling = None if unlimited_tokens(config) else settings["context_tokens"] + settings["max_output_tokens"]
             usage = {
                 "backend": "ollama", "llm_calls": 1, "model": settings["model"],
                 "model_digest": current["model_digest"], "server_version": current["server_version"],
-                "seconds": time.monotonic() - start, "token_accounting": "upper_bound",
+                "seconds": time.monotonic() - start,
+                "token_accounting": "unknown" if ceiling is None else "upper_bound",
                 "exact_tokens": None, "token_ceiling": ceiling, "done_reason": "repetition_abort",
             }
             atomic_json(logs / "ollama-error.json", {"error": str(exc), **usage})
-            return Generated(ceiling, usage, str(exc), infrastructure_error=True, tokens_upper_bound=True)
+            return Generated(ceiling, usage, str(exc), infrastructure_error=True,
+                             tokens_upper_bound=ceiling is not None)
         atomic_json(logs / "ollama-response.json", response)
         keys = ["prompt_eval_count", "eval_count"]
         known = all(type(response.get(k)) is int and response[k] >= 0 for k in keys)

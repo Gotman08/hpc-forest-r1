@@ -212,3 +212,79 @@ def test_frozen_build_rejects_uninitialized_openmp_reduction(
     assert diagnostic["code"] == "compilation_failed"
     assert "uninitialized" in diagnostic["stderr"]
     assert not (tmp_path / "build/solution").exists()
+
+
+def test_mismatch_diagnostic_reports_index_counts_and_nan_without_leaking_oracle():
+    exp = {"stdout": c.blob(b"10 20 30.5 40\n")}
+    act_val = {"stdout": c.blob(b"10 20 99.0 40\n")}
+    diag = c.mismatch_diagnostic(exp, act_val, {"mode": "text"})
+    assert diag["kind"] == "token_value_mismatch"
+    assert diag["expected_tokens"] == 4 and diag["actual_tokens"] == 4
+    assert diag["first_mismatch_token"] == 2
+    assert diag["non_finite_actual"] is False
+    assert "30.5" not in json.dumps(diag)
+
+    act_nan = {"stdout": c.blob(b"10 nan 30.5\n")}
+    diag_nan = c.mismatch_diagnostic(exp, act_nan, {"mode": "text"})
+    assert diag_nan["kind"] == "token_count_mismatch"
+    assert diag_nan["first_mismatch_token"] == 1
+    assert diag_nan["non_finite_actual"] is True
+
+    diag_empty = c.mismatch_diagnostic(exp, {"stdout": c.blob(b"")}, {"mode": "auto"})
+    assert diag_empty["kind"] == "empty_output" and diag_empty["actual_bytes"] == 0
+
+    bin_cmp = {"mode": "binary_numeric", "binary_format": "<ff"}
+    exp_bin = {"stdout": c.blob(struct.pack("<ffff", 1.0, 2.0, 3.0, 4.0))}
+    act_bin = {"stdout": c.blob(struct.pack("<ffff", 1.0, 2.0, 3.0, float("nan")))}
+    diag_bin = c.mismatch_diagnostic(exp_bin, act_bin, bin_cmp)
+    assert diag_bin["kind"] == "numeric_record_mismatch"
+    assert diag_bin["first_mismatch_record"] == 1 and diag_bin["first_mismatch_field"] == 1
+    assert diag_bin["non_finite_actual"] is True
+
+
+def test_sanitizer_probe_rejects_undefined_behavior_on_smallest_search_case(tmp_path):
+    if not shutil.which("gcc"):
+        pytest.skip("gcc is unavailable")
+    root = official(tmp_path)
+    (root / "echo.c").write_text(
+        "#include <stdio.h>\nint main(void){int c;while((c=getchar())!=EOF)putchar(c);return 0;}\n"
+    )
+    receipt = c.prepare(contract(), root, tmp_path / "prepared", probe_timeout=5)
+    trusted = Path(receipt["validation"])
+    candidate = tmp_path / "candidate"
+    (candidate / "src").mkdir(parents=True)
+    # Candidate outputs the exact expected characters but triggers signed overflow / OOB UB.
+    (candidate / "src/echo.c").write_text(
+        "#include <stdio.h>\n"
+        "int main(void){\n"
+        "  volatile int x = 0x7fffffff;\n"
+        "  volatile int y = x + 1;\n"
+        "  (void)y;\n"
+        "  int c; while((c=getchar())!=EOF) putchar(c);\n"
+        "  return 0;\n"
+        "}\n"
+    )
+    build_dir = tmp_path / "build"
+    build_res = subprocess.run(
+        [sys.executable, str(trusted / "contract_tool.py"), "build", str(candidate), str(build_dir)],
+        capture_output=True,
+        text=True,
+    )
+    assert build_res.returncode == 0, build_res.stderr
+    assert c.sanitizer_executable_path(build_dir).is_file()
+    check_res = subprocess.run(
+        [
+            sys.executable,
+            str(trusted / "contract_tool.py"),
+            "check",
+            str(c.executable_path(build_dir)),
+            "search",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert check_res.returncode == 1
+    assert json.loads(check_res.stderr)["diagnostic"]["code"] == "sanitizer_failed"
+
+
+

@@ -147,6 +147,108 @@ def equal_output(expected, actual, comparison):
     )
 
 
+def _non_finite_token(token):
+    try:
+        return not math.isfinite(float(token))
+    except ValueError:
+        return False
+
+
+def _token_matches(left, right, c):
+    if left == right:
+        return True
+    try:
+        return close_number(float(left), float(right), c)
+    except ValueError:
+        return False
+
+
+def mismatch_diagnostic(expected, actual, c):
+    if expected.keys() != actual.keys():
+        return {
+            "kind": "stream_mismatch",
+            "expected_streams": sorted(expected),
+            "actual_streams": sorted(actual),
+        }
+    mode = c.get("mode", "auto")
+    for key in expected:
+        exp_raw, act_raw = unblob(expected[key]), unblob(actual[key])
+        if compare_bytes(exp_raw, act_raw, c):
+            continue
+        first_byte = next(
+            (i for i, (x, y) in enumerate(zip(exp_raw, act_raw, strict=False)) if x != y),
+            min(len(exp_raw), len(act_raw)),
+        )
+        base = {
+            "stream": key,
+            "expected_bytes": len(exp_raw),
+            "actual_bytes": len(act_raw),
+            "first_mismatch_byte": first_byte,
+        }
+        if not act_raw:
+            return {**base, "kind": "empty_output"}
+        if mode == "bytes":
+            return {**base, "kind": "byte_mismatch"}
+        if mode == "binary_numeric":
+            record = struct.Struct(c["binary_format"])
+            exp_records = len(exp_raw) // record.size if record.size else 0
+            act_records = len(act_raw) // record.size if record.size else 0
+            if len(act_raw) != len(exp_raw) or not record.size or len(act_raw) % record.size:
+                return {
+                    **base,
+                    "kind": "record_count_mismatch",
+                    "record_bytes": record.size,
+                    "expected_records": exp_records,
+                    "actual_records": act_records,
+                }
+            non_finite = False
+            mismatch_rec, mismatch_field = None, None
+            for rec_i, (left, right) in enumerate(
+                zip(record.iter_unpack(exp_raw), record.iter_unpack(act_raw), strict=True)
+            ):
+                for field_i, (x, y) in enumerate(zip(left, right, strict=True)):
+                    if isinstance(y, float) and not math.isfinite(y):
+                        non_finite = True
+                    matched = (
+                        close_number(x, y, c)
+                        if isinstance(x, float) and isinstance(y, float)
+                        else x == y
+                    )
+                    if not matched and mismatch_rec is None:
+                        mismatch_rec, mismatch_field = rec_i, field_i
+            return {
+                **base,
+                "kind": "numeric_record_mismatch",
+                "expected_records": exp_records,
+                "actual_records": act_records,
+                "first_mismatch_record": mismatch_rec,
+                "first_mismatch_field": mismatch_field,
+                "non_finite_actual": non_finite,
+            }
+        try:
+            left, right = exp_raw.decode("utf-8"), act_raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return {**base, "kind": "byte_mismatch"}
+        if mode == "auto" and ("\0" in left or "\0" in right):
+            return {**base, "kind": "byte_mismatch"}
+        a, b = left.split(), right.split()
+        first_tok = next(
+            (i for i, (x, y) in enumerate(zip(a, b, strict=False)) if not _token_matches(x, y, c)),
+            min(len(a), len(b)),
+        )
+        return {
+            **base,
+            "kind": "token_count_mismatch" if len(a) != len(b) else "token_value_mismatch",
+            "expected_lines": len(left.splitlines()),
+            "actual_lines": len(right.splitlines()),
+            "expected_tokens": len(a),
+            "actual_tokens": len(b),
+            "first_mismatch_token": first_tok,
+            "non_finite_actual": any(_non_finite_token(t) for t in b),
+        }
+    return {"kind": "unknown"}
+
+
 def validate_contract(c, official, evidence_text=""):
     warnings = []
     available = sorted(
@@ -263,6 +365,14 @@ def validate_contract(c, official, evidence_text=""):
     return list(dict.fromkeys(units)), warnings
 
 
+def executable_path(build):
+    return build / ("solution.exe" if os.name == "nt" else "solution")
+
+
+def sanitizer_executable_path(build):
+    return build / ("solution.san.exe" if os.name == "nt" else "solution.san")
+
+
 def build_source(src, build, contract):
     build.mkdir(parents=True, exist_ok=True)
     compiler = shutil.which("g++" if contract["language"] == "c++" else "gcc")
@@ -275,7 +385,7 @@ def build_source(src, build, contract):
         *[str(src / p) for p in contract["source_files"]],
         *contract["compiler_flags"],
         "-o",
-        str(build / "solution"),
+        str(executable_path(build)),
     ]
     result = subprocess.run(command, capture_output=True, timeout=90)
     (build / "compiler.stdout").write_bytes(result.stdout)
@@ -288,6 +398,70 @@ def build_source(src, build, contract):
             returncode=result.returncode,
             stderr=result.stderr.decode(errors="replace")[-12000:],
         )
+    vec_lines = []
+    if any(flag.startswith(("-O2", "-O3")) for flag in contract.get("compiler_flags", [])):
+        try:
+            vec = subprocess.run(
+                [
+                    compiler,
+                    "-I",
+                    str(src),
+                    *[str(src / p) for p in contract["source_files"]],
+                    *contract["compiler_flags"],
+                    "-S",
+                    "-o",
+                    os.devnull,
+                    "-fopt-info-vec-optimized",
+                    "-fopt-info-vec-missed",
+                ],
+                capture_output=True,
+                timeout=30,
+            )
+            (build / "compiler.vec.stderr").write_bytes(vec.stderr)
+            vec_lines = [
+                line.strip()
+                for line in vec.stderr.decode(errors="replace").splitlines()
+                if "optimized:" in line or "missed:" in line
+            ][:32]
+        except (OSError, subprocess.SubprocessError):
+            vec_lines = []
+    san_binary = sanitizer_executable_path(build)
+    san_mode = None
+    flag_candidates = (
+        [["-g1", "-fsanitize=undefined", "-fsanitize=bounds", "-fsanitize-undefined-trap-on-error"]]
+        if os.name == "nt"
+        else [
+            ["-g1", "-fsanitize=address,undefined", "-fno-sanitize-recover=all"],
+            ["-g1", "-fsanitize=undefined", "-fsanitize=bounds", "-fsanitize-undefined-trap-on-error"],
+        ]
+    )
+    for san_flags in flag_candidates:
+        try:
+            san = subprocess.run(
+                [
+                    compiler,
+                    "-I",
+                    str(src),
+                    *[str(src / p) for p in contract["source_files"]],
+                    *contract["compiler_flags"],
+                    *san_flags,
+                    "-o",
+                    str(san_binary),
+                ],
+                capture_output=True,
+                timeout=60,
+            )
+            if san.returncode == 0 and san_binary.is_file():
+                san_mode = san_flags[1]
+                break
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return {
+        "built": True,
+        "compiler_stderr": result.stderr.decode(errors="replace").strip()[-2000:],
+        "vectorization": vec_lines,
+        "sanitizer_probe": san_mode,
+    }
 
 
 def _generator_limits():
@@ -347,6 +521,50 @@ def materialize(case, official, root, resources):
         "files": files,
         "capture_files": case.get("capture_files", []),
     }
+
+
+def probe_sanitizer(binary, case, timeout=30, resources=None):
+    resources = resources or Path(__file__).parent
+    with tempfile.TemporaryDirectory(prefix="forest-san-") as tmp:
+        cwd = Path(tmp)
+        for entry in case["files"]:
+            target = cwd / relative(entry["target"])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(resources / entry["source"], target)
+        with (resources / case["stdin"]).open("rb") as stream:
+            try:
+                result = subprocess.run(
+                    [str(Path(binary).resolve()), *case["argv"]],
+                    cwd=cwd,
+                    stdin=stream,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    timeout=timeout,
+                    env={
+                        **os.environ,
+                        "OMP_NUM_THREADS": "4",
+                        "OMP_DYNAMIC": "FALSE",
+                        "CUDA_VISIBLE_DEVICES": "",
+                        "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1:halt_on_error=1",
+                        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1",
+                    },
+                )
+            except subprocess.TimeoutExpired:
+                return
+        stderr_text = result.stderr.decode(errors="replace")
+        if (
+            result.returncode
+            or "AddressSanitizer:" in stderr_text
+            or "UndefinedBehaviorSanitizer:" in stderr_text
+            or "runtime error:" in stderr_text
+        ):
+            raise ContractError(
+                "sanitizer_failed",
+                case["name"],
+                "Sanitizer detected memory error or undefined behavior",
+                returncode=result.returncode,
+                stderr=stderr_text[-6000:],
+            )
 
 
 def execute(binary, case, timeout=60, resources=None):
@@ -444,6 +662,7 @@ def prepare(contract, official, root, *, evidence_text="", probe_timeout=60):
     )
     reference = root / "reference-build"
     build_source(source / "src", reference, contract)
+    reference_binary = executable_path(reference)
     trusted = root / "validation"
     trusted.mkdir()
     shutil.copyfile(Path(__file__), trusted / "contract_tool.py")
@@ -473,9 +692,9 @@ def prepare(contract, official, root, *, evidence_text="", probe_timeout=60):
                 continue
             seen.add(key)
             if key not in cache:
-                expected, seconds = execute(reference / "solution", actual, probe_timeout, trusted)
+                expected, seconds = execute(reference_binary, actual, probe_timeout, trusted)
                 repeat, repeat_seconds = execute(
-                    reference / "solution", actual, probe_timeout, trusted
+                    reference_binary, actual, probe_timeout, trusted
                 )
                 if not any(item["bytes"] for item in expected.values()):
                     raise ContractError(
@@ -550,7 +769,7 @@ def prepare(contract, official, root, *, evidence_text="", probe_timeout=60):
         "source": str(source),
         "validation": str(trusted),
         "warnings": warnings,
-        "reference_binary_sha256": sha(reference / "solution"),
+        "reference_binary_sha256": sha(reference_binary),
         "reference_timings": timings,
         "coverage": resolved["coverage"],
         "benchmark_reference_seconds": bench["reference_seconds"],
@@ -566,16 +785,29 @@ def main():
     root = Path(__file__).parent
     contract = json.loads((root / "contract.json").read_text(encoding="utf-8"))
     if sys.argv[1] == "build":
-        build_source(Path(sys.argv[2]) / "src", Path(sys.argv[3]), contract)
+        report = build_source(Path(sys.argv[2]) / "src", Path(sys.argv[3]), contract)
+        print(json.dumps(report))
     elif sys.argv[1] == "check":
+        binary = Path(sys.argv[2])
+        phase = sys.argv[3]
+        if phase == "search" and contract.get("search"):
+            san_binary = sanitizer_executable_path(binary.parent)
+            if san_binary.is_file():
+                smallest = min(
+                    contract["search"],
+                    key=lambda c: (c.get("stdin_bytes", 0), c.get("reference_seconds", 0.0)),
+                )
+                probe_sanitizer(
+                    san_binary, smallest, min(contract["case_timeout_seconds"], 30), root
+                )
         seen = set()
         count = 0
-        for case in [*contract[sys.argv[3]], contract["benchmark"]]:
+        for case in [*contract[phase], contract["benchmark"]]:
             key = (case["input_fingerprint"], tuple(case["capture_files"]))
             if key in seen:
                 continue
             seen.add(key)
-            actual, _ = execute(Path(sys.argv[2]), case, contract["case_timeout_seconds"], root)
+            actual, _ = execute(binary, case, contract["case_timeout_seconds"], root)
             if not equal_output(case["expected"], actual, contract["comparison"]):
                 print(
                     json.dumps(
@@ -583,6 +815,9 @@ def main():
                             "correct": False,
                             "case": case["name"],
                             "reason": "Reference output mismatch",
+                            "mismatch": mismatch_diagnostic(
+                                case["expected"], actual, contract["comparison"]
+                            ),
                         }
                     )
                 )

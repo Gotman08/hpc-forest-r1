@@ -8,7 +8,17 @@ import sys
 import tomllib
 from pathlib import Path
 
+from .adaptive_budget import validate_adaptive
 from .core import ForestError
+from .forest import persistent_mother, validate_forest
+from .model_skills import validate_settings as validate_skills
+from .support.budgets import (
+    FINISH_STARTED,
+    NATIVE_TOKEN_CEILING,
+    adaptive,
+    finish_started,
+    unlimited_tokens,
+)
 from .support.validation import require_finite_number, require_integer
 
 DEFAULT = {
@@ -17,20 +27,23 @@ DEFAULT = {
     "backend": "recipe",
     "seed": 23,
     "binary_tree": {"enabled": False},
+    "forest": {"policy": "fixed"},
+    "completion": {"policy": FINISH_STARTED, "postprocess_tokens": None,
+                   "reserve_policy": "adaptive", "confirm_final_g": True},
     "roles": ["A", "B", "C"],
     "budget": {
-        "search_slots": 39,
+        "search_slots": None,
         "confirmation_slots": 3,
         "wall_seconds": 3600,
-        "tokens": 300000,
-        "mission_tokens": 16000,
+        "tokens": None,
+        "mission_tokens": None,
         "max_workers": 3,
-        "max_depth": 6,
+        "max_depth": 0,  # Zero disables only the depth cap.
         "generation_seconds": 180,
         "infrastructure_retries": 1,
         "confirmation_seconds": 180,
     },
-    "schedule": {"cycles": 2, "trials_per_role_per_cycle": 5, "integrations_per_cycle": 4},
+    "schedule": {"cycles": None, "trials_per_role_per_cycle": 2, "integrations_per_cycle": 2},
     "protocol": {
         "build": ["{python}", "{trusted}/build.py", "{worktree}", "{build}"],
         "check": ["{python}", "{trusted}/check.py", "{binary}", "{phase}"],
@@ -52,7 +65,7 @@ DEFAULT = {
         "num_threads": 4,
     },
     "minimum_gain": 0.03,
-    "harness": {"enabled": False, "max_attempts": 2, "call_token_ceiling": 16000,
+    "harness": {"enabled": False, "max_attempts": 2, "call_token_ceiling": None,
                 "research": {"enabled": False, "corpus": None, "corpus_sha256": None,
                              "allowed_hosts": []}},
 }
@@ -71,17 +84,47 @@ def load_config(path: Path | None = None) -> dict:
     if path:
         with path.open("rb") as stream:
             changes = json.load(stream) if path.suffix == ".json" else tomllib.load(stream)
+        # A supplied finite legacy profile keeps its original lifecycle. Only
+        # new duration profiles inherit adaptive completion from DEFAULT.
+        if (changes.get("completion", {}).get("reserve_policy") != "adaptive"
+                and (changes.get("budget", {}).get("search_slots") is not None
+                     or changes.get("schedule", {}).get("cycles") is not None
+                     or changes.get("completion", {}).get("policy") == "hard"
+                     or changes.get("budget", {}).get("tokens") is not None)):
+            config["completion"] = {"policy": FINISH_STARTED, "postprocess_tokens": None}
+            config["budget"].update(search_slots=39, max_depth=6)
+            config["schedule"].update(cycles=2)
         _merge(config, changes)
     validate(config)
     return config
 
 
 def validate(c: dict) -> None:
+    validate_skills(c.get("skills"))
+    if (c.get("skills") or {}).get("enabled") and (
+        c["backend"] != "codex" or c["codex"].get("transport") != "codex-mailbox"
+    ):
+        raise ForestError("Project skills require the structured Codex mailbox backend")
+    completion = c.get("completion", {})
+    if (not isinstance(completion, dict)
+            or completion.get("policy", "hard") not in {"hard", FINISH_STARTED}):
+        raise ForestError("completion.policy must be hard or finish-started")
+    validate_adaptive(c)
+    if adaptive(c) and (not finish_started(c) or not unlimited_tokens(c)):
+        raise ForestError("Adaptive completion requires finish-started and budget.tokens=null")
+    if completion.get("confirm_final_g") and not finish_started(c):
+        raise ForestError("Final G confirmation requires finish-started")
+    post_tokens = completion.get("postprocess_tokens")
+    if post_tokens is not None:
+        require_integer(post_tokens, "completion.postprocess_tokens", minimum=1)
+        if not unlimited_tokens(c) and post_tokens < (c["budget"]["mission_tokens"] or 0) + NATIVE_TOKEN_CEILING:
+            raise ForestError("Reserve one Mother call and one complete G mission for postprocessing")
     binary = c.get("binary_tree", {})
     if not isinstance(binary, dict) or type(binary.get("enabled", False)) is not bool:
         raise ForestError("binary_tree.enabled must be a boolean")
     if binary.get("enabled") and c["method"] not in {"H", "H-no-feedback"}:
         raise ForestError("Binary search requires separate H trees, without enumeration")
+    validate_forest(c)
     harness = c.get("harness", {})
     if type(harness.get("enabled", False)) is not bool:
         raise ForestError("harness.enabled must be a boolean")
@@ -90,10 +133,11 @@ def validate(c: dict) -> None:
             raise ForestError("The node harness expects a model backend, not the recipe demonstration")
         if type(harness.get("max_attempts")) is not int or not 1 <= harness["max_attempts"] <= 4:
             raise ForestError("harness.max_attempts must be an integer in [1,4]")
-        if type(harness.get("call_token_ceiling")) is not int or harness["call_token_ceiling"] < 1:
-            raise ForestError("harness.call_token_ceiling must be a positive integer")
-        if c["budget"]["mission_tokens"] < harness["max_attempts"] * harness["call_token_ceiling"]:
-            raise ForestError("Reserve all possible harness calls inside mission_tokens")
+        if not unlimited_tokens(c):
+            require_integer(harness.get("call_token_ceiling"), "harness.call_token_ceiling", minimum=1)
+            require_integer(c["budget"]["mission_tokens"], "budget.mission_tokens", minimum=1)
+            if c["budget"]["mission_tokens"] < harness["max_attempts"] * harness["call_token_ceiling"]:
+                raise ForestError("Reserve all possible harness calls inside mission_tokens")
         research = harness.get("research", {})
         if type(research.get("enabled", False)) is not bool:
             raise ForestError("harness.research.enabled must be a boolean")
@@ -148,23 +192,30 @@ def validate(c: dict) -> None:
     if c["backend"] == "recipe" and any(r not in "ABC" for r in c["roles"]):
         raise ForestError("Recipe demonstration supports A/B/C only; use Codex for D/E")
     for name, value in c["budget"].items():
+        if name in {"tokens", "mission_tokens", "search_slots"} and value is None:
+            continue
         if name == "infrastructure_retries":
             require_integer(value, name, maximum=3)
             continue
+        if name == "max_depth":
+            continue
         if require_finite_number(value, f"budget.{name}") <= 0:
             raise ForestError(f"budget.{name} must be positive")
+    require_integer(c["budget"]["max_depth"], "budget.max_depth", minimum=0)
     for name in [
         "search_slots",
         "confirmation_slots",
-        "tokens",
-        "mission_tokens",
         "max_workers",
-        "max_depth",
     ]:
+        if name == "search_slots" and c["budget"][name] is None:
+            continue
         require_integer(c["budget"][name], f"budget.{name}", minimum=1)
+    for name in ["tokens", "mission_tokens"]:
+        if c["budget"][name] is not None or not unlimited_tokens(c):
+            require_integer(c["budget"][name], f"budget.{name}", minimum=1)
     if c["budget"]["max_workers"] > 4:
         raise ForestError("Initial controller supports at most four generation workers")
-    if c["budget"]["confirmation_seconds"] >= c["budget"]["wall_seconds"]:
+    if not adaptive(c) and c["budget"]["confirmation_seconds"] >= c["budget"]["wall_seconds"]:
         raise ForestError("Reserve less confirmation time than the full wall budget")
     for name in [
         "timeout_seconds",
@@ -175,7 +226,12 @@ def validate(c: dict) -> None:
     for name in ["repetitions", "confirmation_repetitions", "warmups"]:
         require_integer(c["protocol"][name], f"protocol.{name}", minimum=0 if name == "warmups" else 1)
     for name in ["cycles", "trials_per_role_per_cycle", "integrations_per_cycle"]:
-        require_integer(c["schedule"][name], f"schedule.{name}", minimum=1)
+        if name == "cycles" and c["schedule"][name] is None:
+            if c["method"] == "H-enumeration":
+                raise ForestError("Enumeration needs a finite cycle count")
+            continue
+        minimum = 0 if name == "integrations_per_cycle" and persistent_mother(c) else 1
+        require_integer(c["schedule"][name], f"schedule.{name}", minimum=minimum)
     for name in ["build", "check", "benchmark"]:
         command = c["protocol"][name]
         if (

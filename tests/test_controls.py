@@ -153,10 +153,25 @@ def test_pilot_has_420_slots_without_hidden_budget(tmp_path, config):
     assert json.loads((plan.parent / "seed-1-U.json").read_text())["budget"] == config["budget"]
 
 
-@pytest.mark.parametrize("key,value", [("max_workers", 5), ("max_depth", 0), ("search_slots", 1.2)])
+@pytest.mark.parametrize("key,value", [("max_workers", 5), ("max_depth", -1), ("search_slots", 1.2)])
 def test_invalid_controller_limits_rejected(config, key, value):
     config["budget"][key] = value
     with pytest.raises(ForestError):
+        validate(config)
+
+
+@pytest.mark.parametrize("binary", [False, True])
+@pytest.mark.parametrize("depth", [0, 1, 6])
+def test_zero_depth_disables_cap_and_positive_depths_remain_valid(config, binary, depth):
+    config["binary_tree"] = {"enabled": binary}
+    config["budget"]["max_depth"] = depth
+    validate(config)
+
+
+@pytest.mark.parametrize("depth", [-1, True, False, 1.5, "0", None, float("inf")])
+def test_depth_cap_requires_a_nonnegative_integer(config, depth):
+    config["budget"]["max_depth"] = depth
+    with pytest.raises(ForestError, match="budget.max_depth"):
         validate(config)
 
 
@@ -166,3 +181,48 @@ def test_invalid_inference_repetition_controls_rejected(config,key,value):
     config["ollama"][key]=value
     with pytest.raises(ForestError):
         validate(config)
+
+
+@pytest.mark.parametrize("binary", [False, True])
+def test_recover_pending_preserves_already_settled_exact_tokens(db, binary):
+    from hpc_forest.search import Search
+
+    config = db.get("config")
+    config["backend"] = "codex"
+    config["binary_tree"] = {"enabled": binary}
+    config["budget"].update(tokens=10000, mission_tokens=1000)
+    db.set("config", config)
+    search = Search(db)
+    tree = search.initialize(1, "A", 23)
+    slot = db.reserve("search", "A", 1000)
+    search.ask(tree, ["A"], 1, "base", 1, "unused", slot)
+    db.settle_tokens(slot, 42)
+    before = db.costs()
+    assert search.recover_pending() == 1
+    assert db.costs() == before
+    assert db.costs()["exact_tokens_used"] == 42
+    assert db.costs()["unknown_usage_calls"] == 0
+
+
+def test_campaign_shortened_build_timeout_keeps_absent_score(tmp_path, config):
+    import time
+
+    from hpc_forest.evaluator import Evaluator
+
+    source = tmp_path / "original"
+    (source / "src").mkdir(parents=True)
+    (source / "src/main.c").write_text("int main(void) { return 0; }\n", encoding="utf8")
+    worktree = tmp_path / "candidate"
+    commit = initialize_source(source, worktree)
+    campaign = tmp_path / "campaign"
+    (campaign / "trusted").mkdir(parents=True)
+    config["target_id"] = str(tmp_path)
+    config["protocol"]["build"] = [sys.executable, "-c", "import time; time.sleep(2.0)"]
+    config["protocol"]["build_timeout_seconds"] = 10
+    manifest = protected_manifest(campaign / "trusted")
+    evaluator = Evaluator(campaign, config, manifest, "p", time.time() + 0.6)
+    outcome = evaluator.evaluate("fixture", 1, worktree, commit, 1.0)
+    assert outcome.status == "cancelled_budget"
+    assert outcome.correct is None
+    assert outcome.score is None
+

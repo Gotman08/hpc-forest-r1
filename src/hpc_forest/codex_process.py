@@ -1,4 +1,4 @@
-"""Native Codex generation with an explicit model/effort and no candidate execution."""
+"""Native Codex generation with explicit identity and optional ROMEO MCP access."""
 from __future__ import annotations
 
 import copy
@@ -7,6 +7,7 @@ import shutil
 import time
 from pathlib import Path
 
+from .codex_conversation import run_turn, workspace_for
 from .codex_mailbox import (
     EFFORT,
     MODEL,
@@ -15,7 +16,11 @@ from .codex_mailbox import (
     response_envelope,
     sha256,
 )
-from .core import InfrastructureError, atomic_json, run_process
+from .core import CandidateRejected, InfrastructureError, atomic_json, run_process
+from .documentation_mcp import DOCUMENTATION_INSTRUCTIONS, DOCUMENTATION_TOOLS, DocumentationMCP
+from .model_mcp import DISABLED_MODEL_TOOLS, RomeoMCP
+from .model_skills import consume_report, usage_trace, verify_binding
+from .support.budgets import FINISH_STARTED, OBSERVE_TOKENS, time_left
 
 
 def check_dependencies(receipt: Path, required_jobs: set[str]) -> dict:
@@ -83,7 +88,9 @@ def wire_schema(schema: dict) -> dict:
     return schema
 
 
-def command_for(request: dict, output: Path, executable: str = "codex") -> list[str]:
+def command_for(request: dict, output: Path, executable: str = "codex", *,
+                romeo_mcp: RomeoMCP | None = None,
+                documentation_mcp: DocumentationMCP | None = None) -> list[str]:
     if request.get("model") != MODEL or request.get("reasoning_effort") != EFFORT:
         raise InfrastructureError("A different model or reasoning effort is forbidden")
     executable = shutil.which(executable)
@@ -93,36 +100,59 @@ def command_for(request: dict, output: Path, executable: str = "codex") -> list[
     messages = request["messages"]
     if [m.get("role") for m in messages] != ["system", "user"]:
         raise InfrastructureError("Expected the frozen neutral system/user prompt")
-    (output / "instructions.txt").write_text(messages[0]["content"], encoding="utf8")
+    verify_binding(request)
+    system = messages[0]["content"]
+    if romeo_mcp is not None:
+        system = romeo_mcp.instructions(system)
+    if documentation_mcp is not None:
+        system += DOCUMENTATION_INSTRUCTIONS
+    (output / "instructions.txt").write_text(system, encoding="utf8")
     atomic_json(output / "output-schema.json", wire_schema(request["schema"]))
-    args = [executable, "exec", "--ignore-user-config", "--strict-config", "--ephemeral",
-            "--skip-git-repo-check", "--sandbox", "read-only", "--json", "--color", "never",
-            "--model", MODEL, "--output-schema", str(output / "output-schema.json"),
-            "--output-last-message", str(output / "agent-result.json"), "-C", str(output)]
+    persistent = request.get("conversation") is not None
+    workspace = workspace_for(request, output) if persistent else output
+    workspace.mkdir(parents=True, exist_ok=True)
+    args = [executable, "exec", "--sandbox", "read-only", "--color", "never", "-C", str(workspace)]
+    if persistent and request["conversation"]["turn"] > 0:
+        args += ["resume", request["conversation"]["thread_id"]]
+    # Resume has its own schema, model and config options. Pass them directly to
+    # that subcommand so the planning schema cannot survive into code assembly.
+    args += ["--ignore-user-config", "--strict-config", "--skip-git-repo-check", "--json",
+             "--model", MODEL, "--output-schema", str(output / "output-schema.json"),
+             "--output-last-message", str(output / "agent-result.json")]
+    if not persistent:
+        args.append("--ephemeral")
     overrides = {
         "model_reasoning_effort": EFFORT,
         "model_instructions_file": str(output / "instructions.txt"),
-        "model_context_window": 65536,
         "project_doc_max_bytes": 0,
         "skills.max_context_tokens": 1,
         "approval_policy": "never",
         "forced_login_method": "chatgpt",
         "web_search": "disabled",
         "features.skip_host_skill_discovery": True,
+        "features.code_mode_host": romeo_mcp is not None or documentation_mcp is not None,
         **{f"features.{name}": False for name in [
             "shell_tool", "unified_exec", "apps", "plugins", "memories", "multi_agent",
             "multi_agent_v2", "hooks", "skill_search", "browser_use", "computer_use",
-            "image_generation", "view_image", "workspace_dependencies", "code_mode_host",
+            "image_generation", "view_image", "workspace_dependencies",
             "sleep_tool", "unbounded_connection_retries", "shell_snapshot", "goals",
         ]},
     }
+    if request.get("token_policy") != OBSERVE_TOKENS:
+        overrides["model_context_window"] = 65536
+    if romeo_mcp is not None:
+        overrides.update(romeo_mcp.overrides())
+    if documentation_mcp is not None:
+        overrides.update(documentation_mcp.overrides(request["nonce"]))
     for key, value in overrides.items():
         args.extend(["--config", f"{key}={json.dumps(value, ensure_ascii=False)}"])
     return [*args, "-"]
 
 
-def usage_from_events(path: Path) -> tuple[dict, bool]:
+def usage_from_events(path: Path, *, observe_only: bool = False,
+                      allow_romeo_mcp: bool = False, allow_documentation: bool = False) -> tuple[dict, bool]:
     usage_events, tool_events = [], []
+    mcp_calls, forbidden_tools, runtime_errors = {}, [], []
     for line in path.read_text(encoding="utf8", errors="replace").splitlines():
         try:
             event = json.loads(line)
@@ -132,58 +162,137 @@ def usage_from_events(path: Path) -> tuple[dict, bool]:
             usage_events.append(event["usage"])
         item = event.get("item", {})
         if event.get("type") in {"item.started", "item.completed", "item.updated"}:
+            if item.get("type") == "error" and (allow_romeo_mcp or allow_documentation):
+                message = str(item.get("message", ""))
+                if "Code Mode is unavailable" in message or "code-mode host is disabled" in message:
+                    runtime_errors.append(message)
             if item.get("type") not in {"agent_message", "reasoning", "error", None}:
                 tool_events.append(item.get("type"))
+                allowed = (item.get("type") == "mcp_tool_call" and isinstance(item.get("tool"), str)
+                           and bool(item["tool"]) and (
+                               (allow_romeo_mcp and item.get("server") == "romeo"
+                                and item["tool"] not in DISABLED_MODEL_TOOLS)
+                               or (allow_documentation and item.get("server") == "hpc_docs"
+                                   and item["tool"] in DOCUMENTATION_TOOLS)))
+                if not allowed:
+                    forbidden_tools.append(item.get("type"))
+                if item.get("type") == "mcp_tool_call":
+                    identifier = item.get("id") or f"event-{len(tool_events)}"
+                    mcp_calls[identifier] = {"id": identifier, "server": item.get("server"),
+                                             "tool": item.get("tool"), "status": item.get("status"),
+                                             "allowed": bool(allowed)}
     known = bool(usage_events) and all(
         all(type(u.get(k)) is int and u[k] >= 0 for k in ["input_tokens", "output_tokens"])
         for u in usage_events
     )
     return {
         "tokens": sum(u["input_tokens"] + u["output_tokens"] for u in usage_events)
-        if known else TOKEN_CEILING,
-        "token_accounting": "exact" if known else "upper_bound",
+        if known else None if observe_only else TOKEN_CEILING,
+        "token_accounting": "exact" if known else "unknown" if observe_only else "upper_bound",
+        "observed_tokens": sum(u["input_tokens"] + u["output_tokens"] for u in usage_events
+                               if all(type(u.get(k)) is int and u[k] >= 0
+                                      for k in ["input_tokens", "output_tokens"])),
         "events": usage_events, "llm_calls": max(1, len(usage_events)),
         "model_requested": MODEL, "reasoning_effort_requested": EFFORT,
         "cached_tokens_included_in_input": True, "tool_events": tool_events,
+        "mcp_tool_calls": list(mcp_calls.values()), "forbidden_tool_events": forbidden_tools,
+        "tool_runtime_errors": list(dict.fromkeys(runtime_errors)),
         "codex_jsonl_sha256": sha256(path.read_bytes()),
-    }, bool(tool_events)
+    }, bool(forbidden_tools)
 
 
 def run_codex(request: dict, request_sha: str, output: Path, dependency_receipt: Path,
-              required_jobs: set[str], executable="codex") -> dict:
+              required_jobs: set[str], executable="codex", *, romeo_mcp: RomeoMCP | None = None,
+              documentation_mcp: DocumentationMCP | None = None) -> dict:
     gate = check_dependencies(dependency_receipt, required_jobs)
     if (gate.get("status") in {"parallel_pilot_explicitly_authorized",
                                "harness_comparison_explicitly_authorized"}
             and request.get("session_id") != gate.get("session_id")):
         raise InfrastructureError("Generation belongs to another explicitly authorized session")
-    timeout = request["expires_at"] - time.time() - 5
-    if timeout <= 0:
-        return response_envelope(request, request_sha, error="Request expired before generation",
-                                 infrastructure_error=True,
-                                 usage={"tokens": 0, "token_accounting": "exact", "llm_calls": 0})
-    argv = command_for(request, output, executable)
+    if request["expires_at"] is None and request.get("deadline_policy") != FINISH_STARTED:
+        raise InfrastructureError("An unlimited request requires the finish-started contract")
+    if request["expires_at"] is None and gate.get("completion", {}).get("policy") != FINISH_STARTED:
+        raise InfrastructureError("The authorization does not cover unlimited completion time")
+    observe_only = request.get("token_policy") == OBSERVE_TOKENS
+    if observe_only and gate.get("completion", {}).get("token_policy") != OBSERVE_TOKENS:
+        raise InfrastructureError("The authorization does not cover unlimited token consumption")
+    timeout = time_left(request["expires_at"], now=time.time())
+    if timeout is not None:
+        timeout -= 5
+    if timeout is not None and timeout <= 0:
+        return response_envelope(
+            request,
+            request_sha,
+            error="Request expired before generation",
+            infrastructure_error=False,
+            usage={
+                "tokens": 0,
+                "token_accounting": "exact",
+                "llm_calls": 0,
+                "generation_not_started": "search_deadline",
+            },
+        )
+    def invoke():
+        return _invoke(request, request_sha, output, executable, timeout, observe_only,
+                       romeo_mcp, documentation_mcp)
+    if request.get("conversation") is not None:
+        return run_turn(request, request_sha, output, invoke)
+    return invoke()
+
+
+def _invoke(request, request_sha, output, executable, timeout, observe_only,
+            romeo_mcp=None, documentation_mcp=None):
+    options = {"romeo_mcp": romeo_mcp}
+    if documentation_mcp is not None:
+        options["documentation_mcp"] = documentation_mcp
+    argv = command_for(request, output, executable, **options)
     atomic_json(output / "invocation.json", {
         "argv": argv, "model": MODEL, "reasoning_effort": EFFORT,
         "request_sha256": request_sha, "hosted_inference": True,
-        "source_execution_allowed": False,
+        "source_execution_allowed": romeo_mcp is not None,
+        "local_source_execution_allowed": False,
+        "remote_experiments_allowed": romeo_mcp is not None,
+        "model_mcp": romeo_mcp.receipt() if romeo_mcp is not None else None,
+        "documentation_mcp": documentation_mcp.receipt() if documentation_mcp is not None else None,
+        "model_skills": request.get("model_skills"),
+        "effective_instructions_sha256": sha256((output / "instructions.txt").read_bytes()),
+        "deadline_policy": request.get("deadline_policy", "hard"),
+        "budget_phase": request.get("budget_phase", "search"),
+        "token_policy": request.get("token_policy", "limited"),
+        "conversation": request.get("conversation"),
     })
     atomic_json(output / "request.json", request)
     result = run_process(argv, output, output / "codex.jsonl", timeout,
                          env={"OPENAI_API_KEY": "", "CODEX_API_KEY": ""},
                          stdin=request["messages"][1]["content"])
-    usage, tools = usage_from_events(Path(result.log))
+    usage, tools = usage_from_events(Path(result.log), observe_only=observe_only,
+                                    allow_romeo_mcp=romeo_mcp is not None,
+                                    allow_documentation=documentation_mcp is not None)
     error = None
     infra = False
     data = None
+    reported, report_error = None, None
     if result.returncode or result.timed_out:
         error, infra = "Codex failed or exceeded the generation deadline; inspect its log", True
+    elif usage.get("tool_runtime_errors"):
+        error, infra = "The native MCP tool runtime is unavailable; inspect its log", True
     elif tools:
-        error, infra = "Codex attempted a tool call in a source-only generation", True
+        error, infra = "Codex attempted a tool call outside the authorized MCP access", True
     else:
         try:
             data = bounded_json(output / "agent-result.json")
+            data, reported = consume_report(data, request.get("model_skills"))
+        except CandidateRejected as exc:
+            report_error = str(exc)
+            error = f"Codex returned an invalid project skills report: {exc}"
         except (OSError, ValueError, InfrastructureError) as exc:
             error = f"Codex returned no valid structured proposal: {exc}"
+    trace = usage_trace(request, request_sha, usage,
+                        sha256((output / "instructions.txt").read_bytes()),
+                        reported=reported, report_error=report_error)
+    if trace is not None:
+        usage["model_skills"] = trace
+        atomic_json(output / "skills-usage.json", trace)
     response = response_envelope(request, request_sha, data=data, usage=usage,
                                  error=error, infrastructure_error=infra)
     atomic_json(output / "response.json", response)

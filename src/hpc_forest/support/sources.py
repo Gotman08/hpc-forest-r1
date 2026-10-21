@@ -5,11 +5,34 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..core import InfrastructureError
+from ..gitops import git
 from .validation import require_integer
 
 
 class SourceLimitExceeded(InfrastructureError):
     """The complete source does not fit; callers must never silently truncate it."""
+
+
+def committed_source_snapshot(repo: Path, commit: str) -> dict[str, str]:
+    """Read full, exact committed files for one integration input, never clipped diffs."""
+    files = {}
+    byte_count = 0
+    entries = git(repo, "ls-tree", "-r", "-z", commit, "--", "src", binary=True)
+    for entry in entries.split(b"\0"):
+        if not entry:
+            continue
+        header, path = entry.split(b"\t", 1)
+        mode, kind, object_id = header.split()
+        if mode not in {b"100644", b"100755"} or kind != b"blob":
+            raise InfrastructureError("Integration source must contain regular files only")
+        raw = git(repo, "cat-file", "blob", object_id.decode("ascii"), binary=True)
+        byte_count += len(raw)
+        if byte_count > 1024 * 1024:
+            raise SourceLimitExceeded("Integration source exceeds its snapshot byte limit")
+        files[path.decode("utf-8")] = raw.decode("utf-8")
+    if not files:
+        raise InfrastructureError("Integration source has no committed src/ files")
+    return files
 
 
 def _is_link(path: Path) -> bool:

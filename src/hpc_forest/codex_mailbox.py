@@ -9,19 +9,39 @@ import uuid
 from pathlib import Path
 
 from .backends import Generated
+from .codex_conversation import next_turn, verify_receipt
 from .core import CandidateRejected, InfrastructureError, Mission, atomic_json
+from .forest import persistent_mother
 from .harness_research import extract_research
 from .ollama_backend import validate_files
 from .source_request import proposal_messages
-from .support.budgets import generation_deadline
+from .support.budgets import (
+    FINISH_STARTED,
+    NATIVE_TOKEN_CEILING,
+    OBSERVE_TOKENS,
+    adaptive,
+    expired,
+    generation_deadline,
+    time_left,
+    unlimited_tokens,
+)
 
 MODEL = "gpt-6.1-sol"
 EFFORT = "max"
 PROTOCOL = "hpc-forest-codex-mailbox-v1"
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
-# Codex does not expose Ollama's num_predict. Reserve a conservative service ceiling.
-TOKEN_CEILING = 65536 + 131072
+HEARTBEAT_GRACE_SECONDS = 180
+# Historical budgeted campaigns used this accounting reservation. New requests
+# have no application ceiling and never present this estimate as a real bound.
+TOKEN_CEILING = NATIVE_TOKEN_CEILING
+
+
+def unavailable_usage(request: dict) -> dict:
+    observe_only = request.get("token_policy") == OBSERVE_TOKENS
+    return {"tokens": None if observe_only else TOKEN_CEILING,
+            "token_accounting": "unknown" if observe_only else "upper_bound",
+            "exact_tokens": None, "llm_calls": 1}
 
 
 def json_bytes(value: dict) -> bytes:
@@ -73,16 +93,43 @@ def make_request(mission: Mission, context: dict, config: dict) -> dict:
     settings = config["codex"]
     if settings.get("model") != MODEL or settings.get("reasoning_effort") != EFFORT:
         raise InfrastructureError("This campaign requires exactly GPT-6.1 Sol MAX")
-    if config["budget"]["mission_tokens"] < TOKEN_CEILING:
+    if not unlimited_tokens(config) and config["budget"]["mission_tokens"] < TOKEN_CEILING:
         raise InfrastructureError("Insufficient conservative Codex token reservation")
-    rendered = proposal_messages(Path(mission.worktree), mission, context)
-    return {
+    rendered = proposal_messages(Path(mission.worktree), mission, context, skills=config.get("skills"))
+    request = {
         "protocol": PROTOCOL, "kind": "source-proposal", "nonce": uuid.uuid4().hex,
         "session_id": settings["session_id"], "model": MODEL, "reasoning_effort": EFFORT,
         "mission_id": mission.id, "integration_source_ids": mission.sources,
         "expires_at": generation_deadline(context, config["budget"]["generation_seconds"]),
-        "token_ceiling": TOKEN_CEILING, **rendered,
+        "token_ceiling": None if unlimited_tokens(config) else TOKEN_CEILING, **rendered,
     }
+    if unlimited_tokens(config):
+        request["token_policy"] = OBSERVE_TOKENS
+    if adaptive(config):
+        request["archive_request_after_response"] = True
+    if context.get("deadline_policy") == FINISH_STARTED:
+        request.update(deadline_policy=FINISH_STARTED, budget_phase=context.get("budget_phase", "search"))
+    if persistent_mother(config) and mission.role == "G":
+        if not context.get("mother_assembly") or mission.budget_phase != "postprocess":
+            raise InfrastructureError("G must be assembled by the original Mother after research closes")
+        request["conversation"] = next_turn(context["mother_conversation"])
+        request["meta_role"] = "mother-final-assembly"
+        request["messages"][0]["content"] += (
+            " You are the SAME Mother continuing your original conversation after your N research trees. "
+            "Research is permanently closed. Assemble the code yourself from their returned source "
+            "programs and measurements. Do not create, launch, restart, replace or request any research "
+            "tree or other model. Return the source proposal schema for G, never a decomposition or "
+            "guidance-only response. The controller measures your proposal and independently confirms final G."
+        )
+        if context.get("integration_pair"):
+            request["messages"][0]["content"] += (
+                " This is one step of a pairwise reduction. Assemble only the supplied input programs. "
+                "The controller measures each intermediate result and preserves the better input "
+                "when that result regresses. Continue in this same conversation; its history is "
+                "managed by the native Codex CLI, including automatic compaction. "
+                "Do not attempt to compact, restart or replace your conversation yourself."
+            )
+    return request
 
 
 def publish_request(channel: Path, request: dict) -> str:
@@ -122,7 +169,8 @@ def publish_response(channel: Path, response: dict) -> None:
 def wait_response(channel: Path, request: dict, request_sha256: str, poll_seconds=0.25) -> dict:
     nonce = request["nonce"]
     ready_path = channel / "responses" / f"{nonce}.ready.json"
-    while time.time() < request["expires_at"]:
+    last_heartbeat, last_alive = None, time.monotonic()
+    while not expired(request["expires_at"]):
         if ready_path.exists():
             ready = bounded_json(ready_path, 4096)
             path = channel / "responses" / f"{nonce}.response.json"
@@ -133,8 +181,33 @@ def wait_response(channel: Path, request: dict, request_sha256: str, poll_second
             expected = response_envelope(request, request_sha256)
             if any(response.get(k) != v for k, v in expected.items()):
                 raise InfrastructureError("Stale, replayed or mismatched mailbox response")
+            if request.get("archive_request_after_response"):
+                # Keep the active inbox below the remote listing limit on long
+                # campaigns. Preserve every original request, rather than delete it.
+                original = channel / "requests" / f"{nonce}.request.json"
+                archived = channel / "archive" / "requests" / original.name
+                if original.exists():
+                    if sha256(original.read_bytes()) != request_sha256:
+                        raise InfrastructureError("The delivered request changed before archival")
+                    archived.parent.mkdir(parents=True, exist_ok=True)
+                    if archived.exists() and sha256(archived.read_bytes()) != request_sha256:
+                        raise InfrastructureError("An archived request has a different identity")
+                    original.replace(archived)
             return response
-        time.sleep(min(poll_seconds, max(0, request["expires_at"] - time.time())))
+        if request["expires_at"] is None:
+            heartbeat_path = channel / "worker-heartbeat.json"
+            if heartbeat_path.exists():
+                heartbeat = bounded_json(heartbeat_path, 4096)
+                if any(heartbeat.get(key) != value for key, value in {
+                    "session_id": request["session_id"], "model": MODEL, "reasoning_effort": EFFORT,
+                }.items()):
+                    raise InfrastructureError("The worker heartbeat belongs to another session or model")
+                stamp = sha256(heartbeat_path.read_bytes())
+                if stamp != last_heartbeat:
+                    last_heartbeat, last_alive = stamp, time.monotonic()
+            if time.monotonic() - last_alive >= HEARTBEAT_GRACE_SECONDS:
+                raise InfrastructureError("The local model worker stopped sending heartbeats")
+        time.sleep(max(0, time_left(request["expires_at"], poll_seconds)))
     raise InfrastructureError("Local Codex worker did not finish before the mission deadline")
 
 
@@ -142,9 +215,24 @@ class CodexMailboxBackend:
     supports_harness_research = True
 
     def generate(self, mission: Mission, context: dict, config: dict, root: Path) -> Generated:
+        if persistent_mother(config):
+            from .registry import Registry
+
+            db = Registry(root / "registry.sqlite3")
+            try:
+                if mission.role == "G":
+                    if (db.get(f"search_closed:{mission.epoch}") is None
+                            or db.get(f"mother_assembly_started:{mission.epoch}") is None):
+                        raise InfrastructureError("Research must be permanently closed before Mother assembly")
+                    # Harness repairs resume the next turn, not the stale turn in a copied context.
+                    context = {**context, "mother_conversation": db.get(f"mother_conversation:{mission.epoch}")}
+                elif db.get(f"mother_assembly_started:{mission.epoch}") is not None:
+                    raise InfrastructureError("Mother cannot relaunch research after assembly starts")
+            finally:
+                db.close()
         if mission.role == "G" and not context.get("sources"):
             return Generated(error="No admissible integration sources")
-        if time.time() >= generation_deadline(context):
+        if expired(generation_deadline(context)):
             return Generated(0, {"llm_calls": 0, "generation_not_started": "search_deadline"},
                              error="Search generation deadline reached before invocation")
         settings = config["codex"]
@@ -159,28 +247,56 @@ class CodexMailboxBackend:
         except (OSError, ValueError, InfrastructureError) as exc:
             # The worker may have sent a request before the connection failed.
             # Never replay it or invent an exact token count.
-            return Generated(TOKEN_CEILING, {
+            missing = unavailable_usage(request)
+            return Generated(missing["tokens"], {
                 "backend": "codex-mailbox", "llm_calls": 1, "model": MODEL,
                 "reasoning_effort": EFFORT, "request_sha256": request_sha,
-                "token_accounting": "upper_bound", "exact_tokens": None,
-            }, str(exc), infrastructure_error=True, tokens_upper_bound=True)
+                **missing,
+            }, str(exc), infrastructure_error=True,
+                tokens_upper_bound=missing["token_accounting"] == "upper_bound")
         atomic_json(logs / "codex-response.json", response)
-        usage = response.get("usage", {})
+        usage = response.get("usage") or {}
         tokens = usage.get("tokens")
+        if unlimited_tokens(config) and usage.get("token_accounting") != "exact":
+            tokens = None
         if type(tokens) is not int or tokens < 0:
-            return Generated(TOKEN_CEILING, {"backend": "codex-mailbox", "llm_calls": 1},
-                             "Missing or excessive Codex usage", infrastructure_error=True,
-                             tokens_upper_bound=True)
+            if not unlimited_tokens(config):
+                return Generated(TOKEN_CEILING, {"backend": "codex-mailbox", "llm_calls": 1},
+                                 "Missing or excessive Codex usage", infrastructure_error=True,
+                                 tokens_upper_bound=True)
+            tokens = None
+            usage = {**usage, "tokens": None, "token_accounting": "unknown"}
         generated = Generated(tokens, {"backend": "codex-mailbox", **usage,
                               "model": MODEL, "reasoning_effort": EFFORT,
                               "request_sha256": request_sha}, response.get("error"),
                               response.get("infrastructure_error", False),
-                              usage.get("token_accounting") == "upper_bound")
-        if tokens > TOKEN_CEILING:
+                              not unlimited_tokens(config) and usage.get("token_accounting") == "upper_bound")
+        if not unlimited_tokens(config) and tokens > TOKEN_CEILING:
             generated.error = "Observed usage exceeded the reserved token ceiling"
             generated.infrastructure_error = True
         if generated.error:
             return generated
+        if request.get("conversation") is not None:
+            from .registry import Registry
+
+            try:
+                receipt = verify_receipt(request, request_sha, response)
+                db = Registry(root / "registry.sqlite3")
+                try:
+                    db.set(f"mother_conversation:{mission.epoch}", receipt)
+                    db.set(f"mother_plan:final_synthesis:{mission.epoch}", {
+                        "status": "complete", "phase": "assembly", "final_synthesis": True,
+                        "budget_phase": "postprocess", "request_sha256": request_sha,
+                        "conversation": receipt, "model_calls": usage.get("llm_calls", 1),
+                        "usage_charged_to_g_mission": mission.id,
+                    })
+                finally:
+                    db.close()
+                generated.usage["conversation"] = receipt
+                generated.usage["mother_assembly"] = True
+            except InfrastructureError as exc:
+                generated.error, generated.infrastructure_error = str(exc), True
+                return generated
         try:
             data = response["data"]
             data, research = extract_research(data, context)

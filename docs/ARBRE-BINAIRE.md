@@ -32,9 +32,20 @@ la gauche. Seul le gagnant pourra recevoir de nouveaux enfants.
 Les échecs de correction gardent un score nul. Les erreurs d'infrastructure,
 doublons et interruptions gardent un score absent et ne deviennent pas des
 observations de performance inventées. Si aucun enfant n'est admissible, cet
-arbre s'arrête ; les autres arbres peuvent poursuivre. Les limites de profondeur,
-de temps, de tokens et de tentatives restent appliquées. Une paire peut rester
-incomplète à l'arrêt du budget.
+arbre s'arrête ; les autres arbres peuvent poursuivre. `budget.max_depth = 0`
+désactive le plafond de profondeur, pour le binaire comme pour AB-MCTS-A. Une
+valeur positive conserve un plafond explicite (6 dans les anciens profils). Les limites de
+temps d'admission et de tentatives restent appliquées, ainsi que l'ordonnancement
+prévu : une recherche sans plafond de profondeur ne crée pas de missions supplémentaires.
+Les nouvelles configurations n'ont aucun quota de tokens ; les campagnes
+historiques conservent leurs quotas enregistrés.
+Une paire peut rester incomplète à l'arrêt du budget.
+
+Avec la nouvelle politique `completion.policy = "finish-started"`, cet arrêt
+ferme les admissions et laisse finir les missions engagées. La synthèse Mother
+et G final sont exécutés à part avant confirmation, selon le
+[contrat de fin de recherche](FIN-DE-RECHERCHE.md). Les anciennes campagnes
+conservent leur contrat de temps strict.
 
 Les nœuds écartés restent archivés avec leurs mesures et leur provenance. Un
 parent plus rapide que ses descendants reste disponible pour la confirmation
@@ -46,6 +57,31 @@ Les observations des arbres spécialisés ne contiennent que leurs ancêtres ; l
 frère et les branches écartées ne sont pas injectés dans leur contexte. G reste
 l'intégrateur du protocole R1 et reçoit les productions archivées. La mère garde
 sa préparation et sa synthèse ; son rôle de directrice n'est pas implémenté ici.
+
+## Sélection rétablie le 20 octobre 2026
+
+La version `binary-greedy-v3` rétablit la sélection gloutonne de la première
+campagne sans plafond de profondeur : après deux enfants, poursuivre avec
+l'enfant correct dont le temps moyen mesuré est le plus faible. Les diagnostics
+de vectorisation ne départagent plus les frères, même à moins de 2 % d'écart.
+Les branches écartées ne sont plus réactivées par les heuristiques de retour
+introduites dans `binary-role-aware-v2`.
+
+Cette restauration concerne uniquement la politique binaire. AB-MCTS-A conserve
+son fonctionnement actuel. Les contrôles de correction, la détection des
+doublons, les protections de budget, la conservation des consommations et la
+reprise vérifiée des transferts restent actifs. `budget.max_depth = 0` continue
+de désactiver le plafond dans les deux méthodes.
+
+La version de checkpoint distingue cette sélection des versions précédentes :
+un registre binaire `binary-greedy-v1` ou `binary-role-aware-v2` ne doit pas être
+repris silencieusement avec la version restaurée. Une nouvelle campagne reçoit
+son propre registre ; les campagnes et programmes historiques restent archivés.
+
+Le programme à 8,109 ms appartient à la première campagne. Rétablir son mode de
+sélection ne garantit pas que Luna produira à nouveau le même programme. Ce
+résultat et le résultat AB-MCTS à 19,421 ms restent des mesures historiques ; la
+restauration elle-même n'a pas encore fait l'objet d'une nouvelle mesure HPC.
 
 ## Comparaison
 

@@ -11,7 +11,7 @@ import pytest
 import treequest
 
 from hpc_forest.backends import Generated
-from hpc_forest.binary_search import BinaryGreedy, SearchExhausted
+from hpc_forest.binary_search import VERSION, BinaryGreedy, SearchExhausted
 from hpc_forest.cli import parser
 from hpc_forest.config import validate
 from hpc_forest.controller import Controller
@@ -268,8 +268,10 @@ def test_controller_honors_depth_limit_and_keeps_other_tree_running(db, tmp_path
     assert len(db.rows("SELECT * FROM events WHERE kind='tree_exhausted'")) == 4
 
 
-def test_controller_budget_stop_preserves_best_candidate_and_partial_pair(db, tmp_path, monkeypatch):
-    controller = controller_fixture(db, tmp_path, monkeypatch)
+@pytest.mark.parametrize("depth", [0, 6])
+def test_controller_budget_stop_preserves_best_candidate_and_partial_pair(
+        db, tmp_path, monkeypatch, depth):
+    controller = controller_fixture(db, tmp_path, monkeypatch, depth=depth)
     controller.config["budget"]["search_slots"] = 3
     db.set("config", controller.config)
     monkeypatch.setattr(controller, "_evaluate_mission", lambda m, b: Outcome(
@@ -317,9 +319,10 @@ def test_final_confirmation_can_retain_an_ancestor_better_than_last_pair(db, tmp
     assert best["mean_seconds"] == 0.5 and not best["is_baseline"]
 
 
-def test_wall_deadline_stops_binary_search_before_generation(db, tmp_path, monkeypatch):
+@pytest.mark.parametrize("depth", [0, 6])
+def test_wall_deadline_stops_binary_search_before_generation(db, tmp_path, monkeypatch, depth):
     import time
-    controller = controller_fixture(db, tmp_path, monkeypatch)
+    controller = controller_fixture(db, tmp_path, monkeypatch, depth=depth)
     db.set("deadline", time.time() - 1)
     calls = []
     controller.backend.generate = lambda *args: calls.append(args) or Generated()
@@ -327,8 +330,9 @@ def test_wall_deadline_stops_binary_search_before_generation(db, tmp_path, monke
     assert calls == [] and db.costs()["slots"] == 0
 
 
-def test_token_limit_stops_binary_search_without_extra_generation(db, tmp_path, monkeypatch):
-    controller = controller_fixture(db, tmp_path, monkeypatch)
+@pytest.mark.parametrize("depth", [0, 6])
+def test_token_limit_stops_binary_search_without_extra_generation(db, tmp_path, monkeypatch, depth):
+    controller = controller_fixture(db, tmp_path, monkeypatch, depth=depth)
     controller.config["backend"] = "codex"
     controller.config["budget"].update(tokens=20, mission_tokens=10)
     db.set("config", controller.config)
@@ -364,3 +368,236 @@ def test_binary_report_preserves_pruning_and_absent_scores(db, tmp_path):
     assert topology["policy"] == "binary-greedy" and topology["scored_nodes"] == 1
     left = next(n for n in topology["trees"][0]["nodes"] if n.get("side") == "left")
     assert left["score"] is None and left["pruned"]
+
+
+
+# Frozen measurements and decisions from official-depth-5af73c16/romeo-results.json.
+# SHA256: c5b7408af4b5f739ab0090ad593d36dbff483402219fb38d9531200ee4889949.
+# These are a recorded decision oracle, not timings to reproduce or a policy implementation.
+# The corresponding archived binary_search.py SHA256 is
+# 38e204860f8ec21c84bc2aeea12c3f285857b4f59ad713a315f2fb817b42a2f5.
+HISTORICAL_CAMPAIGN = [('A',
+  [('0571c7afb2414b21', None, 1, 0.05987244533995787, 'valid', True, 0.568420057229678),
+   ('522022823068479e', None, 1, 0.04877548043926557, 'valid', True, 0.6178415155618683),
+   ('bc34bbdfb30f437d',
+    '522022823068479e',
+    2,
+    0.049008108054598175,
+    'valid',
+    True,
+    0.6167174556494884),
+   ('b892c1d2826f413e',
+    '522022823068479e',
+    2,
+    0.04892297803113858,
+    'valid',
+    True,
+    0.617128330293474)],
+  [{'parent_id': None,
+    'left_id': '0571c7afb2414b21',
+    'right_id': '522022823068479e',
+    'winner_id': '522022823068479e',
+    'pruned_ids': ['0571c7afb2414b21'],
+    'reason': 'fastest_correct_child'},
+   {'parent_id': '522022823068479e',
+    'left_id': 'bc34bbdfb30f437d',
+    'right_id': 'b892c1d2826f413e',
+    'winner_id': 'b892c1d2826f413e',
+    'pruned_ids': ['bc34bbdfb30f437d'],
+    'reason': 'fastest_correct_child'}]),
+ ('B',
+  [('437718d0bb74491c', None, 1, 0.008870001882314682, 'valid', True, 0.8988897878971567),
+   ('738c84cbd9794911', None, 1, 0.025127456833918888, 'valid', True, 0.7583515654176081),
+   ('14f7b27562b34e39',
+    '437718d0bb74491c',
+    2,
+    0.008036130107939243,
+    'valid',
+    True,
+    0.9075160950789267),
+   ('6ad31031c0354a1d',
+    '437718d0bb74491c',
+    2,
+    0.009006607656677565,
+    'valid',
+    True,
+    0.8974922259655048)],
+  [{'parent_id': None,
+    'left_id': '437718d0bb74491c',
+    'right_id': '738c84cbd9794911',
+    'winner_id': '437718d0bb74491c',
+    'pruned_ids': ['738c84cbd9794911'],
+    'reason': 'fastest_correct_child'},
+   {'parent_id': '437718d0bb74491c',
+    'left_id': '14f7b27562b34e39',
+    'right_id': '6ad31031c0354a1d',
+    'winner_id': '14f7b27562b34e39',
+    'pruned_ids': ['6ad31031c0354a1d'],
+    'reason': 'fastest_correct_child'}]),
+ ('C',
+  [('217cc8d4931d4180', None, 1, 0.015504783329864344, 'valid', True, 0.8356862772720572),
+   ('b5c2ba05f3c145c0', None, 1, 0.014104238090415796, 'valid', True, 0.8482767736139988),
+   ('0bd29fb072a04059',
+    'b5c2ba05f3c145c0',
+    2,
+    0.01384212945898374,
+    'valid',
+    True,
+    0.850675317080969),
+   ('a10cebf0e74d4479', 'b5c2ba05f3c145c0', 2, None, 'duplicate', None, None)],
+  [{'parent_id': None,
+    'left_id': '217cc8d4931d4180',
+    'right_id': 'b5c2ba05f3c145c0',
+    'winner_id': 'b5c2ba05f3c145c0',
+    'pruned_ids': ['217cc8d4931d4180'],
+    'reason': 'fastest_correct_child'},
+   {'parent_id': 'b5c2ba05f3c145c0',
+    'left_id': '0bd29fb072a04059',
+    'right_id': 'a10cebf0e74d4479',
+    'winner_id': '0bd29fb072a04059',
+    'pruned_ids': ['a10cebf0e74d4479'],
+    'reason': 'fastest_correct_child'}]),
+ ('G',
+  [('3560ac342ccd4dc4', None, 1, 0.008875148991743723, 'valid', True, 0.8988370508660373),
+   ('71c26eaa16464dfd', None, 1, 0.008917057265837988, 'valid', True, 0.8984078909392833),
+   ('582ee27a76ef45d5', '3560ac342ccd4dc4', 2, None, 'infrastructure_error', None, None)],
+  [{'parent_id': None,
+    'left_id': '3560ac342ccd4dc4',
+    'right_id': '71c26eaa16464dfd',
+    'winner_id': '3560ac342ccd4dc4',
+    'pruned_ids': ['71c26eaa16464dfd'],
+    'reason': 'fastest_correct_child'}])]
+
+
+@pytest.mark.parametrize("role,trials,decisions", HISTORICAL_CAMPAIGN, ids=["A", "B", "C", "G"])
+def test_restored_policy_replays_first_campaign_decisions(role, trials, decisions):
+    policy = BinaryGreedy()
+    tree = policy.init_tree()
+    for experiment, expected_parent, depth, seconds, status, correct, score in trials:
+        policy.check_admission(tree, 0)
+        tree, trial = policy.ask(tree, [role])
+        parent = trial.parent_state
+        assert (parent["experiment_id"] if parent else None) == expected_parent
+        assert (parent["depth"] + 1 if parent else 1) == depth
+        tree = policy.tell(tree, trial.trial_id, ({
+            "experiment_id": experiment, "commit": experiment, "depth": depth,
+            "mean_seconds": seconds, "status": status, "correct": correct,
+        }, score))
+    assert tree.decisions == decisions
+    assert not tree.stopped
+
+
+@pytest.mark.parametrize("role", ["A", "B", "C", "G"])
+@pytest.mark.parametrize("left_seconds,right_seconds,keep_left", [
+    (1.0, 1.01, True),
+    (1.01, 1.0, False),
+    (1.0, 1.0, True),
+    (1.0, math.nextafter(1.0, math.inf), True),
+])
+def test_measured_time_and_stable_ties_override_favorable_secondary_metrics(
+    db, tmp_path, role, left_seconds, right_seconds, keep_left,
+):
+    enable(db)
+    left = ask(db, role=role)
+    left_log = tmp_path / "left.log"
+    left_log.write_text(json.dumps({
+        "vectorization": ["loop missed: a", "loop missed: b"],
+        "rusage": {"max_rss_kb": 32768, "minor_page_faults": 500,
+                   "cpu_utilization_ratio": 1.0, "sys_seconds": 0.25},
+    }), encoding="utf8")
+    assert Search(db).finish(left, Outcome(
+        "valid", commit="code-" + left.id, correct=True,
+        mean_seconds=left_seconds, score=0.1, logs=[str(left_log)],
+    ))
+    right = ask(db, 2, role=role)
+    right_log = tmp_path / "right.log"
+    right_log.write_text(json.dumps({
+        "vectorization": ["loop optimized: a", "loop optimized: b"],
+        "rusage": {"max_rss_kb": 8192, "minor_page_faults": 100,
+                   "cpu_utilization_ratio": 4.0, "sys_seconds": 0.0},
+    }), encoding="utf8")
+    assert Search(db).finish(right, Outcome(
+        "valid", commit="code-" + right.id, correct=True,
+        mean_seconds=right_seconds, score=0.9, logs=[str(right_log)],
+    ))
+    expected = left if keep_left else right
+    decision = state(db, f"e1:{role}").decisions[-1]
+    assert decision["winner_id"] == expected.id
+    assert decision["reason"] == "fastest_correct_child"
+    assert ask(db, 3, role=role).parent_id == expected.id
+
+
+@pytest.mark.parametrize("old_version", ["binary-greedy-v1", "binary-role-aware-v2"])
+def test_restored_policy_requires_fresh_checkpoints(db, old_version):
+    enable(db)
+    search = Search(db)
+    tree = search.initialize(1, "A", 23)
+    assert VERSION == "binary-greedy-v3"
+    assert db.one("SELECT version FROM trees WHERE id=?", (tree,))["version"] == VERSION
+    with db.connection:
+        db.connection.execute("UPDATE trees SET version=? WHERE id=?", (old_version, tree))
+    with pytest.raises(InfrastructureError, match="new campaign"):
+        Search(db).initialize(1, "A", 23)
+    with pytest.raises(InfrastructureError, match="new campaign"):
+        Search(db).check_admission(tree, 0)
+
+
+def test_zero_depth_cap_descends_beyond_the_former_default_without_extra_budget(db):
+    config = enable(db, max_depth=0)
+    for pair in range(8):
+        left = ask(db, pair * 2 + 1)
+        finish(db, left, 1.0 / (pair + 1))
+        right = ask(db, pair * 2 + 2)
+        finish(db, right, 0.9 / (pair + 1))
+    snapshot = Search(db).snapshot()
+    assert snapshot["max_depth"] == 8 and snapshot["scored_nodes"] == 16
+    assert snapshot["max_children"] == 2
+    assert db.get("config")["budget"] == config["budget"]
+    assert db.costs()["slots"] == 16
+
+
+
+def test_dead_end_stops_without_reopening_a_pruned_branch(db):
+    enable(db)
+    left = ask(db, 1, role="A")
+    finish(db, left, 1.2)
+    right = ask(db, 2, role="A")
+    finish(db, right, 1.0)
+    first_failure = ask(db, 3, role="A")
+    assert first_failure.parent_id == right.id
+    finish(db, first_failure, None, correct=False, status="build_failed", score=0.0)
+    second_failure = ask(db, 4, role="A")
+    finish(db, second_failure, None, correct=False, status="incorrect", score=0.0)
+    tree = state(db, "e1:A")
+    assert tree.stopped
+    assert tree.tree.root.children[0].state["pruned"]
+    assert tree.decisions[-1] == {
+        "parent_id": right.id, "left_id": first_failure.id, "right_id": second_failure.id,
+        "winner_id": None, "pruned_ids": [first_failure.id, second_failure.id],
+        "reason": "no_eligible_child",
+    }
+    before = db.costs()
+    with pytest.raises(SearchExhausted, match="Neither sibling"):
+        ask(db, 5, role="A")
+    assert db.costs() == before
+
+
+def test_regressed_pair_still_descends_locally_without_reopening_a_pruned_branch(db):
+    enable(db)
+    left = ask(db, 1, role="B")
+    finish(db, left, 0.9)
+    right = ask(db, 2, role="B")
+    finish(db, right, 0.5)
+    slower_left = ask(db, 3, role="B")
+    assert slower_left.parent_id == right.id
+    finish(db, slower_left, 2.0)
+    slower_right = ask(db, 4, role="B")
+    finish(db, slower_right, 1.8)
+    tree = state(db, "e1:B")
+    assert tree.tree.root.children[0].state["pruned"]
+    assert tree.decisions[-1] == {
+        "parent_id": right.id, "left_id": slower_left.id, "right_id": slower_right.id,
+        "winner_id": slower_right.id, "pruned_ids": [slower_left.id],
+        "reason": "fastest_correct_child",
+    }
+    assert ask(db, 5, role="B").parent_id == slower_right.id

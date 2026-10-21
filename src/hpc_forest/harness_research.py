@@ -19,6 +19,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from .core import CandidateRejected, InfrastructureError, atomic_json
+from .support.budgets import expired, time_left
 
 MAX_RAW_BYTES = 256 * 1024
 MAX_CORPUS_BYTES = 4 * 1024 * 1024
@@ -102,7 +103,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class DocumentationReader:
-    def __init__(self, settings: dict, root: Path, deadline: float):
+    def __init__(self, settings: dict, root: Path, deadline: float | None):
         self.settings, self.root, self.deadline = settings, root, deadline
         self.documents = []
         corpus = settings.get("corpus")
@@ -142,7 +143,7 @@ class DocumentationReader:
         addresses = socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)
         if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
             raise ValueError("Documentation host must resolve to public addresses")
-        remaining = self.deadline - time.time()
+        remaining = time_left(self.deadline, 5)
         if remaining <= 0:
             raise TimeoutError("Documentation deadline reached")
         request = urllib.request.Request(url, headers={"User-Agent": "HPC-Forest-doc-reader/1"})
@@ -154,7 +155,7 @@ class DocumentationReader:
                 raise ValueError("Documentation response is not supported text")
             parts, total = [], 0
             while True:
-                if time.time() >= self.deadline:
+                if expired(self.deadline):
                     raise TimeoutError("Documentation deadline reached")
                 part = response.read1(min(8192, MAX_RAW_BYTES + 1 - total))
                 if not part:

@@ -62,6 +62,9 @@ def test_selected_parent_diagnostic_survives_recent_history_window(db, tmp_path)
         mission = ask(db, ordinal=ordinal)
         Search(db).finish(mission, Outcome("duplicate", tree_hash="bad-tree"))
     pending = replace(ask(db, ordinal=5), parent_id=parent.id, base_commit="bad")
+    # Windows clocks can assign the same timestamp to successive admissions.
+    with db.connection:
+        db.connection.execute("UPDATE trials SET created=100")
     context = measured_observations(db, tmp_path, pending)
     assert parent.id not in [r["experiment_id"] for r in context["recent_own_role"]]
     assert context["selected_parent"]["experiment_id"] == parent.id

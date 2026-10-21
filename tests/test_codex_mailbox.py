@@ -86,6 +86,7 @@ def test_every_native_invocation_pins_model_max_and_disables_external_tools(setu
     assert 'forced_login_method="chatgpt"' in command
     assert "--ignore-user-config" in command and "--strict-config" in command
     assert command[command.index("--sandbox") + 1] == "read-only"
+    assert "features.code_mode_host=false" in command
     for value in ["features.shell_tool=false", "features.apps=false", "features.memories=false",
                   "features.plugins=false", "features.multi_agent=false", "project_doc_max_bytes=0"]:
         assert value in command
@@ -204,6 +205,36 @@ def test_usage_includes_cached_input_and_rejects_tool_events(tmp_path):
     assert usage["tokens"] == TOKEN_CEILING and tools
 
 
+@pytest.mark.parametrize("tokens", [TOKEN_CEILING + 1000000, None])
+def test_no_token_quota_accepts_large_or_unknown_usage_without_discarding_source(setup, tmp_path, monkeypatch, tokens):
+    from hpc_forest import codex_mailbox
+
+    mission, context, config, _ = setup
+    config["budget"].update(tokens=None, mission_tokens=None)
+    context.update(deadline=None, deadline_policy="finish-started", token_policy="observe-only")
+    request = make_request(mission, context, config)
+    assert request["token_ceiling"] is None and request["token_policy"] == "observe-only"
+    def response(channel, request, sha):
+        value = result(request, sha)
+        value["usage"].update(tokens=tokens, token_accounting="unknown" if tokens is None else "exact")
+        return value
+    monkeypatch.setattr(codex_mailbox, "wait_response", response)
+    generated = CodexMailboxBackend().generate(mission, context, config, tmp_path)
+    assert generated.error is None and not generated.infrastructure_error
+    assert generated.tokens == tokens and not generated.tokens_upper_bound
+    assert (tmp_path / "tree/src/main.c").read_text() == "int received;\n"
+    monkeypatch.setattr(shutil, "which", lambda _: "offline-codex")
+    argv = command_for(request, tmp_path / "command")
+    assert not any("model_context_window" in argument for argument in argv)
+
+
+def test_missing_native_final_usage_is_unknown_without_an_invented_bound(tmp_path):
+    path = tmp_path / "codex.jsonl"
+    path.write_text('{"type":"item.completed","item":{"type":"agent_message"}}')
+    usage, tools = usage_from_events(path, observe_only=True)
+    assert usage["tokens"] is None and usage["token_accounting"] == "unknown" and not tools
+
+
 class LocalTransfer:
     def __init__(self, channel):
         self.channel = channel
@@ -241,7 +272,8 @@ def test_transport_smoke_uses_zero_model_calls_and_validated_hashes(setup, tmp_p
     assert response["usage"]["llm_calls"] == 0
 
 
-def test_worker_prioritizes_response_and_defers_diagnostics(setup, tmp_path):
+@pytest.mark.parametrize("with_skill_trace", [False, True])
+def test_worker_prioritizes_response_and_defers_diagnostics(setup, tmp_path, with_skill_trace):
     mission, context, config, channel = setup
     request = make_request(mission, context, config)
     request["kind"] = "transport-smoke"
@@ -251,6 +283,8 @@ def test_worker_prioritizes_response_and_defers_diagnostics(setup, tmp_path):
     local.mkdir(parents=True)
     (local / "codex.jsonl").write_text("diagnostic only")
     (local / "invocation.json").write_text("{}")
+    if with_skill_trace:
+        (local / "skills-usage.json").write_text('{"report_status":"reported"}')
     uploads = []
 
     class OrderedTransfer(LocalTransfer):
@@ -269,10 +303,13 @@ def test_worker_prioritizes_response_and_defers_diagnostics(setup, tmp_path):
         assert uploads[1].endswith(".ready.json")
         assert wait_response(channel, request, request_sha)["usage"]["llm_calls"] == 0
         await worker.flush_diagnostics()
-        assert len(uploads) == 4
+        assert len(uploads) == (5 if with_skill_trace else 4)
         assert all("/logs/" in value for value in uploads[2:])
         await worker.flush_diagnostics()
-        assert len(uploads) == 4
+        assert len(uploads) == (5 if with_skill_trace else 4)
+        if with_skill_trace:
+            assert json.loads((channel / "logs" / f"{request['nonce']}.skills-usage.json").read_text()) == {
+                "report_status": "reported"}
         assert not await worker.handle(f"{request['nonce']}.request.json")
 
     asyncio.run(execute())
@@ -292,6 +329,54 @@ def test_worker_crash_does_not_replay_a_potentially_charged_generation(setup, tm
     response = wait_response(channel, request, request_sha)
     assert response["infrastructure_error"] and "not replayed" in response["error"]
     assert response["usage"]["tokens"] == TOKEN_CEILING
+
+
+def test_worker_passes_mcp_binding_to_native_generation_and_checks_it_on_restart(setup, tmp_path, monkeypatch):
+    mission, context, config, channel = setup
+    request = make_request(mission, context, config)
+    request_sha = publish_request(channel, request)
+    mcp_config = tmp_path / "codex.toml"
+    mcp_config.write_text('[mcp_servers.romeo]\ncommand="offline-fixture"')
+    output = tmp_path / "worker"
+    arguments = (LocalTransfer(channel), "/scratch/hpc-forest-gpt61sol-max-test/results-1/mailbox",
+                 "a" * 32, output, None, set())
+    worker = Worker(*arguments, model_mcp_config=mcp_config)
+    received = []
+    def generate(request, sha, *args, romeo_mcp):
+        received.append(romeo_mcp.receipt())
+        return result(request, sha)
+    monkeypatch.setattr("hpc_forest.codex_worker.run_codex", generate)
+    assert asyncio.run(worker.handle(f"{request['nonce']}.request.json"))
+    assert wait_response(channel, request, request_sha)["error"] is None
+    assert received == [worker.romeo_mcp.receipt()]
+    Worker(*arguments, model_mcp_config=mcp_config)
+    with pytest.raises(InfrastructureError, match="binding changed"):
+        Worker(*arguments)
+    mcp_config.write_text('[mcp_servers.romeo]\ncommand="changed"')
+    with pytest.raises(InfrastructureError, match="binding changed"):
+        Worker(*arguments, model_mcp_config=mcp_config)
+
+
+def test_worker_keeps_documentation_binding_for_native_calls_and_restart(setup, tmp_path, monkeypatch):
+    pytest.importorskip("mcp")
+    pytest.importorskip("pypdf")
+    mission, context, config, channel = setup
+    request = make_request(mission, context, config)
+    request_sha = publish_request(channel, request)
+    arguments = (LocalTransfer(channel), "/scratch/hpc-forest-gpt61sol-max-test/results-1/mailbox",
+                 "a" * 32, tmp_path / "worker", None, set())
+    worker = Worker(*arguments, documentation=True)
+    received = []
+    def generate(request, sha, *args, documentation_mcp):
+        received.append(documentation_mcp.receipt())
+        return result(request, sha)
+    monkeypatch.setattr("hpc_forest.codex_worker.run_codex", generate)
+    assert asyncio.run(worker.handle(f"{request['nonce']}.request.json"))
+    assert wait_response(channel, request, request_sha)["error"] is None
+    assert received == [worker.documentation_mcp.receipt()]
+    Worker(*arguments, documentation=True)
+    with pytest.raises(InfrastructureError, match="documentation MCP binding changed"):
+        Worker(*arguments)
 
 
 def test_source_validation_is_atomic_when_one_file_escapes(setup, tmp_path):
@@ -341,3 +426,44 @@ def test_exact_usage_above_reservation_is_not_hidden(setup, tmp_path):
     thread.join(timeout=3)
     assert generated.tokens == TOKEN_CEILING + 10 and generated.infrastructure_error
     assert (tmp_path / "tree/src/main.c").read_text() == "int original;\n"
+
+
+def test_worker_end_of_window_budget_stop_is_not_classified_as_transport_failure(setup, tmp_path):
+    mission, context, config, channel = setup
+    context["deadline"] = time.time() + 2.0
+    gate = tmp_path / "gate.json"
+    atomic_json(
+        gate,
+        {
+            "status": "deepseek_results_received_and_audited",
+            "next_model": MODEL,
+            "reasoning_effort": EFFORT,
+            "finished_job_ids": [],
+            "archives": [],
+        },
+    )
+    worker = Worker(
+        LocalTransfer(channel),
+        "/scratch/hpc-forest-gpt61sol-max-test/results-1/mailbox",
+        "a" * 32,
+        tmp_path / "worker",
+        gate,
+        set(),
+        transport_smoke=False,
+    )
+
+    def peer():
+        while not list((channel / "requests").glob("*.json")):
+            time.sleep(0.01)
+        path = next((channel / "requests").glob("*.json"))
+        asyncio.run(worker.handle(path.name))
+
+    thread = threading.Thread(target=peer)
+    thread.start()
+    generated = CodexMailboxBackend().generate(mission, context, config, tmp_path)
+    thread.join(timeout=3)
+    assert generated.infrastructure_error is False
+    assert generated.tokens == 0
+    assert generated.usage["llm_calls"] == 0
+    assert generated.usage["generation_not_started"] == "search_deadline"
+

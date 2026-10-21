@@ -16,10 +16,13 @@ modèle, aucune campagne ni allocation.
 | Emplacement | Responsabilité |
 | --- | --- |
 | src/hpc_forest/controller.py | Ordonnancement et vie de la campagne |
+| src/hpc_forest/completion.py | Synthèse et intégration finales après fermeture des admissions |
 | src/hpc_forest/search.py | TreeQuest et persistance ask/tell |
 | src/hpc_forest/binary_search.py | Politique binaire gloutonne optionnelle |
 | src/hpc_forest/mother.py | Préparation et synthèse de la mère |
 | src/hpc_forest/node_harness.py | Développement borné d'un candidat |
+| src/hpc_forest/assets/skills/ | Six skills génériques pour Mother, les enfants et la fusion |
+| src/hpc_forest/model_skills.py | Chargement par rôle, empreintes et traces d'utilisation |
 | src/hpc_forest/evaluator.py | Compilation, correction et mesures |
 | src/hpc_forest/registry.py | Registre, réservations et consommation |
 | src/hpc_forest/support/ | Sources bornées, échéances et validation numérique |
@@ -31,6 +34,13 @@ modèle, aucune campagne ni allocation.
 | tools/compare_tree_reports.py | Comparaison contrôlée de deux rapports de politiques |
 | docs/ | Provenance et décisions de reconstruction |
 | artifacts/ | Reçus locaux de vérification, exclus des sources |
+| experiments/ | Campagnes sélectionnées, sources gelées et résultats mesurés |
+
+Les nouvelles campagnes `--mother-trees` chargent explicitement les skills adaptés
+à chaque rôle, y compris pendant les réparations et la fusion dans la même
+conversation Mother. Leurs contenus et les preuves de chargement, déclarations
+du modèle et appels MCP observés sont décrits dans
+[les skills des modèles](docs/SKILLS-MODELES.md).
 
 ## Développement
 
@@ -64,7 +74,51 @@ Un exemple synthétique de matrices a été choisi à tort lors du premier contr
 Ses reçus sont conservés comme diagnostics du transport et sont exclus de toute
 comparaison avec les résultats des sujets officiels.
 
+## Fin de recherche
+
+La durée cible est configurable (`30m`, `2h`, `5h`, `24h`, etc.). Les nouveaux
+profils répètent les cycles sans plafond d'essais, avec une réserve recalculée
+à partir des durées observées. Les modèles engagés finissent ; puis Mother
+effectue sa synthèse finale, G produit son programme et **G final est toujours
+inclus dans la confirmation indépendante**, en plus des finalistes ordinaires.
+Cette séquence peut dépasser la durée cible. Aucun quota applicatif de tokens
+n'est imposé. `python tools/prepare_smoke.py --duration 2h --mother-trees` prépare le prochain
+profil Luna MAX avec N arbres choisis par Mother. Cette commande ne
+lance aucun job. Le [contrat de fin de recherche](docs/FIN-DE-RECHERCHE.md)
+décrit les prévisions de temps, la confirmation et les contrats historiques.
+
+## N arbres choisis par Mother
+
+Avec `--mother-trees`, Mother choisit le nombre d'arbres AB-MCTS et attribue un
+sujet précis à chacun selon le code et le problème, sans recevoir la durée
+cible ni le temps restant. **Tous les N arbres sont
+lancés en parallèle**, sans réglage de concurrence distinct. Ils développent
+leurs recherches selon le temps disponible. Ensuite, **la même conversation
+Mother reprend et assemble les programmes deux par deux**, sans pouvoir lancer
+ou relancer les arbres. Chaque fusion intermédiaire est mesurée ; la meilleure
+entrée reste disponible si elle régresse. La compaction de l'historique reste
+automatique dans Codex CLI, avec le même UUID. G final est mesuré puis confirmé
+indépendamment. Le [fonctionnement de la forêt](docs/FORET-MOTHER.md)
+décrit l'admission commune, le relais parallèle et les preuves de reprise.
+
+Les nouvelles campagnes de ce mode donnent aussi à Mother et aux enfants accès
+au **MCP-ROMEO existant**, avec le profil et l'identité SSH du fichier fourni au
+relais par `--codex-config`. Les appels sont tracés ; le contrôleur conserve les
+mesures officielles et Mother ne peut pas relancer les modèles pendant la fusion.
+Les campagnes historiques ne changent pas d'accès.
+
+Les nouveaux plans fournissent aussi un [accès aux références officielles](docs/DOCUMENTATION-OFFICIELLE.md)
+NVIDIA, OpenMP, MPI, SIMD et compilateurs par le MCP `hpc_docs`. Le cache et les
+preuves de lecture sont communs à Mother, aux N enfants et à la fusion finale.
+La documentation du cluster reste servie par le MCP-ROMEO existant.
+
 ## Limites à conserver
+
+Le [test CUDA N-corps du 21 octobre 2026](experiments/cuda-nbody-20261021/README.md)
+archive les sources, le protocole, les contrôles et les résultats d'un lancement
+Luna MAX avec quatre arbres parallèles et G final confirmé. Son rapport conserve
+aussi la réserve encore prudente et l'échec de l'export standard, dont les sources
+confirmées ont été récupérées. Il s'agit d'un cas historique, pas d'un lanceur GPU générique.
 
 Un [mode binaire optionnel](docs/ARBRE-BINAIRE.md) est disponible pour les nouveaux
 essais : `binary_tree.enabled=true` ou `init --binary-tree`. Il compare deux enfants

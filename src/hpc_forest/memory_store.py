@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .core import canonical, digest
 from .memory_contract import VERSION, enabled
+from .source_diversity import source_evidence
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memory_facts(
@@ -57,12 +58,14 @@ class MemoryStore:
         events = self.db.rows("SELECT payload FROM events WHERE kind='generation_usage' "
                              "AND json_extract(payload,'$.experiment_id')=? ORDER BY id", (row["id"],))
         usages = [json.loads(item["payload"]) for item in events]
+        source_change = source_evidence(self.root, mission, outcome)
         with self.db.connection:
             self._put(mission, protocol, row["created"], row["id"], "experiment", {
                 "facts": {"outcome": outcome, "commit": outcome.get("commit"),
                           "base_commit": mission["base_commit"], "parent_id": mission["parent_id"],
                           "delegation_parent": mission["delegation_parent"],
-                          "source_ids": mission["sources"], "source_commits": mission["source_commits"]},
+                          "source_ids": mission["sources"], "source_commits": mission["source_commits"],
+                          "source_change": source_change},
                 "model_interpretation": {"hypothesis": mission["hypothesis"],
                                          "transformations": mission["transformations"]}})
             for attempt in attempts:

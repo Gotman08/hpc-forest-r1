@@ -11,6 +11,7 @@ from .core import CandidateRejected, InfrastructureError, canonical, digest
 from .memory_contract import VERSION, settings, validate_read
 from .memory_overview import tree_overview
 from .memory_store import terms
+from .source_diversity import compact_evidence
 from .support.sources import committed_source_snapshot, source_snapshot
 
 
@@ -26,7 +27,8 @@ def card(record):
     return {key: record[key] for key in ("id", "kind", "role", "tree_id", "mission_id")} | {
         "facts": {key: facts.get(key) for key in ("commit", "base_commit", "parent_id")} | {
             "source_ids": (facts.get("source_ids") or [])[:6],
-            "source_count": len(facts.get("source_ids") or [])},
+            "source_count": len(facts.get("source_ids") or []),
+            "source_change": compact_evidence(facts.get("source_change", {}))},
         "measured_outcome": {key: outcome.get(key) for key in ("status", "correct", "mean_seconds", "score")},
         "diagnostic": str(outcome.get("reason") or "")[:500],
         "model_interpretation": {

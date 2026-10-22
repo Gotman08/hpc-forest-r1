@@ -26,9 +26,16 @@ Les objectifs sont présentés par pages exactes bornées ; les objectifs trop v
 
 Les nouvelles campagnes créées avec `init --mother-trees` autorisent deux tours de critique. `--plan-review-calls 0` permet une comparaison sans critique. Pour un fichier de configuration, utiliser `forest.plan_review_calls` ; une ancienne configuration sans ce champ conserve son comportement. Le contrôleur ne lance aucun nouveau modèle lors d'une simple reprise d'un plan déjà enregistré.
 
-## Étapes suivantes
+## 4. Expériences contrastées et changements observés — intégré
 
-4. Donner aux arbres des observations sur les approches déjà essayées et distinguer les transformations réelles des copies ou réglages de lancement.
+Le contexte demande aux arbres de traiter leur objectif comme une question de recherche et de remettre en cause leurs hypothèses lorsque les programmes se répètent ou que les progrès stagnent. Le choix du parent et la récompense restent ceux de TreeQuest AB-MCTS. Aucun algorithme de remplacement n'est fourni par le contrôleur.
+
+Le contrôleur compare les empreintes des fichiers des commits exacts. La mémoire expose le nombre de programmes distincts observés, les répétitions et les essais qui modifient uniquement des fichiers de configuration. L'archive distingue aussi les copies d'un programme d'entrée et les fichiers modifiés qui correspondent exactement à une autre entrée. Le bilan d'intégration conserve ces observations, même si le modèle décrit une fusion plus ambitieuse.
+
+Ces observations ne prouvent pas une différence sémantique : modifier un commentaire ou une constante dans un fichier source reste un changement de fichier. Les extensions `.json`, `.toml`, `.yaml`, `.yml`, `.ini` et `.cfg` servent uniquement à décrire les fichiers de configuration. Aucune variante n'est exclue ni récompensée en raison de cette classification. Une version lente reste consultable et utilisable. Une archive source indisponible produit un diagnostic absent, sans changer le résultat mesuré.
+
+## Étape suivante
+
 5. Fournir une comparaison de régularité entre campagnes indépendantes, avec médiane, mauvais résultats et fréquence d'amélioration, sans confondre tests fonctionnels et qualité de recherche.
 
 Chaque lot vérifié est enregistré dans un commit local distinct. Une nouvelle campagne GPU ou une publication Git nécessite une demande explicite.

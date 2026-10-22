@@ -97,6 +97,12 @@ def _integrate(controller, epoch, baseline, state, *, sources=None, merge=None):
     if merge is not None:
         state["steps"][-1].update(status="failed" if failed else "complete",
             outcome=outcome, mother=mother, retained_ids=mission.sources)
+        from .memory_contract import enabled as memory_enabled
+
+        if memory_enabled(controller.config):
+            row = controller.db.one("SELECT payload FROM memory_facts WHERE id=?", (mission.id,))
+            if row:
+                state["steps"][-1]["source_change"] = json.loads(row["payload"])["facts"].get("source_change")
         controller.db.set(f"postprocess:{epoch['id']}", state)
     if failed:
         # Leave the exact last attempted final program available for confirmation.

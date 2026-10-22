@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 
+from .source_diversity import diversity_counts
+
 MEASURED = "json_extract(payload,'$.facts.outcome.correct')=1 AND json_extract(payload,'$.facts.outcome.mean_seconds')>0"
 
 
@@ -43,4 +45,5 @@ def tree_overview(connection, scope, args, role):
             "json_extract(payload,'$.facts.commit'),id)<>? ORDER BY created DESC,id LIMIT 1",
             [*params, identity]).fetchone()
     return {"records": counts.pop("records"), "results": counts,
+            "source_diversity": diversity_counts(connection, where, params),
             "best": _brief(best), "latest": _brief(latest), "alternative": _brief(alternative)}

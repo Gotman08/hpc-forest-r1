@@ -135,6 +135,8 @@ def test_memory_reads_repairs_same_mother_code_and_real_independent_confirmation
         assert post["stop_decision"]["controller_budget_stop"]
         assert len(post["selections"]) == 1  # Expired target: reject the fixture's extra read, then code.
         assert post["steps"][0]["outcome"]["correct"] is True
+        assert post["steps"][0]["source_change"]["kind"] == "nonconfiguration_files_changed"
+        assert post["steps"][0]["source_change"]["semantic_novelty"] == "not_established_by_file_hashes"
         research = controller.db.rows("SELECT * FROM trials WHERE role<>'G'")
         assert len(research) == 2 and all(json.loads(row["result"])["correct"] for row in research)
         usage = [json.loads(row["payload"]) for row in controller.db.rows(

@@ -7,13 +7,14 @@ from pathlib import Path
 from .core import Mission
 from .forest import role_goal
 from .harness_research import research_contract
+from .memory_context import source_view
+from .memory_contract import memory_contract
 from .model_skills import bind
 from .proposal_contract import SOURCE_SCHEMA
-from .support.sources import source_snapshot
 
 
 def proposal_messages(worktree: Path, mission: Mission, context: dict, *, skills=None) -> dict:
-    sources = source_snapshot(worktree, max_characters=32000)
+    sources, context = source_view(worktree, context)
     system = (
         "You propose one bounded HPC source-code experiment. Return only the requested JSON. "
         "Do not execute commands. Edit only source files under src/. Never change tests, "
@@ -43,6 +44,7 @@ def proposal_messages(worktree: Path, mission: Mission, context: dict, *, skills
     else:
         kept_schema["maxItems"] = 0
     system, schema = research_contract(system, schema, context)
+    system, schema = memory_contract(system, schema, context)
     system, schema, skill_binding = bind(
         system, schema, skills,
         role="Mother" if mission.role == "G" and context.get("mother_assembly") else mission.role,

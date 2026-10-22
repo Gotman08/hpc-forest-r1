@@ -16,6 +16,8 @@ modèle, aucune campagne ni allocation.
 | Emplacement | Responsabilité |
 | --- | --- |
 | src/hpc_forest/controller.py | Ordonnancement et vie de la campagne |
+| src/hpc_forest/forest_scheduler.py | Progression indépendante des N arbres parallèles |
+| src/hpc_forest/independent_budget.py | Réserve par phase et prévision de la file de mesures |
 | src/hpc_forest/completion.py | Synthèse et intégration finales après fermeture des admissions |
 | src/hpc_forest/search.py | TreeQuest et persistance ask/tell |
 | src/hpc_forest/binary_search.py | Politique binaire gloutonne optionnelle |
@@ -92,14 +94,16 @@ décrit les prévisions de temps, la confirmation et les contrats historiques.
 Avec `--mother-trees`, Mother choisit le nombre d'arbres AB-MCTS et attribue un
 sujet précis à chacun selon le code et le problème, sans recevoir la durée
 cible ni le temps restant. **Tous les N arbres sont
-lancés en parallèle**, sans réglage de concurrence distinct. Ils développent
-leurs recherches selon le temps disponible. Ensuite, **la même conversation
+lancés en parallèle**, sans réglage de concurrence distinct. Chacun poursuit
+sa recherche dès que sa propre mesure a mis à jour son état AB-MCTS-A ; il
+n'attend pas la fin des générations des autres arbres. Les mesures restent
+exclusives sur leur cible. Ensuite, **la même conversation
 Mother reprend et assemble les programmes deux par deux**, sans pouvoir lancer
 ou relancer les arbres. Chaque fusion intermédiaire est mesurée ; la meilleure
 entrée reste disponible si elle régresse. La compaction de l'historique reste
 automatique dans Codex CLI, avec le même UUID. G final est mesuré puis confirmé
 indépendamment. Le [fonctionnement de la forêt](docs/FORET-MOTHER.md)
-décrit l'admission commune, le relais parallèle et les preuves de reprise.
+décrit le départ commun, la progression indépendante et les preuves de reprise.
 
 Les nouvelles campagnes de ce mode donnent aussi à Mother et aux enfants accès
 au **MCP-ROMEO existant**, avec le profil et l'identité SSH du fichier fourni au
@@ -114,11 +118,23 @@ La documentation du cluster reste servie par le MCP-ROMEO existant.
 
 ## Limites à conserver
 
+Les nouvelles campagnes peuvent activer le [harnais mémoire](docs/MEMOIRE.md)
+avec `memory.mode=active` et `forest.integration=memory-guided-v1`. Les N arbres
+écrivent et optimisent du code avec leur mémoire propre. Après la recherche,
+Mother consulte un index paginé, choisit les programmes et idées à associer,
+écrit les programmes combinés et reçoit leurs mesures. Les variantes lentes
+restent consultables. N n'est pas fixé ; la taille des vues reste bornée pour
+de petites forêts comme pour 500 ou 600 arbres. Les profils historiques gardent
+leurs contrats. Le [pilote CUDA mémoire](examples/cuda_nbody/README.md) prépare
+une nouvelle campagne Luna Max sans lancer d'allocation.
+
 Le [test CUDA N-corps du 21 octobre 2026](experiments/cuda-nbody-20261021/README.md)
 archive les sources, le protocole, les contrôles et les résultats d'un lancement
 Luna MAX avec quatre arbres parallèles et G final confirmé. Son rapport conserve
 aussi la réserve encore prudente et l'échec de l'export standard, dont les sources
 confirmées ont été récupérées. Il s'agit d'un cas historique, pas d'un lanceur GPU générique.
+Le moteur courant dispose d'un [contrat d'export CUDA](docs/EXPORT-CUDA.md)
+pour livrer le kernel NVRTC et son lancement confirmés sans exiger un lanceur C.
 
 Un [mode binaire optionnel](docs/ARBRE-BINAIRE.md) est disponible pour les nouveaux
 essais : `binary_tree.enabled=true` ou `init --binary-tree`. Il compare deux enfants

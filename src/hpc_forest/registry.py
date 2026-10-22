@@ -9,6 +9,7 @@ from pathlib import Path
 from .adaptive_budget import admission_deadline, forecast
 from .core import BudgetExhausted, ForestError, canonical
 from .forest import forest_plan, model_selected, pairwise_mother, research_roles
+from .memory_contract import guided
 from .support.budgets import (
     adaptive,
     expired,
@@ -158,6 +159,18 @@ class Registry:
                 expected = f"{scope}merge:{count + 1}"
                 if purpose != expected:
                     raise ForestError("Pairwise integration reservations must follow their recorded sequence")
+            if phase == "postprocess" and guided(c):
+                from .integration_policy import limits
+
+                bounds = limits(c, len(research_roles(self)))
+                limit = bounds["postprocess_slots"]
+                allowed = {f"{scope}memory:code:{number}" for number in range(1, bounds["rounds"] + 1)}
+                allowed.update(f"{scope}memory:select:{number}:{turn}"
+                    for number in range(1, bounds["rounds"] + 1)
+                    for turn in range(1, bounds["selection_calls_per_round"] + 1))
+                if purpose not in allowed or self.connection.execute(
+                        "SELECT 1 FROM slots WHERE purpose=?", (purpose,)).fetchone():
+                    raise ForestError("Memory integration reservation is outside its frozen bounds or already claimed")
             if phase == "confirmation" and mandatory_final_g(c):
                 limit += int(self.get(f"confirmation_extra_slot:{self.get('current_epoch', 1)}", False))
             if limit is not None and count >= limit:

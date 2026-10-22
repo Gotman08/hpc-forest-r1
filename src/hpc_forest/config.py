@@ -11,7 +11,9 @@ from pathlib import Path
 from .adaptive_budget import validate_adaptive
 from .core import ForestError
 from .forest import persistent_mother, validate_forest
+from .memory_contract import validate_settings as validate_memory
 from .model_skills import validate_settings as validate_skills
+from .submission import validate_submission
 from .support.budgets import (
     FINISH_STARTED,
     NATIVE_TOKEN_CEILING,
@@ -100,6 +102,8 @@ def load_config(path: Path | None = None) -> dict:
 
 
 def validate(c: dict) -> None:
+    validate_memory(c)
+    validate_submission(c)
     validate_skills(c.get("skills"))
     if (c.get("skills") or {}).get("enabled") and (
         c["backend"] != "codex" or c["codex"].get("transport") != "codex-mailbox"

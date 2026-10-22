@@ -23,6 +23,10 @@ from .core import (
 from .evaluator import Evaluator
 from .gitops import assert_allowed_changes, git, initialize_source, worktree_tree_hash
 from .harness_research import DocumentationReader
+from .memory_context import bounded_history
+from .memory_contract import active, enabled
+from .memory_contract import settings as memory_settings
+from .memory_retrieval import MemoryReader, evidence_ids
 from .registry import Registry
 from .support.budgets import expired, generation_deadline, search_deadline, unlimited_tokens
 from .support.sources import SourceLimitExceeded, source_snapshot
@@ -76,6 +80,10 @@ class NodeHarness:
         last = Generated()
         source_ids, source_commits = list(mission.sources), list(mission.source_commits)
         reader = None
+        memory = copy.deepcopy(context.get("memory", {}))
+        memory_cfg = memory_settings(config)
+        read_limit = memory_cfg["reads_per_mission"] if active(config) else 0
+        reads, proposals = 0, 0
 
         def persist(state):
             atomic_json(journal, {
@@ -97,9 +105,10 @@ class NodeHarness:
                  "harness_attempts": len(history),
                  "development_evaluations": sum("development_outcome" in h for h in history),
                  "attempt_usage": [h.get("generation_usage", {}) for h in history],
-                 "journal": str(journal), "automatic_measured_feedback_only": not bool(reader),
+                 "journal": str(journal), "automatic_measured_feedback_only": not bool(reader or memory),
                  "research_enabled": bool(reader),
                  "research_actions": sum("research_results" in h for h in history),
+                 **({"memory_reads": reads, "source_attempts": proposals} if memory else {}),
                  "observed_tokens": total_tokens,
                  "token_accounting": "unknown" if usage_unknown else "upper_bound" if bounded else "exact",
                  "contract_rejected": last.usage.get("contract_rejected", False)},
@@ -114,7 +123,9 @@ class NodeHarness:
                 if not getattr(self.backend, "supports_harness_research", False):
                     raise InfrastructureError("This backend has no structured documentation action")
                 reader = DocumentationReader(settings["research"], journal.parent / "research", deadline)
-            for number in range(1, attempts + 1):
+            for number in range(1, attempts + read_limit + 1):
+                if proposals >= attempts:
+                    break
                 if expired(deadline):
                     if not history:
                         last = Generated(0, error="No development time remains")
@@ -135,9 +146,12 @@ class NodeHarness:
                 call_context["generation_deadline"] = deadline
                 call_context["remaining_tokens"] = None if observe_only else min(
                     reservation - total_tokens, context.get("remaining_tokens", reservation))
+                if memory:
+                    call_context["memory"] = {**memory, "remaining_reads": read_limit - reads}
                 call_context.setdefault("automatic_observations", {})["node_development"] = {
-                    "attempt": number, "remaining_attempts": attempts - number + 1,
-                    "previous_attempts": copy.deepcopy(history),
+                    "attempt": number, "remaining_attempts": attempts - proposals,
+                    "previous_attempts": (bounded_history(history, memory_cfg["context_characters"])
+                                          if memory else copy.deepcopy(history)),
                     "confirmation_data_available": False,
                 }
                 if reader:
@@ -146,6 +160,7 @@ class NodeHarness:
                           "state": "model_call_claimed", "llm_calls": 1,
                           "source_digest_before_call": before_digest}
                 history.append(record)
+                proposals += 1
                 persist("model_call_claimed")
                 try:
                     last = self.backend.generate(child, call_context, call_config, root)
@@ -194,6 +209,26 @@ class NodeHarness:
                 if last.error:
                     record["state"] = "generation_failed"
                     continue
+                if memory and (request := last.usage.get("memory_request")):
+                    if digest(_source_snapshot(worktree)) != before_digest:
+                        raise CandidateRejected("A memory action changed source files")
+                    if reads >= read_limit:
+                        raise CandidateRejected("Memory read allowance exhausted")
+                    reads += 1
+                    proposals -= 1
+                    with MemoryReader(root, mission, config, context["protocol_id"]) as memory_reader:
+                        try:
+                            page = memory_reader.read(request)
+                        except CandidateRejected as exc:
+                            page = {"error": str(exc), "evidence_ids": []}
+                    record.update(state="memory_read", memory_result=page)
+                    memory["evidence_ids"] = list(dict.fromkeys([*memory.get("evidence_ids", []), *evidence_ids(page)]))
+                    memory["last_read"] = page
+                    atomic_json(journal.parent / f"memory-read-{reads:02d}.json",
+                                {"request": request, "result": page})
+                    last.error = "Memory read ended without a subsequent source proposal"
+                    persist("memory_read")
+                    continue
                 if reader and (research := last.usage.get("research_request")):
                     if digest(_source_snapshot(worktree)) != before_digest:
                         raise CandidateRejected("A documentation action changed source files")
@@ -207,6 +242,8 @@ class NodeHarness:
                 for name in ("hypothesis", "transformations", "sources", "source_commits"):
                     setattr(mission, name, copy.deepcopy(getattr(child, name)))
                 source_files = _source_snapshot(worktree)
+                if enabled(config):
+                    record["proposal"] = {"hypothesis": child.hypothesis, "transformations": child.transformations}
                 record["source_digest"] = digest(source_files)
                 atomic_json(journal.parent / f"harness-source-{number:02d}.json", source_files)
                 tree_hash = worktree_tree_hash(worktree)

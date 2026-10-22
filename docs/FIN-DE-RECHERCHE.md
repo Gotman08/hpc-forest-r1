@@ -1,5 +1,11 @@
 # Fin de recherche : terminer le travail engagé, puis intégrer
 
+Avec la politique optionnelle [memory-guided-v1](MEMOIRE.md), la réserve inclut
+les consultations/sélections de Mother, les épisodes de génération avec leurs
+lectures et réparations, les mesures des combinaisons et leur confirmation.
+Une même fonction de limites est utilisée pour la prévision, les slots et
+l'exécution. Les limites portent sur les actions d'assemblage, pas sur N.
+
 Les nouvelles configurations utilisent `completion.policy = "finish-started"`.
 Elles utilisent une **durée cible configurable**, une **réserve adaptative**,
 des **cycles répétés sans plafond d'essais** et la **confirmation obligatoire
@@ -13,10 +19,10 @@ de sélection.
 ## Déroulement
 
 Le mode [forêt choisie par Mother](FORET-MOTHER.md) généralise A/B/C en N sujets
-définis par le modèle. Tous les N arbres AB-MCTS démarrent ensemble à chaque
-passe ; leur concurrence est N et ne se règle pas séparément. La première
-passe continue la planification Mother déjà engagée. Les passes suivantes
-utilisent la réserve adaptative avant d'admettre l'ensemble des N arbres.
+définis par le modèle. Les N arbres AB-MCTS démarrent ensemble ; leur concurrence
+est N et ne se règle pas séparément. Le premier départ continue la planification
+Mother déjà engagée. Ensuite, chaque arbre peut demander sa prochaine mission
+dès que sa propre mesure a mis à jour son état AB-MCTS-A, sans attendre les autres.
 Dans le profil natif v7, les N arbres poursuivent leurs passes AB-MCTS jusqu'à
 la fermeture des admissions. **La conversation initiale de Mother reprend
 ensuite pour assembler leurs meilleurs programmes mesurés deux par deux**.
@@ -48,31 +54,36 @@ Les anciens profils conservent la séquence A/B/C et G ci-dessous.
    explicite si une erreur empêche sa réussite.
 
 La durée est `budget.wall_seconds`. À chaque admission, le contrôleur estime
-le coût de la prochaine passe et de la finalisation complète. Dans le mode
-Mother persistant, **les passes de recherche et les fusions sont estimées
-séparément** :
+le coût de la prochaine mission, des travaux en cours et de la finalisation
+complète. Dans le mode Mother persistant, **les générations, les évaluations
+exclusives et les fusions sont estimées séparément** :
 
-- Une passe est chronométrée une seule fois, de la préparation des N contextes
-  jusqu'à la fin des générations et des évaluations. Sa durée inclut déjà les
-  attentes et les mesures sérialisées ; elle n'est pas multipliée par N.
-  Les historiques distinguent les passes de tailles différentes.
-- La prévision utilise la médiane des cinq dernières passes de même taille.
-  Une réparation isolée n'impose donc plus son coût à toutes les admissions
-  suivantes ; un ralentissement persistant fait remonter l'estimation.
+- La génération est chronométrée dans son worker. Le travail exclusif de
+  l'évaluateur est chronométré après acquisition du verrou ; l'attente du GPU
+  reste enregistrée séparément. Les anciennes durées de mission comprenant
+  l'attente de toute une vague ne sont plus utilisées pour ces admissions.
+- La prévision utilise la médiane des cinq dernières observations par phase
+  et par rôle. Elle tient compte de la génération déjà effectuée par les
+  autres arbres et simule l'ordre possible des évaluations sur la cible.
+  Les générations se recouvrent ; leurs évaluations ne sont pas additionnées
+  une deuxième fois à une durée de vague complète.
 - Chaque fusion utilise la médiane de ses cinq dernières durées observées
-  (`mission:G`). Avant la première fusion mesurée, l'amorce est un appel
+  (`generation:G` et travail exclusif G, ou `mission:G` en repli). Avant la première fusion mesurée, l'amorce est un appel
   nominal de 120 secondes, plus le coût observé d'une évaluation. Elle ne
   reprend ni la passe de recherche la plus lente ni le maximum de réparations
   possibles. Le coût total suit les `max(1, N−1)` assemblages à exécuter.
 - La confirmation indépendante et l'archive restent réservées. La marge est
   de 25 % sur les travaux prévus, plus 10 secondes de sécurité.
+  Le changement du nombre de répétitions multiplie seulement la partie
+  chronométrage observée de l'évaluation ; compilation et correction ne sont
+  pas répétées artificiellement dans l'estimation. G garde sa place obligatoire.
 
 Les anciennes politiques à arbres fixes conservent le maximum des douze
 dernières durées observées. Ces valeurs restent des prévisions de temps,
 jamais des délais d'annulation, et ne sont pas communiquées à Mother pour
 choisir N.
 
-Régression vérifiée sur les latences de la campagne 772311 : l'ancien calcul
+Régression de l'ancien ordonnanceur par vagues, conservée sur les latences de la campagne 772311 : l'ancien calcul
 réservait 709 s pour finir et refusait une quatrième passe avec encore
 1 019 s disponibles. La nouvelle réserve est d'environ 334 s et la passe
 suivante d'environ 260 s : elle est admise. En répétant ensuite la dernière

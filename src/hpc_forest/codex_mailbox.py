@@ -13,6 +13,7 @@ from .codex_conversation import next_turn, verify_receipt
 from .core import CandidateRejected, InfrastructureError, Mission, atomic_json
 from .forest import persistent_mother
 from .harness_research import extract_research
+from .memory_contract import extract_memory
 from .ollama_backend import validate_files
 from .source_request import proposal_messages
 from .support.budgets import (
@@ -95,7 +96,12 @@ def make_request(mission: Mission, context: dict, config: dict) -> dict:
         raise InfrastructureError("This campaign requires exactly GPT-6.1 Sol MAX")
     if not unlimited_tokens(config) and config["budget"]["mission_tokens"] < TOKEN_CEILING:
         raise InfrastructureError("Insufficient conservative Codex token reservation")
-    rendered = proposal_messages(Path(mission.worktree), mission, context, skills=config.get("skills"))
+    if context.get("assembly_selection"):
+        from .integration_policy import selection_messages
+
+        rendered = selection_messages(context, config)
+    else:
+        rendered = proposal_messages(Path(mission.worktree), mission, context, skills=config.get("skills"))
     request = {
         "protocol": PROTOCOL, "kind": "source-proposal", "nonce": uuid.uuid4().hex,
         "session_id": settings["session_id"], "model": MODEL, "reasoning_effort": EFFORT,
@@ -114,13 +120,16 @@ def make_request(mission: Mission, context: dict, config: dict) -> dict:
             raise InfrastructureError("G must be assembled by the original Mother after research closes")
         request["conversation"] = next_turn(context["mother_conversation"])
         request["meta_role"] = "mother-final-assembly"
-        request["messages"][0]["content"] += (
-            " You are the SAME Mother continuing your original conversation after your N research trees. "
-            "Research is permanently closed. Assemble the code yourself from their returned source "
-            "programs and measurements. Do not create, launch, restart, replace or request any research "
-            "tree or other model. Return the source proposal schema for G, never a decomposition or "
-            "guidance-only response. The controller measures your proposal and independently confirms final G."
-        )
+        if not context.get("assembly_selection"):
+            request["messages"][0]["content"] += (
+                " You are the SAME Mother continuing your original conversation after your N research trees. "
+                "Research is permanently closed. Assemble the code yourself from their returned source "
+                "programs and measurements. Do not create, launch, restart, replace or request any research "
+                "tree or other model. Return the source proposal schema for G, never a decomposition or "
+                "guidance-only response. The controller measures your proposal and independently confirms final G."
+            )
+        if context.get("assembly_selection"):
+            request["meta_role"] = "mother-memory-selection"
         if context.get("integration_pair"):
             request["messages"][0]["content"] += (
                 " This is one step of a pairwise reduction. Assemble only the supplied input programs. "
@@ -230,7 +239,7 @@ class CodexMailboxBackend:
                     raise InfrastructureError("Mother cannot relaunch research after assembly starts")
             finally:
                 db.close()
-        if mission.role == "G" and not context.get("sources"):
+        if mission.role == "G" and not context.get("sources") and not context.get("assembly_selection"):
             return Generated(error="No admissible integration sources")
         if expired(generation_deadline(context)):
             return Generated(0, {"llm_calls": 0, "generation_not_started": "search_deadline"},
@@ -284,12 +293,14 @@ class CodexMailboxBackend:
                 db = Registry(root / "registry.sqlite3")
                 try:
                     db.set(f"mother_conversation:{mission.epoch}", receipt)
-                    db.set(f"mother_plan:final_synthesis:{mission.epoch}", {
-                        "status": "complete", "phase": "assembly", "final_synthesis": True,
-                        "budget_phase": "postprocess", "request_sha256": request_sha,
-                        "conversation": receipt, "model_calls": usage.get("llm_calls", 1),
-                        "usage_charged_to_g_mission": mission.id,
-                    })
+                    # Selection and memory reads advance the same conversation but are not code.
+                    if not context.get("memory", {}).get("enabled"):
+                        db.set(f"mother_plan:final_synthesis:{mission.epoch}", {
+                            "status": "complete", "phase": "assembly", "final_synthesis": True,
+                            "budget_phase": "postprocess", "request_sha256": request_sha,
+                            "conversation": receipt, "model_calls": usage.get("llm_calls", 1),
+                            "usage_charged_to_g_mission": mission.id,
+                        })
                 finally:
                     db.close()
                 generated.usage["conversation"] = receipt
@@ -299,7 +310,18 @@ class CodexMailboxBackend:
                 return generated
         try:
             data = response["data"]
+            if context.get("assembly_selection"):
+                generated.usage["assembly_decision"] = data
+                atomic_json(logs / "agent-selection.json", data)
+                return generated
+            data, memory_read, lessons = extract_memory(data, context)
             data, research = extract_research(data, context)
+            if context.get("memory", {}).get("enabled"):
+                generated.usage["memory_lessons"] = lessons
+            if memory_read is not None:
+                generated.usage["memory_request"] = memory_read
+                atomic_json(logs / "agent-memory-request.json", memory_read)
+                return generated
             if research is not None:
                 generated.usage["research_request"] = research
                 atomic_json(logs / "agent-research-request.json", research)
@@ -316,6 +338,16 @@ class CodexMailboxBackend:
             mission.sources = data["sources_kept"]
             mission.source_commits = [source_map[s] for s in mission.sources]
             atomic_json(logs / "agent-result.json", data)
+            if request.get("conversation") and context.get("memory", {}).get("enabled"):
+                db = Registry(root / "registry.sqlite3")
+                try:
+                    db.set(f"mother_plan:final_synthesis:{mission.epoch}", {
+                        "status": "complete", "phase": "assembly", "final_synthesis": True,
+                        "budget_phase": "postprocess", "request_sha256": request_sha,
+                        "conversation": generated.usage["conversation"],
+                        "model_calls": usage.get("llm_calls", 1), "usage_charged_to_g_mission": mission.id})
+                finally:
+                    db.close()
         except (CandidateRejected, ValueError, KeyError, TypeError) as exc:
             generated.error = f"Invalid Codex source proposal: {exc}"
         return generated

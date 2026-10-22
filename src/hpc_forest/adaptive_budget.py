@@ -36,6 +36,14 @@ def record_timing(db, stage: str, seconds: float) -> None:
     db.set("timing_samples", history)
 
 
+def record_evaluation_timing(db, role, evaluator):
+    """Keep exclusive work separate from GPU queue waits and model generation."""
+    measured = getattr(evaluator, "last_wall_times", {})
+    for stage in ("work", "build", "check", "benchmark", "lock_wait"):
+        if stage + "_seconds" in measured:
+            record_timing(db, f"evaluation_{stage}:{role}", measured[stage + "_seconds"])
+
+
 def forecast(db, roles=(), *, now: float | None = None) -> dict:
     """Forecast each phase independently; never turn an estimate into a timeout.
 
@@ -43,6 +51,10 @@ def forecast(db, roles=(), *, now: float | None = None) -> dict:
     configured margin. A research repair is not a sample of a Mother fusion.
     Historical fixed-tree profiles keep their maximum-based estimator.
     """
+    if db.get(f"research_scheduler:{db.get('current_epoch')}", {}).get("policy") == "independent-v1":
+        from .independent_budget import forecast_independent
+
+        return forecast_independent(db, roles, now=now)
     config = db.get("config")
     history = db.get("timing_samples", {})
     settings = config.get("completion", {})
@@ -135,8 +147,14 @@ def validate_adaptive(config: dict) -> None:
         raise ForestError("completion.reserve_policy must be fixed or adaptive")
     if type(settings.get("confirm_final_g", False)) is not bool:
         raise ForestError("completion.confirm_final_g must be a boolean")
-    for key, minimum in (("initial_model_seconds", 0), ("reserve_safety_factor", 1)):
-        value = require_finite_number(settings.get(key, 120 if key == "initial_model_seconds" else 1.25),
+    for key, minimum, default in (("initial_model_seconds", 0, 120),
+                                  ("initial_selection_seconds", 0, 30),
+                                  ("reserve_safety_factor", 1, 1.25)):
+        value = require_finite_number(settings.get(key, default),
                                       f"completion.{key}")
         if value < minimum or value == 0:
             raise ForestError(f"completion.{key} must be positive and >= {minimum}")
+    for key in ("initial_selection_calls", "initial_integration_rounds"):
+        count = settings.get(key, 2)
+        if type(count) is not int or count < 1:
+            raise ForestError(f"completion.{key} must be a positive integer")

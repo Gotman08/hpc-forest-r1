@@ -9,7 +9,13 @@ from dataclasses import asdict
 from importlib.resources import files
 from pathlib import Path
 
-from .adaptive_budget import admission_deadline, admit, forecast, record_timing
+from .adaptive_budget import (
+    admission_deadline,
+    admit,
+    forecast,
+    record_evaluation_timing,
+    record_timing,
+)
 from .backends import CodexBackend, RecipeBackend
 from .binary_search import SearchExhausted, enabled
 from .completion import finalize
@@ -44,6 +50,7 @@ from .observations import measured_observations
 from .ollama_backend import OllamaBackend, resolve_model
 from .registry import Registry
 from .search import Search
+from .submission import resolve_submission, validate_launch, validate_submission
 from .support.budgets import (
     FINISH_STARTED,
     OBSERVE_TOKENS,
@@ -93,6 +100,16 @@ def create_workspace(
     validation = validation.resolve() if validation else assets / "validation"
     if not source.is_dir() or not validation.is_dir():
         raise ForestError("Source and validation directories must exist")
+    config["submission"] = resolve_submission(config, source)
+    validate_submission(config)
+    if config["submission"]["kind"] == "cuda-kernel":
+        contract = config["submission"]
+        if not (source / contract["source"]).is_file():
+            raise ForestError("Imported CUDA kernel source is missing")
+        try:
+            validate_launch(json.loads((source / contract["launch"]).read_text(encoding="utf8")))
+        except (OSError, ValueError) as exc:
+            raise ForestError("Imported CUDA launch settings are missing or malformed") from exc
     research = config.get("harness", {}).get("research", {})
     corpus = None
     if config.get("harness", {}).get("enabled") and research.get("enabled"):
@@ -196,6 +213,14 @@ class Controller:
     def __exit__(self, *_):
         self.db.close()
 
+    def _notify_progress(self):
+        callback = getattr(self, "on_progress", None)
+        if callback is not None:
+            try:
+                callback(self.status())
+            except OSError as exc:
+                self.db.event("progress_write_failed", {"reason": str(exc)})
+
     def _start(self) -> None:
         verify_protected(self.root / "trusted", self.db.get("manifest"))
         if target_identity(self.config) != self.db.get("identity"):
@@ -251,6 +276,7 @@ class Controller:
             f"baseline-e{epoch['id']}", epoch["id"], path, epoch["base_commit"], None
         )
         record_timing(self.db, "baseline", time.time() - started)
+        record_evaluation_timing(self.db, "baseline", self.evaluator)
         self.db.record_evaluation(f"baseline-e{epoch['id']}", epoch["id"], "search", asdict(result))
         if result.correct is not True:
             raise ForestError("Baseline does not pass the protected correctness contract")
@@ -329,6 +355,9 @@ class Controller:
         return result
 
     def _context(self, mission: Mission, sources: list[dict]) -> dict:
+        from .memory_store import sync_memory
+
+        sync_memory(self.db, self.root)
         annotations = []
         pairwise = pairwise_mother(self.config) and mission.budget_phase == "postprocess"
         detailed = None
@@ -398,8 +427,10 @@ class Controller:
         if model_selected(self.config):
             from .mother import mother_context
 
-            return mother_context(self, mission, context)
-        return context
+            context = mother_context(self, mission, context)
+        from .memory_context import attach_memory
+
+        return attach_memory(self, mission, context)
 
     def _new_mission(self, role: str, epoch: dict, reserved_slot=None) -> tuple[Mission, dict, str]:
         if persistent_mother(self.config):
@@ -471,13 +502,15 @@ class Controller:
         retries = int(self.config["budget"]["infrastructure_retries"])
         for attempt in range(retries + 1):
             try:
-                return self.evaluator.evaluate(
+                outcome = self.evaluator.evaluate(
                     mission.id,
                     mission.epoch,
                     Path(mission.worktree),
                     commit,
                     baseline["mean_seconds"],
                 )
+                record_evaluation_timing(self.db, mission.role, self.evaluator)
+                return outcome
             except InfrastructureError as exc:
                 self.db.event(
                     "infrastructure_error",
@@ -540,6 +573,9 @@ class Controller:
                 self.db.settle_tokens(slot, 0 if self.config["backend"] == "recipe" else None)
             outcome = Outcome("infrastructure_error", reason=str(exc))
         self.search.finish(mission, outcome)
+        from .memory_store import sync_memory
+
+        sync_memory(self.db, self.root)
         row = self.db.one("SELECT created FROM trials WHERE id=?", (mission.id,))
         record_timing(self.db, "mission:" + mission.role, time.time() - row["created"])
         if outcome.status == "infrastructure_error" and not bounded_generation_abort:
@@ -547,7 +583,8 @@ class Controller:
         print(f"{mission.role} {mission.id}: {outcome.status}", flush=True)
         return fatal
 
-    def run(self, max_batches: int | None = None) -> dict:
+    def run(self, max_batches: int | None = None, *, on_progress=None) -> dict:
+        self.on_progress = on_progress
         if self.config.get("harness", {}).get("enabled"):
             from .node_harness import wrap_backend
 
@@ -561,6 +598,9 @@ class Controller:
                 self.evaluator.deadline = search_deadline(
                     self.evaluator.deadline, self.config["budget"]["confirmation_seconds"])
             self.search.recover_pending()
+            from .memory_store import sync_memory
+
+            sync_memory(self.db, self.root)
             if not unlimited_tokens(self.config) and not soft and self.db.costs()["unknown_usage_calls"]:
                 raise BudgetExhausted("Unknown previous LLM usage; start a new budgeted campaign")
             if (not unlimited_tokens(self.config) and not soft
@@ -584,6 +624,13 @@ class Controller:
                     return self.status()
             self._initialize_trees(epoch["id"])
             self.db.set("status", "running")
+            if persistent_mother(self.config):
+                from .forest_scheduler import run_research
+
+                run_research(self, epoch, baseline, max_rounds=max_batches)
+                if self.db.get("status") != "checkpointed":
+                    finalize(self, epoch, baseline)
+                return self.status()
             plan = self.plan()
             cursor_key = f"plan_cursor:{epoch['id']}"
             cursor, completed = self.db.get(cursor_key, 0), 0
@@ -846,6 +893,7 @@ class Controller:
             "adaptive_budget": forecast(self.db) if adaptive(self.config) else None,
             "last_admission": self.db.get(f"adaptive_budget:{self.db.get('current_epoch')}"),
             "completed_batches": self.db.get(f"plan_cursor:{self.db.get('current_epoch')}", 0),
+            "research_scheduler": self.db.get(f"research_scheduler:{self.db.get('current_epoch')}"),
             "final_g_confirmation": self.db.get(f"final_g_confirmation:{self.db.get('current_epoch')}"),
             "confirmation_deadline": self.db.get(f"confirmation_deadline:{self.db.get('current_epoch')}"),
             "best_confirmed": self.db.get("best_confirmed"),

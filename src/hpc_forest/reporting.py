@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import time
 import zipfile
@@ -11,9 +12,11 @@ from .adaptive_budget import admission_deadline
 from .core import FileLock, ForestError, atomic_json, digest, verify_protected
 from .forest import forest_plan, research_roles
 from .gitops import git
+from .memory_store import memory_summary
 from .model_skills import campaign_traces
 from .registry import Registry
 from .search import Search
+from .submission import delivery_manifest
 from .support.budgets import mandatory_final_g
 
 
@@ -72,7 +75,9 @@ def report(root: Path, output: Path | None = None) -> Path:
             "forest_plan": forest_plan(db),
             "mother_conversation": db.get(f"mother_conversation:{db.get('current_epoch')}"),
             "model_skills": campaign_traces(db),
+            "memory": memory_summary(db),
             "research_roles": research_roles(db),
+            "research_scheduler": db.get(f"research_scheduler:{db.get('current_epoch')}"),
             "research_forests": [json.loads(row["value"]) for row in db.rows(
                 "SELECT value FROM metadata WHERE key LIKE 'forest_plan:%' ORDER BY key")],
             "timing": {
@@ -216,6 +221,8 @@ def package(root: Path, destination: Path) -> Path:
                         or final["outcome"].get("commit") != post.get("outcome", {}).get("commit")):
                     raise ForestError("Mandatory final G confirmation receipt does not match its committed program")
             raw = git(root / "repo", "archive", "--format=zip", best["commit"], binary=True)
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                delivery = delivery_manifest(archive, db.get("config"))
             manifest = {
                 "format": "hpc-forest-submission-v1",
                 "created_unix": time.time(),
@@ -224,6 +231,7 @@ def package(root: Path, destination: Path) -> Path:
                 "protocol": db.get("config")["protocol"],
                 "search_policy": "binary-greedy" if Search(db).binary else "ab-mcts-a",
                 "confirmation": outcome,
+                "delivery": delivery,
                 "final_g_confirmation": final,
                 "forest_plan": forest_plan(db),
                 "mother_conversation": db.get(f"mother_conversation:{db.get('current_epoch')}"),
@@ -238,11 +246,8 @@ def package(root: Path, destination: Path) -> Path:
             with zipfile.ZipFile(tmp) as archive:
                 if archive.testzip() is not None:
                     raise ForestError("Submission archive integrity failed")
-                names = set(archive.namelist())
-                if not {"Makefile", "run.sh"}.issubset(names):
-                    raise ForestError(
-                        "Submission requires a Makefile and run.sh in the imported repository"
-                    )
+                if delivery_manifest(archive, db.get("config")) != delivery:
+                    raise ForestError("Submission delivery differs from the confirmed source archive")
             tmp.replace(destination)
             sha = hashlib.sha256(destination.read_bytes()).hexdigest()
             destination.with_suffix(destination.suffix + ".sha256").write_text(

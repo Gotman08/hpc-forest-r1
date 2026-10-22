@@ -29,6 +29,7 @@ from hpc_forest import codex_mailbox
 from hpc_forest.adaptive_budget import record_timing
 from hpc_forest.controller import create_workspace
 from hpc_forest.core import BudgetExhausted, InfrastructureError, atomic_json, file_digest
+from hpc_forest.forest import persistent_mother
 from hpc_forest.mother import MotherContext
 from hpc_forest.native_matrix import install_identity
 from hpc_forest.reporting import package, report
@@ -187,9 +188,15 @@ def main():
             with controller.db.connection:
                 controller.db.connection.execute("DELETE FROM documents")
             controller.db.event("official_r1_reconstruction", result)
+            def progress(state):
+                result["search"] = state
+                atomic_json(output / "progress.json", result)
+                print("OFFICIAL_PROGRESS", json.dumps(state), flush=True)
             while True:
                 try:
-                    result["search"] = controller.run(max_batches=1)
+                    result["search"] = controller.run(
+                        max_batches=None if persistent_mother(controller.config) else 1,
+                        on_progress=progress)
                 except BudgetExhausted as exc:
                     if plan["scope"] not in DEPTH_SCOPES:
                         raise

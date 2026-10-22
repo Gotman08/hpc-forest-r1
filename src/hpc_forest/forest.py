@@ -67,8 +67,9 @@ def validate_forest(config: dict) -> None:
         raise ForestError("forest.statement must be problem text")
     if "conversation" in settings and (settings["conversation"] != "persistent" or not model_selected(config)):
         raise ForestError("A persistent Mother conversation requires Mother-selected trees")
-    if "integration" in settings and (settings["integration"] != "pairwise" or not persistent_mother(config)):
-        raise ForestError("Pairwise integration requires the persistent Mother conversation")
+    if "integration" in settings and (settings["integration"] not in {"pairwise", "memory-guided-v1"}
+                                      or not persistent_mother(config)):
+        raise ForestError("Pairwise or memory-guided integration requires the persistent Mother conversation")
     if model_selected(config):
         if persistent_mother(config) and config["schedule"]["integrations_per_cycle"] != 0:
             raise ForestError("Persistent Mother assembles once after research; no G-to-research cycles")

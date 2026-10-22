@@ -361,8 +361,6 @@ def test_worker_keeps_documentation_binding_for_native_calls_and_restart(setup, 
     pytest.importorskip("mcp")
     pytest.importorskip("pypdf")
     mission, context, config, channel = setup
-    request = make_request(mission, context, config)
-    request_sha = publish_request(channel, request)
     arguments = (LocalTransfer(channel), "/scratch/hpc-forest-gpt61sol-max-test/results-1/mailbox",
                  "a" * 32, tmp_path / "worker", None, set())
     worker = Worker(*arguments, documentation=True)
@@ -371,6 +369,10 @@ def test_worker_keeps_documentation_binding_for_native_calls_and_restart(setup, 
         received.append(documentation_mcp.receipt())
         return result(request, sha)
     monkeypatch.setattr("hpc_forest.codex_worker.run_codex", generate)
+    # Dependency imports are test setup, outside the short transport deadline.
+    context["deadline"] = time.time() + 3
+    request = make_request(mission, context, config)
+    request_sha = publish_request(channel, request)
     assert asyncio.run(worker.handle(f"{request['nonce']}.request.json"))
     assert wait_response(channel, request, request_sha)["error"] is None
     assert received == [worker.documentation_mcp.receipt()]

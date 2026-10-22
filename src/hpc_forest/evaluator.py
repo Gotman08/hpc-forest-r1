@@ -10,6 +10,7 @@ import statistics
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from .core import (
@@ -84,6 +85,7 @@ class Evaluator:
         self.root, self.config = root, config
         self.protocol = config["protocol"]
         self.manifest, self.protocol_id, self.deadline = manifest, protocol_id, deadline
+        self.last_wall_times = {}
         # Same target string across campaigns -> same exclusive OS lock.
         self.lock_path = (
             Path(tempfile.gettempdir())
@@ -116,7 +118,33 @@ class Evaluator:
             self.protocol["environment"],
         )
         result.budget_shortened = bool(result.timed_out and self.deadline is not None and remaining < limit)
+        if self.last_wall_times:
+            key = name + "_seconds"
+            self.last_wall_times[key] = self.last_wall_times.get(key, 0.0) + result.seconds
         return result
+
+    @contextmanager
+    def _target(self):
+        """Queue exclusive target work without treating another tree as a failure."""
+        queued = time.monotonic()
+        lock = FileLock(self.lock_path)
+        while True:
+            try:
+                lock.__enter__()
+                break
+            except InfrastructureError as exc:
+                if not str(exc).startswith("Resource already locked:"):
+                    raise
+                if expired(self.deadline):
+                    raise BudgetExhausted("Evaluation expired waiting for target") from exc
+                time.sleep(max(0, time_left(self.deadline, 0.05)))
+        started = time.monotonic()
+        self.last_wall_times = {"lock_wait_seconds": started - queued}
+        try:
+            yield
+        finally:
+            self.last_wall_times["work_seconds"] = time.monotonic() - started
+            lock.__exit__(None, None, None)
 
     def _build(self, experiment: str, epoch: int, worktree: Path, commit: str, phase: str):
         verify_protected(self.root / "trusted", self.manifest)
@@ -263,7 +291,7 @@ class Evaluator:
     def evaluate(
         self, experiment: str, epoch: int, worktree: Path, commit: str, baseline: float | None
     ) -> Outcome:
-        with FileLock(self.lock_path):
+        with self._target():
             try:
                 item = self._prepare(experiment, epoch, worktree, commit, "search")
                 for i in range(self.protocol["repetitions"]):
@@ -316,7 +344,7 @@ class Evaluator:
             verify_protected(self.root / "trusted", self.manifest)
 
     def confirm(self, candidates: list[dict], epoch: int) -> dict[str, Outcome]:
-        with FileLock(self.lock_path):
+        with self._target():
             items = {}
             try:
                 for candidate in candidates:

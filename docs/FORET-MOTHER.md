@@ -1,5 +1,11 @@
 # Mother choisit N arbres AB-MCTS
 
+Le [harnais mémoire optionnel](MEMOIRE.md) ajoute la politique
+`memory-guided-v1` : recherche paginée dans les N arbres, choix explicite des
+sources, écriture du code combiné et mesure de chaque combinaison. Les
+descriptions de réduction par paires ci-dessous concernent la politique
+historique `pairwise`, qui reste disponible. Aucun de ces modes ne fixe N.
+
 Le mode `--mother-trees` (`forest.policy = "mother"` et
 `forest.conversation = "persistent"`) remplace la liste fixe A/B/C par un plan
 produit par Mother à partir du sujet, des sources et de la mesure de référence.
@@ -37,12 +43,19 @@ parents de recherche, ses propositions, ses continuations, ses scores et son
 générateur aléatoire. Son objectif reste celui attribué par Mother.
 Les sujets ne sont pas des recettes A/B/C renommées.
 
-Une passe admet tous les N arbres dans une seule réservation atomique. Elle
-demande un candidat par arbre et lance les N générations ensemble. Les
-réparations autorisées d'un candidat restent attachées à sa mission. Le
-contrôleur attend les travaux engagés avant la fusion. Les compilations,
-vérifications et mesures sont protégées par le verrou de cible ; les mesures
-ne se concurrencent pas sur la même machine.
+Le premier départ admet les N arbres dans une seule réservation atomique et
+lance leurs générations ensemble. Ensuite, chaque arbre poursuit sa propre
+boucle : choix du parent par AB-MCTS-A, génération, évaluation exclusive, puis
+mise à jour du score et nouvelle admission. Il ne reste pas de barrière entre
+les générations des différents arbres. Un arbre rapide peut donc commencer
+son deuxième candidat pendant qu'un autre termine encore son premier.
+Un même arbre garde au plus une mission en attente : son prochain choix utilise
+toujours le résultat déjà enregistré de la mission précédente. Les réparations
+autorisées restent attachées à leur mission. Les mises à jour TreeQuest et SQLite
+appartiennent au seul contrôleur ; seules les générations utilisent les N workers.
+Les mesures attendent leur tour sous le verrou de cible, y compris lorsqu'un
+autre enfant effectue une vérification de développement sur le même GPU.
+Cette attente ne devient pas un échec d'infrastructure.
 
 `T1, T2, …, TN` représente exactement N arbres au total. Les passes AB-MCTS
 développent leurs états existants tant que le budget laisse la réserve
@@ -90,9 +103,11 @@ conversation avec les diagnostics, sans créer de modèle ou d'arbre supplément
 
 La première passe fait partie du travail engagé avec la planification Mother :
 une fois N choisi, les N arbres démarrent même si cette planification a débordé
-de la cible. Les passes suivantes sont admises toutes ensemble lorsque leur
-coût prévu, avec les générations en parallèle et les mesures sérialisées,
-laisse la réserve de finalisation. Sinon, les admissions ferment.
+de la cible. Les missions suivantes sont admises individuellement lorsque leur
+coût prévu, les travaux déjà engagés et la réserve de finalisation tiennent
+dans le temps restant. Un arbre dont le prochain essai est trop long ne bloque
+pas une mission plus courte d'un autre arbre. Quand aucune admission ne tient,
+les travaux engagés finissent avant la reprise de Mother.
 La réserve estime désormais toutes les fusions successives : au plus N−1 pour
 N programmes, ou une proposition finale pour zéro ou un candidat. Une grande
 forêt peut donc augmenter la durée de finalisation ; les étapes engagées ne
@@ -193,6 +208,16 @@ explicitement, sans recréer Mother ni relancer les arbres.
 son objectif et ses liens de provenance. Le lanceur refuse d'annoncer une
 campagne complète si un arbre choisi n'a jamais été traité ou si G final n'a
 pas son reçu de confirmation.
+
+Le registre et les rapports exposent aussi `research_scheduler`, les événements
+`research_node_submitted` / `research_node_settled` et les durées de génération
+et d'évaluation séparées. `completed_batches` compte les tours complets communs
+aux N arbres ; les nombres de sommets par arbre peuvent différer. L'option
+explicite de checkpoint `max_batches` conserve une frontière par arbre, sans
+devenir un quota pendant une exécution normale.
+Les lanceurs courants appellent `run()` sans cette frontière et publient leurs
+instantanés après chaque sommet via `on_progress`, plutôt que de recréer des
+vagues pour alimenter leur fichier de progression.
 
 Les tests locaux utilisent des sorties de modèles simulées avec le vrai
 TreeQuest et de vraies compilations/validations C. Des barrières de concurrence

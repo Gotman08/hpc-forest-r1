@@ -9,6 +9,7 @@ from .adaptive_budget import record_timing
 from .core import ForestError, InfrastructureError
 from .forest import forest_plan, pairwise_mother, persistent_mother, research_roles
 from .gitops import make_worktree
+from .memory_contract import guided
 from .node_harness import wrap_backend
 from .support.budgets import mission_token_reservation, unlimited_tokens
 
@@ -18,11 +19,14 @@ def _mission(controller, epoch: dict, baseline: dict, state: dict, *, sources=No
     role = "G-final" if merge is None or merge["final"] else f"G-merge-{merge['round']}-{merge['pair']}"
     tree = search.initialize(epoch["id"], role, controller.config["seed"] + epoch["id"] * 101 + 99)
     tokens = mission_token_reservation(controller.config)
-    purpose = "role:G" if merge is None else f"merge:{merge['step']}"
+    purpose = (f"memory:code:{merge['step']}" if guided(controller.config) and merge
+               else "role:G" if merge is None else f"merge:{merge['step']}")
     slot = db.reserve("postprocess", f"postprocess:e{epoch['id']}:{purpose}", tokens)
     state["slot_id"] = slot
     db.set(f"postprocess:{epoch['id']}", state)
     base = min(sources, key=lambda row: row["mean_seconds"])["commit"] if merge is not None else epoch["base_commit"]
+    if merge and merge.get("base_id"):
+        base = next(row["commit"] for row in sources if row["id"] == merge["base_id"])
     mission = search.ask(tree, ["G"], epoch["id"], base, merge["step"] if merge else 1, "", slot,
                          budget_phase="postprocess")
     mission.worktree = str(controller.root / "worktrees" / mission.id)
@@ -50,18 +54,30 @@ def _mission(controller, epoch: dict, baseline: dict, state: dict, *, sources=No
     make_worktree(controller.root / "repo", Path(mission.worktree),
                   f"final/{controller.config['problem']}/G/{mission.id}", mission.base_commit)
     context = controller._context(mission, sources)
-    if merge is not None:
+    if merge is not None and not guided(controller.config):
         context["integration_pair"] = {**merge, "input_ids": [s["id"] for s in sources],
             "context_compaction": "codex-cli-automatic"}
+    if merge is not None and guided(controller.config):
+        from .memory_retrieval import MemoryReader, bounded_page, card
+
+        with MemoryReader(controller.root, mission, controller.config, epoch["protocol_id"]) as reader:
+            ideas = [card(reader.exact(identity)) for identity in merge["idea_ids"]]
+            context["integration_ideas"] = bounded_page(ideas, offset=0, total=len(ideas),
+                maximum=context["memory"]["max_result_characters"])
+        context["integration_selection"] = merge["selection"]
+        context["memory"]["evidence_ids"] = list(dict.fromkeys([
+            *context["memory"]["evidence_ids"], *mission.sources, *merge["idea_ids"]]))
     return mission, context, slot
 
 
 def _integrate(controller, epoch, baseline, state, *, sources=None, merge=None):
     mission, context, slot = _mission(controller, epoch, baseline, state, sources=sources, merge=merge)
+    started = time.time()
     try:
         generated = controller.backend.generate(mission, context, controller.config, controller.root)
     except Exception as exc:
         generated = exc
+    record_timing(controller.db, "generation:G", time.time() - started)
     fatal = controller._complete_generation(mission, slot, generated, baseline)
     trial = controller.db.one("SELECT result FROM trials WHERE id=?", (mission.id,))
     outcome = json.loads(trial["result"])
@@ -160,7 +176,11 @@ def finalize(controller, epoch: dict, baseline: dict) -> dict:
     controller.evaluator.deadline = None
     controller.backend = wrap_backend(controller.backend, controller.config)
     try:
-        if pairwise_mother(controller.config):
+        if guided(controller.config):
+            from .integration_policy import integrate_memory
+
+            integrate_memory(controller, epoch, baseline, state)
+        elif pairwise_mother(controller.config):
             _pairwise(controller, epoch, baseline, state)
         else:
             _, outcome, mother = _integrate(controller, epoch, baseline, state)

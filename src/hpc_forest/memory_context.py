@@ -16,10 +16,12 @@ def attach_memory(controller, mission, context):
     query = context.get("research_tree", {}).get("objective", "")
     with MemoryReader(controller.root, mission, controller.config, context["protocol_id"]) as reader:
         page = reader.search(query)
+        catalog = reader.catalog()
     view = {"schema": VERSION, "enabled": True, "scope": {
                 "epoch": mission.epoch, "protocol_id": context["protocol_id"],
                 "tree_id": mission.tree_id if mission.role != "G" else None},
-            "page": page, "evidence_ids": evidence_ids(page),
+            "page": page, "catalog": catalog,
+            "evidence_ids": list(dict.fromkeys([*evidence_ids(page), *evidence_ids(catalog)])),
             "remaining_reads": cfg["reads_per_mission"],
             "max_result_characters": cfg["context_characters"],
             "provenance": "controller facts and separately labelled model interpretations",

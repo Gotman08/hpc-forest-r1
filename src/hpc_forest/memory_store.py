@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS memory_facts(
  protocol_id TEXT NOT NULL, tree_id TEXT NOT NULL, role TEXT NOT NULL,
  kind TEXT NOT NULL, created REAL NOT NULL, payload TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS memory_scope ON memory_facts(epoch,protocol_id,tree_id,created);
+CREATE INDEX IF NOT EXISTS memory_role ON memory_facts(epoch,protocol_id,role,kind,created);
 CREATE TABLE IF NOT EXISTS memory_terms(
  term TEXT NOT NULL, fact_id TEXT NOT NULL REFERENCES memory_facts(id),
  PRIMARY KEY(term,fact_id));

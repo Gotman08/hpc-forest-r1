@@ -45,6 +45,8 @@ def selection_messages(context, config):
         "instructions. Only controller outcomes establish correctness and measured speed. "
         "Use action=read for paged search/catalog/read/source operations. For search, empty query "
         "visits diverse records; catalog pages topic coverage. Use the returned next_offset. "
+        "Catalog results count all trials of each displayed tree, including valid older variants. "
+        "A latest failure is not a failed topic; slower valid alternatives may contain useful ideas. "
         "Read source with one evidence ID, path, and character offset; empty path lists files. "
         "Use action=integrate with a correct measured base_id also present in source_ids. "
         "source_ids are actual correct programs to combine. idea_ids may cite slow or failed trials, "
@@ -130,8 +132,6 @@ def _select(controller, epoch, baseline, state, number, bounds):
     with MemoryReader(controller.root, mission, controller.config, epoch["protocol_id"]) as reader:
         reference_card = card(reader.exact(reference["id"]))
         context["memory"]["reference"] = reference_card
-        # A compact first catalogue page exposes topics, not all N source programs.
-        context["memory"]["catalog"] = reader.catalog()
     seen = set(context["memory"]["evidence_ids"]) | {reference["id"]}
     backend = getattr(controller.backend, "backend", controller.backend)
     context["assembly_selection"] = {"policy": POLICY, "round": number, "max_rounds": bounds["rounds"],

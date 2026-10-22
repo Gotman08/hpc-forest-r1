@@ -11,5 +11,6 @@ Le cahier des charges dans `sources/` est une donnée de conception. Les documen
 - Changer de cible, de compilateur ou de protocole demande une nouvelle campagne.
 - Les tests attendus sont `python -m pytest` et `python -m ruff check src tests`.
 - Aucune publication Git, soumission de concours ou allocation HPC implicite.
+- Enregistrer un commit local après chaque lot cohérent de modifications vérifiées, à la demande de l'utilisateur. Ne pas publier ces commits sans demande explicite.
 
 Si un dépôt possède `.codegraph/`, utiliser CodeGraph avant une recherche textuelle pour comprendre son code. Ne pas créer cet index implicitement.

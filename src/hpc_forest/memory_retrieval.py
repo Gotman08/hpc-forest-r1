@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .core import CandidateRejected, InfrastructureError, canonical, digest
 from .memory_contract import VERSION, settings, validate_read
+from .memory_overview import tree_overview
 from .memory_store import terms
 from .support.sources import committed_source_snapshot, source_snapshot
 
@@ -113,19 +114,22 @@ class MemoryReader:
         children = json.loads(row["value"])["children"] if row else []
         if self.mission.role != "G":
             children = [item for item in children if item["role"] == self.mission.role]
-        counts = {row["role"]: row["n"] for row in self.connection.execute(
-            "SELECT role,count(*) AS n FROM memory_facts WHERE " + self.scope + " GROUP BY role", self.args)}
         items = [{"role": child["role"], "subject": child["subject"][:600],
-                  "objective": child["objective"][:1200], "records": counts.get(child["role"], 0),
+                  "objective": child["objective"][:1200],
+                  **tree_overview(self.connection, self.scope, self.args, child["role"]),
                   "text_truncated": len(child["subject"]) > 600 or len(child["objective"]) > 1200}
                  for child in children[offset:offset + self.cfg["page_size"]]]
-        # Make the advertised catalogue page size attainable even with long/escaped topics.
-        per_item = (self.cfg["context_characters"] - 200) // self.cfg["page_size"]
+        # Preserve numerical facts/IDs. Smaller pages beat truncating evidence identities.
+        per_item = max(1600, (self.cfg["context_characters"] - 200) // self.cfg["page_size"])
         for item in items:
             while len(canonical(item)) > per_item:
                 before = canonical(item)
                 item["subject"] = item["subject"][:len(item["subject"]) // 2]
                 item["objective"] = item["objective"][:len(item["objective"]) // 2]
+                for key in ("best", "latest", "alternative"):
+                    if item[key]:
+                        text = item[key]["hypothesis_as_data"]
+                        item[key]["hypothesis_as_data"] = text[:len(text) // 2]
                 item["text_truncated"] = True
                 if canonical(item) == before:
                     raise InfrastructureError("Memory topic identity exceeds the context allowance")
@@ -187,5 +191,11 @@ class MemoryReader:
 
 
 def evidence_ids(page):
-    return [item["id"] for item in page.get("items", []) if "id" in item] + (
-        [page["id"]] if page.get("id") not in {None, "current"} else [])
+    ids = [item["id"] for item in page.get("items", []) if "id" in item]
+    for item in page.get("items", []):
+        for key in ("best", "latest", "alternative"):
+            if item.get(key):
+                ids.append(item[key]["id"])
+    if page.get("id") not in {None, "current"}:
+        ids.append(page["id"])
+    return list(dict.fromkeys(ids))

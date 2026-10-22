@@ -1,0 +1,92 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.7.0
+rootdir: C:\Users\nicol\Documents\Codex\2026-10-20\new-chat\outputs\hpc-forest-r1
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1
+collected 716 items
+
+tests\test_accounting_recovery.py ............                           [  1%]
+tests\test_adaptive_budget.py ....................................       [  6%]
+tests\test_archive_inputs.py ...............                             [  8%]
+tests\test_backends.py ....                                              [  9%]
+tests\test_binary_search.py ............................................ [ 15%]
+..................                                                       [ 18%]
+tests\test_codex_harness_authorization.py ..........                     [ 19%]
+tests\test_codex_mailbox.py .....................F....                   [ 23%]
+tests\test_codex_pilot_authorization.py ..                               [ 23%]
+tests\test_codex_runner.py ...                                           [ 23%]
+tests\test_codex_worker_retry.py ..................                      [ 26%]
+tests\test_confirmation_deadline.py ..                                   [ 26%]
+tests\test_contracts.py .................                                [ 28%]
+tests\test_controls.py ..................................                [ 33%]
+tests\test_cuda_submission.py ..............                             [ 35%]
+tests\test_depth_campaign.py ........................................... [ 41%]
+                                                                         [ 41%]
+tests\test_depth_limits.py ....                                          [ 42%]
+tests\test_documentation.py .......................................      [ 47%]
+tests\test_end_to_end.py ...                                             [ 48%]
+tests\test_finish_started.py .......................                     [ 51%]
+tests\test_gitops.py ..                                                  [ 51%]
+tests\test_harness_comparison_runner.py ...                              [ 51%]
+tests\test_harness_research.py .................                         [ 54%]
+tests\test_independent_budget.py ........                                [ 55%]
+tests\test_independent_forest.py .....                                   [ 56%]
+tests\test_local_models.py .....                                         [ 56%]
+tests\test_mcp.py .                                                      [ 56%]
+tests\test_memory.py .....................                               [ 59%]
+tests\test_memory_integration.py ....                                    [ 60%]
+tests\test_memory_preparation.py .                                       [ 60%]
+tests\test_memory_skills.py ....                                         [ 61%]
+tests\test_model_mcp.py .....................                            [ 64%]
+tests\test_model_skills.py ..........................                    [ 67%]
+tests\test_mother_conversation.py ..................                     [ 70%]
+tests\test_mother_forest.py ...............                              [ 72%]
+tests\test_mother_forest_launch.py ............                          [ 74%]
+tests\test_native_matrix.py .........................                    [ 77%]
+tests\test_native_smoke.py ..............                                [ 79%]
+tests\test_node_harness.py .......................                       [ 82%]
+tests\test_observations.py ....                                          [ 83%]
+tests\test_ollama.py ......................                              [ 86%]
+tests\test_pairwise_mother.py ................                           [ 88%]
+tests\test_phase_reporting.py .                                          [ 88%]
+tests\test_request_pool.py ...                                           [ 89%]
+tests\test_reserve_forecast.py ...........                               [ 90%]
+tests\test_resource_attribution.py .                                     [ 90%]
+tests\test_retries.py ..                                                 [ 91%]
+tests\test_search.py .......                                             [ 92%]
+tests\test_support.py .............................................      [ 98%]
+tests\test_tree_comparison.py ............                               [100%]
+
+================================== FAILURES ===================================
+____ test_worker_keeps_documentation_binding_for_native_calls_and_restart _____
+
+setup = (Mission(id='trial', tree_id='e1:A', trial_id='local-1', epoch=1, role='A', base_commit='base', parent_id=None, delega....}, WindowsPath('C:/Users/nicol/AppData/Local/Temp/pytest-of-nicol/pytest-98/test_worker_keeps_documentatio0/mailbox'))
+tmp_path = WindowsPath('C:/Users/nicol/AppData/Local/Temp/pytest-of-nicol/pytest-98/test_worker_keeps_documentatio0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000027EB4ACB7E0>
+
+    def test_worker_keeps_documentation_binding_for_native_calls_and_restart(setup, tmp_path, monkeypatch):
+        pytest.importorskip("mcp")
+        pytest.importorskip("pypdf")
+        mission, context, config, channel = setup
+        request = make_request(mission, context, config)
+        request_sha = publish_request(channel, request)
+        arguments = (LocalTransfer(channel), "/scratch/hpc-forest-gpt61sol-max-test/results-1/mailbox",
+                     "a" * 32, tmp_path / "worker", None, set())
+        worker = Worker(*arguments, documentation=True)
+        received = []
+        def generate(request, sha, *args, documentation_mcp):
+            received.append(documentation_mcp.receipt())
+            return result(request, sha)
+        monkeypatch.setattr("hpc_forest.codex_worker.run_codex", generate)
+>       assert asyncio.run(worker.handle(f"{request['nonce']}.request.json"))
+E       AssertionError: assert False
+E        +  where False = <function run at 0x0000027EE3E2E020>(<coroutine object Worker.handle at 0x0000027EB5A67920>)
+E        +    where <function run at 0x0000027EE3E2E020> = asyncio.run
+E        +    and   <coroutine object Worker.handle at 0x0000027EB5A67920> = handle('c6cfab25b1d24c75a0de2bee0547bf44.request.json')
+E        +      where handle = <hpc_forest.codex_worker.Worker object at 0x0000027EB6F79B50>.handle
+
+tests\test_codex_mailbox.py:374: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_codex_mailbox.py::test_worker_keeps_documentation_binding_for_native_calls_and_restart
+================= 1 failed, 715 passed in 2126.65s (0:35:26) ==================

@@ -1,0 +1,2141 @@
+{
+  "scope": "Read-only comparison of preserved campaigns; no new GPU measurement or engine edit",
+  "payload_changed_files": [
+    "plan.json",
+    "project/src/hpc_forest/independent_budget.py",
+    "settings.json"
+  ],
+  "payload_diffs": {
+    "plan.json": "--- 776048\n+++ 776290\n@@ -1,10 +1,10 @@\n {\n   \"scope\": \"cuda-nbody-luna-max-memory-v1\",\n-  \"session_id\": \"9c311c3ac9e8480b919384621c7e4f7e\",\n+  \"session_id\": \"7bf195685d4a4ea690a28ef41cac7743\",\n   \"model\": \"gpt-6-luna\",\n   \"effort\": \"max\",\n   \"subject\": \"cuda-nbody\",\n-  \"remote_root\": \"/scratch_p/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e\",\n+  \"remote_root\": \"/scratch_p/nimarano/hpc-forest-cuda-memory-7bf195685d4a4ea690a28ef41cac7743\",\n   \"wall_seconds\": 1800,\n   \"token_budget\": null,\n   \"source_path\": \"C:\\\\Users\\\\nicol\\\\.gemini\\\\antigravity\\\\scratch\\\\cuda_nbody_naive\\\\nbody_naive.cu\",\n@@ -32,6 +32,6 @@\n   },\n   \"gpus\": 1,\n   \"cpus\": 4,\n-  \"created_at\": 1792673094.8563406,\n+  \"created_at\": 1792675118.116118,\n   \"old_candidates_imported\": false\n }\n",
+    "project/src/hpc_forest/independent_budget.py": "--- 776048\n+++ 776290\n@@ -141,8 +141,13 @@\n                        + estimate[\"archive_seconds\"]) + 10\n     call = estimate[\"selection_call_seconds\"]\n     read_required = finish + safety * 2 * call  # This read, then a selection decision.\n-    round_required = finish + safety * estimate[\"selection_calls_per_round\"] * call\n+    # A new round needs one decision. Additional reads are admitted separately;\n+    # reserving their nominal count here would reject a round that must_decide\n+    # can complete without those reads.\n+    round_required = finish + safety * call\n+    nominal_round = finish + safety * estimate[\"selection_calls_per_round\"] * call\n     return {\"remaining_seconds\": remaining, \"finish_seconds\": finish,\n             \"read_required_seconds\": read_required, \"round_required_seconds\": round_required,\n+            \"nominal_round_required_seconds\": nominal_round,\n             \"can_read\": remaining is None or remaining >= read_required,\n             \"can_start_round\": remaining is None or remaining >= round_required}\n",
+    "settings.json": "--- 776048\n+++ 776290\n@@ -71,8 +71,8 @@\n     \"environment\": {\n       \"OMP_NUM_THREADS\": \"1\",\n       \"OPENBLAS_NUM_THREADS\": \"1\",\n-      \"FOREST_CUDA_HARNESS\": \"/scratch_p/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/harness-build/cuda_test_harness\",\n-      \"FOREST_CUDA_CACHE\": \"/scratch_p/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/cache\",\n+      \"FOREST_CUDA_HARNESS\": \"/scratch_p/nimarano/hpc-forest-cuda-memory-7bf195685d4a4ea690a28ef41cac7743/harness-build/cuda_test_harness\",\n+      \"FOREST_CUDA_CACHE\": \"/scratch_p/nimarano/hpc-forest-cuda-memory-7bf195685d4a4ea690a28ef41cac7743/cache\",\n       \"PYTHONDONTWRITEBYTECODE\": \"1\",\n       \"FOREST_GPU_TARGET\": \"NVIDIA GH200; NVRTC CUDA 12.6.3\"\n     }\n@@ -81,8 +81,8 @@\n     \"model\": \"gpt-6-luna\",\n     \"reasoning_effort\": \"max\",\n     \"transport\": \"codex-mailbox\",\n-    \"mailbox_dir\": \"/scratch_p/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/pending/mailbox\",\n-    \"session_id\": \"9c311c3ac9e8480b919384621c7e4f7e\"\n+    \"mailbox_dir\": \"/scratch_p/nimarano/hpc-forest-cuda-memory-7bf195685d4a4ea690a28ef41cac7743/pending/mailbox\",\n+    \"session_id\": \"7bf195685d4a4ea690a28ef41cac7743\"\n   },\n   \"ollama\": {\n     \"base_url\": \"http://127.0.0.1:11434\",\n"
+  },
+  "initial_input": {
+    "system_identical": true,
+    "schema_identical": true,
+    "skills_identical": true,
+    "components_identical": {
+      "automatic_observations_as_data": false,
+      "current_sources_as_data": true,
+      "official_statement_as_data": true,
+      "phase": true,
+      "required_schema": true,
+      "target_as_data": false
+    },
+    "remaining_differences": "Measured baseline, campaign IDs/commits/paths and target label differ; same source tree, baseline binary and GH200/CUDA specification."
+  },
+  "metrics": {
+    "final_time_ratio": 8.548912751848071,
+    "preintegration_time_ratio": 6.69875551250303,
+    "baseline_change_percent": -1.1535503282657067,
+    "research_closure_difference_seconds": 0.041742563247680664
+  },
+  "campaigns": [
+    {
+      "job": "776048",
+      "registry_sha256": "0ec06d8c5785b6e22f5036622fb0ff2cc6269544104bfd74e1e39041ae30b1d1",
+      "planning_analysis": "I choose N=4 because the supplied kernel exposes four distinct avenues: block-local reuse of source particles, register reuse across multiple outputs per thread, parallelizing the source-reduction dimension, and reducing per-interaction arithmetic. Each tree should focus on its named mechanism; each may tune its own launch configuration, avoiding a redundant launch-only tree. The source has an O(n²) interaction loop and no shared-memory staging. The supplied baseline is valid: three measured repetitions were 1.8502648, 1.8501167, and 1.8501610 ms (mean 1.8501808 ms); no candidate comparison is available yet. Judge candidates by the official geometric-mean CUDA-event time and preserve the required interface, correctness checks, and resource limits. The CUDA 12.6.3 Programming Guide documents block-level shared-memory cooperation and reciprocal-square-root behavior; those are technical context, not evidence of performance on this kernel.",
+      "children": [
+        {
+          "objective": "Explore conventional block-local source tiling while keeping one target particle per thread and serial traversal of the source dimension, so the main change is reusing staged source particles across output threads. Tune the tile layout and size, block configuration, and dynamic shared-memory setting within the stated launch limits. Handle arbitrary n and tail tiles without extra kernels, buffers, or host preprocessing. Preserve the entry point, Particle layout, complete outputs and masses; pass every supplied correctness case. Evaluate complete source-and-launch candidates using the official search measurements.",
+          "role": "T1",
+          "subject": "Shared-memory source tiling"
+        },
+        {
+          "objective": "Explore register-level output coarsening: have each thread maintain multiple target particles and reuse each loaded source particle across those targets, without shared-memory source staging as the principal mechanism. Tune coarsening and launch parameters while handling all n and tails safely. Preserve the entry point, Particle layout, update order, complete output and exact masses; pass every supplied correctness case. Compare measured source-and-launch candidates under the official protocol.",
+          "role": "T2",
+          "subject": "Per-thread multi-target coarsening"
+        },
+        {
+          "objective": "Explore a distinct mapping that assigns lanes within a warp (or block) to portions of the source-particle reduction for a target, then combines partial force sums. Focus on parallelizing the reduction dimension rather than output coarsening or block-wide source tiling. Handle arbitrary n, self-interaction exclusion, tail sources and reduction synchronization without races or extra launches/buffers. Preserve the entry point, Particle layout, integration order, and exact masses; validate all supplied cases and compare official measurements.",
+          "role": "T3",
+          "subject": "Source-parallel force reduction"
+        },
+        {
+          "objective": "Explore per-interaction arithmetic reductions such as safe factoring of the target-mass term, reciprocal-square-root use, or other instruction simplifications compatible with NVRTC CUDA 12.6.3 and no global fast-math option. Keep self-interaction exclusion unless an alternative is proven safe, preserve float32 state and exact masses, and reject transformations that fail the FP64-oracle tolerances or produce nonfinite output—including on the isolated extreme-mass case. Keep the entry point and single-kernel interface; measure complete source-and-launch candidates using the official protocol.",
+          "role": "T4",
+          "subject": "Force arithmetic simplification"
+        }
+      ],
+      "trials": [
+        {
+          "id": "aae515bf57f94665",
+          "role": "T1",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 130.47049379348755,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009693238222033003,
+            "reason": "",
+            "commit": "d28aed5445e6e7914fcf52b67e251e630d1efec9",
+            "tree_hash": "a615acbe55cdd37dab10c1c1655ca2cc3e61532e"
+          }
+        },
+        {
+          "id": "e099ff53da844775",
+          "role": "T2",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 130.5011489391327,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0026152822324718374,
+            "reason": "",
+            "commit": "cdd3e221b598767ddbaeb1293a6b52bdadfc6e56",
+            "tree_hash": "bdb5fb998646b5a2176397321cb3a01b14a12561"
+          }
+        },
+        {
+          "id": "072b1a80b8fa466d",
+          "role": "T3",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 130.52900958061218,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0001518326655745892,
+            "reason": "",
+            "commit": "e568be9d2b0a871f1cd1f187960d4bcbce943955",
+            "tree_hash": "f843edabe0f353ca2d68238a16ef7497210e461f"
+          }
+        },
+        {
+          "id": "7a33f8f04fdf415f",
+          "role": "T4",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 130.55565881729126,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0010145747743325992,
+            "reason": "",
+            "commit": "ce2d18e6b1bf60a3defd1632579a9a59932a60c2",
+            "tree_hash": "04396fdf1aa14ddbcbad91351d161b3dbf4080c6"
+          }
+        },
+        {
+          "id": "2edf23e904aa477b",
+          "role": "T1",
+          "ordinal": 2,
+          "depth": 1,
+          "admitted_seconds": 236.5719497203827,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.000993255436589586,
+            "reason": "",
+            "commit": "9caf39a759436ab65459030239a44dbb5c2f9697",
+            "tree_hash": "c8daf6cd9b4c01c618c1d02cb68557a35758e65a"
+          }
+        },
+        {
+          "id": "335e165bec36493e",
+          "role": "T2",
+          "ordinal": 2,
+          "depth": 2,
+          "admitted_seconds": 260.48279571533203,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.004167634985676047,
+            "reason": "",
+            "commit": "c71f1693d69a6eb173c9a41489b28febd472be6b",
+            "tree_hash": "dcaa739f72ed7fab7df046da33c263c7b154b08f"
+          }
+        },
+        {
+          "id": "36b0e8c95e694a2e",
+          "role": "T4",
+          "ordinal": 2,
+          "depth": 1,
+          "admitted_seconds": 286.30548119544983,
+          "result": {
+            "status": "incorrect",
+            "correct": false,
+            "mean_seconds": null,
+            "reason": "Protected correctness checks failed",
+            "commit": "3121437eed1f4dcdf695050e4a6db1df2c6f4def",
+            "tree_hash": "d53496bf3f9f0827f91363dfc40d6f68873b9eb3"
+          }
+        },
+        {
+          "id": "54965513c23b4631",
+          "role": "T3",
+          "ordinal": 2,
+          "depth": 1,
+          "admitted_seconds": 298.62529611587524,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.00014436238753220778,
+            "reason": "",
+            "commit": "1174186ce4c74c6c9fa42f92dc4ec43df5ae547b",
+            "tree_hash": "ced6ad73a00f6bad2f31469fa61a097f325089b6"
+          }
+        },
+        {
+          "id": "5e30f66d28c84e34",
+          "role": "T1",
+          "ordinal": 3,
+          "depth": 1,
+          "admitted_seconds": 321.4037368297577,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009585576270644929,
+            "reason": "",
+            "commit": "2ab238d9ae8046c2f297b9014ee423abcf3563f8",
+            "tree_hash": "6bd709547078e4e2fbd4a4e8e6e65a9b6add58e4"
+          }
+        },
+        {
+          "id": "3aec87f1ed714bf4",
+          "role": "T2",
+          "ordinal": 3,
+          "depth": 1,
+          "admitted_seconds": 344.1566333770752,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0025820852919946694,
+            "reason": "",
+            "commit": "b370a56ebb0297d945680abc7705c273bf8159fa",
+            "tree_hash": "f78751251a035c76db4ab1cd277f1c0883bd8c8a"
+          }
+        },
+        {
+          "id": "8052fe0a6b7b4d62",
+          "role": "T3",
+          "ordinal": 3,
+          "depth": 2,
+          "admitted_seconds": 364.5316071510315,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.00013281273678120593,
+            "reason": "",
+            "commit": "3c16471bb69533bcfeae6d46f73564644f91aa03",
+            "tree_hash": "03a64091c87aefdf6ebd96cfd6580318aa192ff2"
+          }
+        },
+        {
+          "id": "b067236e66fc41e3",
+          "role": "T1",
+          "ordinal": 4,
+          "depth": 1,
+          "admitted_seconds": 394.1279716491699,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.000960974214033043,
+            "reason": "",
+            "commit": "0bc4fed352dc4d8128fb72d3de15229c4d9e5c4f",
+            "tree_hash": "bacd40fdd21573f9c7ef9d30a0eaaefc6eb7cfc9"
+          }
+        },
+        {
+          "id": "986ed4e1c49d44e1",
+          "role": "T3",
+          "ordinal": 4,
+          "depth": 1,
+          "admitted_seconds": 437.6517195701599,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.00014356636894721666,
+            "reason": "",
+            "commit": "fff81576991c1fdf17aae5b9c9d7fca9c68ea198",
+            "tree_hash": "1201fd0a78d6b900de6e91670793487340361ddf"
+          }
+        },
+        {
+          "id": "917b639f9f734e82",
+          "role": "T4",
+          "ordinal": 3,
+          "depth": 1,
+          "admitted_seconds": 468.77989172935486,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0018485566126338886,
+            "reason": "",
+            "commit": "f3bfaae6e93031fa3397043c13e453852aea7c69",
+            "tree_hash": "17b4b98780a104c3b714ccc7ce495815a44056cb"
+          }
+        },
+        {
+          "id": "d4299d0b4ca44112",
+          "role": "T1",
+          "ordinal": 5,
+          "depth": 2,
+          "admitted_seconds": 481.4957642555237,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.000966752330228386,
+            "reason": "",
+            "commit": "43a59806dd5ee75ed7c2e74fd184422ea07533b7",
+            "tree_hash": "b80ffb2b24bc83a014a46730bd939ee3084bcf4f"
+          }
+        },
+        {
+          "id": "08eb76bfcf6f4c3b",
+          "role": "T2",
+          "ordinal": 4,
+          "depth": 3,
+          "admitted_seconds": 533.0856788158417,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0027648815927216975,
+            "reason": "",
+            "commit": "2fe73e60b35ef990360ff30e92daa18da5dec71f",
+            "tree_hash": "6037f76e91204853c4fe76bf990ab5f8440359d0"
+          }
+        },
+        {
+          "id": "6c7b9306ff1c45c4",
+          "role": "T3",
+          "ordinal": 5,
+          "depth": 1,
+          "admitted_seconds": 541.013818025589,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.00019732731125512353,
+            "reason": "",
+            "commit": "5365e150fcab4d17b3fd2106d7bed04005735379",
+            "tree_hash": "65c1a5198f5fb0e225c0acd7cfc52f4d2398c703"
+          }
+        },
+        {
+          "id": "4cac546b57bc4d08",
+          "role": "T1",
+          "ordinal": 6,
+          "depth": 2,
+          "admitted_seconds": 558.0024945735931,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009684442885448933,
+            "reason": "",
+            "commit": "a643c0538bcf901cbdff2aa37042bb7ba95dcf90",
+            "tree_hash": "d9968743302b3deb2ce203c606afa44298c6abfa"
+          }
+        },
+        {
+          "id": "929d39cd705e4487",
+          "role": "T2",
+          "ordinal": 5,
+          "depth": 2,
+          "admitted_seconds": 599.2830021381378,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0025854029980898444,
+            "reason": "",
+            "commit": "0eaf17a3443e64f29ffe212c1b6a6693b5de8301",
+            "tree_hash": "97736941f46c8eebe8d0181973ef6afc9a38038c"
+          }
+        },
+        {
+          "id": "7d651842ff4e48f5",
+          "role": "T3",
+          "ordinal": 6,
+          "depth": 1,
+          "admitted_seconds": 653.5909178256989,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0002984635642201054,
+            "reason": "",
+            "commit": "92047ac5dde8d04d0544a5ea6d25e986699cd582",
+            "tree_hash": "978ad0212df898e05167a82dc7679eedcb9ee1c7"
+          }
+        },
+        {
+          "id": "cc1fd62237d84c67",
+          "role": "T1",
+          "ordinal": 7,
+          "depth": 2,
+          "admitted_seconds": 680.795857667923,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0008898039245556399,
+            "reason": "",
+            "commit": "adf6c55fc1188ffe29c69b077ece5a9dd9f2d5d4",
+            "tree_hash": "1b338ac6af999f3653538ffd93087bbf4ce31944"
+          }
+        },
+        {
+          "id": "206c8a2af7294599",
+          "role": "T4",
+          "ordinal": 4,
+          "depth": 2,
+          "admitted_seconds": 708.9734382629395,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0011802861830134592,
+            "reason": "",
+            "commit": "fa94899b99fa583f20163045db4476078cab8dba",
+            "tree_hash": "4f9e1c1ae00d82bc70cbab7c35b6a68be3658e51"
+          }
+        },
+        {
+          "id": "b306ffa7eebb4043",
+          "role": "T2",
+          "ordinal": 6,
+          "depth": 2,
+          "admitted_seconds": 729.0845141410828,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.003424644015537868,
+            "reason": "",
+            "commit": "415fe545981963696ea37289be77ff1deb928ad2",
+            "tree_hash": "1177f018a5d478d89ee3f2fea4e2b5ee2513cb45"
+          }
+        },
+        {
+          "id": "0c5c6d925f44466a",
+          "role": "T3",
+          "ordinal": 7,
+          "depth": 1,
+          "admitted_seconds": 768.4822306632996,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.00014115868751779506,
+            "reason": "",
+            "commit": "253496638f8ecebf5ce758d3fba2efc9b21d68ef",
+            "tree_hash": "5bc03726c780853795dd36bdc370c7769d12faaa"
+          }
+        },
+        {
+          "id": "adcb4f6a36b74958",
+          "role": "T4",
+          "ordinal": 5,
+          "depth": 3,
+          "admitted_seconds": 798.3907225131989,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0011800301059325413,
+            "reason": "",
+            "commit": "e424f134d842c04beead5e8a6ff0b7453bb5ab38",
+            "tree_hash": "03c0058b6d96dfd91658a33a46707a8b4e2124ce"
+          }
+        },
+        {
+          "id": "7bedf3b808574349",
+          "role": "T1",
+          "ordinal": 8,
+          "depth": 1,
+          "admitted_seconds": 841.5141315460205,
+          "result": {
+            "status": "incorrect",
+            "correct": false,
+            "mean_seconds": null,
+            "reason": "Protected correctness checks failed",
+            "commit": "96aa0ba05b339d93d551605477324464ff2da15e",
+            "tree_hash": "238ad0d919a9611cd3f5e5a5f1993becdcc245da"
+          }
+        },
+        {
+          "id": "82706559abee4549",
+          "role": "T2",
+          "ordinal": 7,
+          "depth": 2,
+          "admitted_seconds": 877.4185063838959,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.004251408556948428,
+            "reason": "",
+            "commit": "d96ceb0a16adae7c438aaf4d6c8c76a4aa16e48c",
+            "tree_hash": "ccd140406595bf4addc735371ae06d09b9e8f2a0"
+          }
+        },
+        {
+          "id": "f914248a67cb48e9",
+          "role": "T4",
+          "ordinal": 6,
+          "depth": 1,
+          "admitted_seconds": 912.1400632858276,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0010899355279923727,
+            "reason": "",
+            "commit": "dee732bf8034c6b1ea93d69ec21530b64ae574b7",
+            "tree_hash": "7e17bb73394b97caacb51ec8f59bac1aa1b78b57"
+          }
+        },
+        {
+          "id": "9bcc1b2d95ca4e8b",
+          "role": "T3",
+          "ordinal": 8,
+          "depth": 1,
+          "admitted_seconds": 936.4910049438477,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.00013287262928194602,
+            "reason": "",
+            "commit": "d6e7f0135a89fde5e830a106e6b51ff8acff023e",
+            "tree_hash": "6dd638da5eb3751d4754bf1d242fc2c304e5edbc"
+          }
+        },
+        {
+          "id": "6aa6069b720f4954",
+          "role": "T2",
+          "ordinal": 8,
+          "depth": 1,
+          "admitted_seconds": 1020.1117794513702,
+          "result": {
+            "status": "incorrect",
+            "correct": false,
+            "mean_seconds": null,
+            "reason": "Protected correctness checks failed",
+            "commit": "e0c0832e67a3e8e3c427f5dda5446128be142a56",
+            "tree_hash": "ea8bee4fa7d055a763c29e98d69204ba77619196"
+          }
+        },
+        {
+          "id": "2505e16e21d24a25",
+          "role": "T1",
+          "ordinal": 9,
+          "depth": 2,
+          "admitted_seconds": 1086.08189868927,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009212536833488365,
+            "reason": "",
+            "commit": "70859ca128a3b7feda54a190e2530783497ee480",
+            "tree_hash": "2b952911b82c501feb5bd41f9d2548494ab047c5"
+          }
+        },
+        {
+          "id": "bd224cee51694d00",
+          "role": "G",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 1318.1061432361603,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.00010052812132428774,
+            "reason": "",
+            "commit": "5a33efdbbf12743f1ce8ab27ba8d67f57adc2484",
+            "tree_hash": "9c5ac2f2d0b65cf951db15c8776d40a73b62ec29"
+          }
+        },
+        {
+          "id": "f1843fc5ccdb4b63",
+          "role": "G",
+          "ordinal": 2,
+          "depth": 1,
+          "admitted_seconds": 1530.652560710907,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 9.964856999039209e-05,
+            "reason": "",
+            "commit": "fb0d9a4822413f62bf242c0a021d910821a9ac2a",
+            "tree_hash": "88e06dd102a33573ae70c5120cb56ae57d56fdc3"
+          }
+        }
+      ],
+      "initial_selection_pages": {
+        "1": [
+          {
+            "id": "2505e16e21d24a25",
+            "role": "T1",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0009212536833488365,
+              "score": 0.6675895920864126
+            }
+          },
+          {
+            "id": "6aa6069b720f4954",
+            "role": "T2",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "incorrect",
+              "correct": false,
+              "mean_seconds": null,
+              "score": 0.0
+            }
+          },
+          {
+            "id": "9bcc1b2d95ca4e8b",
+            "role": "T3",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.00013287262928194602,
+              "score": 0.9329959424956317
+            }
+          },
+          {
+            "id": "f914248a67cb48e9",
+            "role": "T4",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0010899355279923727,
+              "score": 0.6292883041695376
+            }
+          },
+          {
+            "id": "baseline-e1",
+            "role": "baseline",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0018501808488344132,
+              "score": 0.5
+            }
+          },
+          {
+            "id": "2505e16e21d24a25-h01",
+            "role": "T1",
+            "kind": "development",
+            "measured_outcome": {
+              "status": "development_valid",
+              "correct": true,
+              "mean_seconds": null,
+              "score": null
+            }
+          }
+        ],
+        "2": [
+          {
+            "id": "bd224cee51694d00",
+            "role": "G",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.00010052812132428774,
+              "score": 0.9484658537679719
+            }
+          },
+          {
+            "id": "2505e16e21d24a25",
+            "role": "T1",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0009212536833488365,
+              "score": 0.6675895920864126
+            }
+          },
+          {
+            "id": "6aa6069b720f4954",
+            "role": "T2",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "incorrect",
+              "correct": false,
+              "mean_seconds": null,
+              "score": 0.0
+            }
+          },
+          {
+            "id": "9bcc1b2d95ca4e8b",
+            "role": "T3",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.00013287262928194602,
+              "score": 0.9329959424956317
+            }
+          },
+          {
+            "id": "f914248a67cb48e9",
+            "role": "T4",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0010899355279923727,
+              "score": 0.6292883041695376
+            }
+          },
+          {
+            "id": "baseline-e1",
+            "role": "baseline",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0018501808488344132,
+              "score": 0.5
+            }
+          }
+        ]
+      },
+      "selections": [
+        {
+          "id": "memory-select-e1-r1-t1",
+          "round": 1,
+          "status": "complete",
+          "seconds": 13.548440933227539,
+          "error": null,
+          "raw_decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "The initial evidence identifies a very fast valid source-parallel reduction candidate, but does not yet provide enough comparative results or its source to choose an integration base. Search the shared campaign records before selecting.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "search",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "read_cards": [
+            {
+              "id": "2505e16e21d24a25",
+              "role": "T1",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": 0.0009212536833488365,
+                "score": 0.6675895920864126,
+                "status": "valid"
+              }
+            },
+            {
+              "id": "6aa6069b720f4954",
+              "role": "T2",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": false,
+                "mean_seconds": null,
+                "score": 0.0,
+                "status": "incorrect"
+              }
+            },
+            {
+              "id": "9bcc1b2d95ca4e8b",
+              "role": "T3",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": 0.00013287262928194602,
+                "score": 0.9329959424956317,
+                "status": "valid"
+              }
+            },
+            {
+              "id": "f914248a67cb48e9",
+              "role": "T4",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": 0.0010899355279923727,
+                "score": 0.6292883041695376,
+                "status": "valid"
+              }
+            },
+            {
+              "id": "baseline-e1",
+              "role": "baseline",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": 0.0018501808488344132,
+                "score": 0.5,
+                "status": "valid"
+              }
+            },
+            {
+              "id": "2505e16e21d24a25-h01",
+              "role": "T1",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            }
+          ]
+        },
+        {
+          "id": "memory-select-e1-r1-t2",
+          "round": 1,
+          "status": "complete",
+          "seconds": 25.31341552734375,
+          "error": null,
+          "raw_decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "The valid four-warps-per-target reference is the strongest measured candidate, but I need its actual kernel before deciding whether to reuse it or adapt a slower arithmetic idea.",
+            "read": {
+              "ids": [
+                "8052fe0a6b7b4d62"
+              ],
+              "offset": 0,
+              "operation": "source",
+              "path": "src/nbody_kernel.cu",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "read_cards": []
+        },
+        {
+          "id": "memory-select-e1-r1-t3",
+          "round": 1,
+          "status": "complete",
+          "seconds": 39.826594829559326,
+          "error": null,
+          "raw_decision": {
+            "action": "integrate",
+            "base_id": "8052fe0a6b7b4d62",
+            "idea_ids": [
+              "f914248a67cb48e9"
+            ],
+            "rationale": "Use the valid measured four-warps-per-target source-parallel program as the base (0.132813 ms reported, versus 1.850181 ms baseline). Adapt only the valid T4 reciprocal-square-root idea: compute invDist=rsqrtf(distSq), form invDist cubed with float multiplications, and use it in the existing force factor. Keep the target mass in the force expression and preserve the base's self-exclusion, reduction mapping, integration order, launch configuration, and exact mass copy. Do not incorporate shared tiling (valid but substantially slower) or the incorrect coarsening trial. The rsqrt result is not verified in combination: compile and run the full correctness suite and official timing afresh; retain the base if the combined candidate fails or is slower.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "8052fe0a6b7b4d62"
+            ]
+          },
+          "read_cards": []
+        },
+        {
+          "id": "memory-select-e1-r2-t1",
+          "round": 2,
+          "status": "complete",
+          "seconds": 22.566774368286133,
+          "error": null,
+          "raw_decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "The first integration passed and measured 0.100528 ms. I will inspect the next diverse evidence page for other complementary, measured ideas before choosing the next experiment.",
+            "read": {
+              "ids": [],
+              "offset": 6,
+              "operation": "search",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "read_cards": [
+            {
+              "id": "bd224cee51694d00-h02",
+              "role": "G",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            },
+            {
+              "id": "2505e16e21d24a25-h01",
+              "role": "T1",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            },
+            {
+              "id": "6aa6069b720f4954-h02",
+              "role": "T2",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": false,
+                "mean_seconds": null,
+                "score": null,
+                "status": "incorrect"
+              }
+            },
+            {
+              "id": "9bcc1b2d95ca4e8b-h02",
+              "role": "T3",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            },
+            {
+              "id": "f914248a67cb48e9-h04",
+              "role": "T4",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            },
+            {
+              "id": "7bedf3b808574349",
+              "role": "T1",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": false,
+                "mean_seconds": null,
+                "score": 0.0,
+                "status": "incorrect"
+              }
+            }
+          ]
+        },
+        {
+          "id": "memory-select-e1-r2-t2",
+          "round": 2,
+          "status": "complete",
+          "seconds": 17.047208070755005,
+          "error": null,
+          "raw_decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "The offset-6 page shows no stronger complementary candidate. I will search specifically for measured warp-reduction variants to see whether a compatible source-parallel adjustment merits a second integration.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "search",
+              "path": "",
+              "query": "warp reduction"
+            },
+            "source_ids": []
+          },
+          "read_cards": [
+            {
+              "id": "9bcc1b2d95ca4e8b",
+              "role": "T3",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": 0.00013287262928194602,
+                "score": 0.9329959424956317,
+                "status": "valid"
+              }
+            },
+            {
+              "id": "9bcc1b2d95ca4e8b-h02",
+              "role": "T3",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            },
+            {
+              "id": "0c5c6d925f44466a",
+              "role": "T3",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": 0.00014115868751779506,
+                "score": 0.9291137021382232,
+                "status": "valid"
+              }
+            },
+            {
+              "id": "0c5c6d925f44466a-h02",
+              "role": "T3",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            },
+            {
+              "id": "6c7b9306ff1c45c4",
+              "role": "T3",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": 0.00019732731125512353,
+                "score": 0.9036256288978626,
+                "status": "valid"
+              }
+            },
+            {
+              "id": "6c7b9306ff1c45c4-h01",
+              "role": "T3",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            }
+          ]
+        },
+        {
+          "id": "memory-select-e1-r2-t3",
+          "round": 2,
+          "status": "rejected",
+          "seconds": 45.32761287689209,
+          "error": "Finish requires an already evaluated integration",
+          "raw_decision": {
+            "action": "finish",
+            "base_id": "bd224cee51694d00",
+            "idea_ids": [],
+            "rationale": "The integrated candidate is valid at 0.100528 ms, substantially faster than the 0.1328 ms source-parallel base and 1.8502 ms baseline. The measured three- and five-warp alternatives were slower or effectively tied with the original base; shared tiling was much slower, and coarsening failed correctness. No remaining evidence-backed combination looks promising enough to justify another attempt. Keep this candidate and request its independent confirmation; do not treat its search measurement as confirmation.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "bd224cee51694d00"
+            ]
+          },
+          "read_cards": []
+        },
+        {
+          "id": "memory-select-e1-r2-t4",
+          "round": 2,
+          "status": "complete",
+          "seconds": 45.09353756904602,
+          "error": null,
+          "raw_decision": {
+            "action": "integrate",
+            "base_id": "bd224cee51694d00",
+            "idea_ids": [
+              "f914248a67cb48e9"
+            ],
+            "rationale": "Test one new arithmetic adaptation on the valid 0.100528 ms integration: cancel target.mass from the force sum and final acceleration division, accumulating acceleration contributions as (G * source.mass) * invDist3. Masses are positive, so this is algebraically equivalent, but changes float32 rounding; the prior T4 trial validated rsqrt arithmetic, not this cancellation. Keep the current four-warp reduction and launch settings. Run fresh correctness and timing checks; retain the current base if this candidate fails or is slower.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "bd224cee51694d00"
+            ]
+          },
+          "read_cards": []
+        }
+      ],
+      "selection_seconds": 208.72358417510986,
+      "rejected_selection_seconds": 45.32761287689209,
+      "integrations": [
+        {
+          "id": "bd224cee51694d00",
+          "selection": {
+            "action": "integrate",
+            "base_id": "8052fe0a6b7b4d62",
+            "idea_ids": [
+              "f914248a67cb48e9"
+            ],
+            "rationale": "Use the valid measured four-warps-per-target source-parallel program as the base (0.132813 ms reported, versus 1.850181 ms baseline). Adapt only the valid T4 reciprocal-square-root idea: compute invDist=rsqrtf(distSq), form invDist cubed with float multiplications, and use it in the existing force factor. Keep the target mass in the force expression and preserve the base's self-exclusion, reduction mapping, integration order, launch configuration, and exact mass copy. Do not incorporate shared tiling (valid but substantially slower) or the incorrect coarsening trial. The rsqrt result is not verified in combination: compile and run the full correctness suite and official timing afresh; retain the base if the combined candidate fails or is slower.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "8052fe0a6b7b4d62"
+            ]
+          },
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.00010052812132428774,
+            "reason": "",
+            "commit": "5a33efdbbf12743f1ce8ab27ba8d67f57adc2484",
+            "tree_hash": "9c5ac2f2d0b65cf951db15c8776d40a73b62ec29"
+          },
+          "diff_from_base": "diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu\nindex 35e3e0c..0bfc724 100644\n--- a/src/nbody_kernel.cu\n+++ b/src/nbody_kernel.cu\n@@ -38,8 +38,9 @@ extern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, i\n             const float dz = source.z - target.z;\n \n             const float distSq = dx * dx + dy * dy + dz * dz + softening;\n-            const float dist = sqrtf(distSq);\n-            const float f = (G * target.mass * source.mass) / (distSq * dist);\n+            const float invDist = rsqrtf(distSq);\n+            const float invDist3 = invDist * invDist * invDist;\n+            const float f = (G * target.mass * source.mass) * invDist3;\n \n             fx += f * dx;\n             fy += f * dy;\n"
+        },
+        {
+          "id": "f1843fc5ccdb4b63",
+          "selection": {
+            "action": "integrate",
+            "base_id": "bd224cee51694d00",
+            "idea_ids": [
+              "f914248a67cb48e9"
+            ],
+            "rationale": "Test one new arithmetic adaptation on the valid 0.100528 ms integration: cancel target.mass from the force sum and final acceleration division, accumulating acceleration contributions as (G * source.mass) * invDist3. Masses are positive, so this is algebraically equivalent, but changes float32 rounding; the prior T4 trial validated rsqrt arithmetic, not this cancellation. Keep the current four-warp reduction and launch settings. Run fresh correctness and timing checks; retain the current base if this candidate fails or is slower.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "bd224cee51694d00"
+            ]
+          },
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 9.964856999039209e-05,
+            "reason": "",
+            "commit": "fb0d9a4822413f62bf242c0a021d910821a9ac2a",
+            "tree_hash": "88e06dd102a33573ae70c5120cb56ae57d56fdc3"
+          },
+          "diff_from_base": "diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu\nindex 0bfc724..ccf61c2 100644\n--- a/src/nbody_kernel.cu\n+++ b/src/nbody_kernel.cu\n@@ -40,7 +40,7 @@ extern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, i\n             const float distSq = dx * dx + dy * dy + dz * dz + softening;\n             const float invDist = rsqrtf(distSq);\n             const float invDist3 = invDist * invDist * invDist;\n-            const float f = (G * target.mass * source.mass) * invDist3;\n+            const float f = (G * source.mass) * invDist3;\n \n             fx += f * dx;\n             fy += f * dy;\n@@ -73,9 +73,9 @@ extern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, i\n         }\n \n         Particle p = target;\n-        p.vx += (total_x / p.mass) * dt;\n-        p.vy += (total_y / p.mass) * dt;\n-        p.vz += (total_z / p.mass) * dt;\n+        p.vx += total_x * dt;\n+        p.vy += total_y * dt;\n+        p.vz += total_z * dt;\n \n         p.x += p.vx * dt;\n         p.y += p.vy * dt;\n"
+        }
+      ],
+      "audit": {
+        "all_checks_passed": true,
+        "job_id": "776048",
+        "pipeline_complete": true,
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "search_policy": "ab-mcts-a",
+        "trees": 4,
+        "native_requests": 64,
+        "same_mother_turns": 11,
+        "development_snapshots_verified": 39,
+        "memory": {
+          "schema": "hpc-forest-memory-v1",
+          "mode": "active",
+          "records": [
+            {
+              "kind": "development",
+              "count": 39
+            },
+            {
+              "kind": "experiment",
+              "count": 34
+            },
+            {
+              "kind": "lesson",
+              "count": 14
+            }
+          ],
+          "measurements_owned_by": "controller",
+          "lessons_are": "model_interpretations"
+        },
+        "confirmed_source_sha256": "ea8387cd4ace43f406430779101f22a41ecaa8e602fb234609f3cc25513ec2d2",
+        "code_matches_native_proposals_and_confirmed_commit": true,
+        "confirmed_program_ids_checked": [
+          "baseline-e1",
+          "f1843fc5ccdb4b63"
+        ],
+        "confirmation_geometric_means_independently_recalculated": true,
+        "protected_validator_unchanged": true,
+        "original_user_source_unchanged": true,
+        "confirmed_baseline_seconds": 0.0018558168194069927,
+        "confirmed_winner_seconds": 9.987650291964732e-05,
+        "speedup": 18.581115328998205,
+        "time_reduction_fraction": 0.9461819173771893,
+        "accepted_selection_reads": 4,
+        "rejected_selection_requests": 1,
+        "recursive_transfer_verification": "Directories copied; critical logs verified by remote SHA256, snapshots by recorded digest, Git objects by fsck and committed blobs",
+        "evidence_directory": "C:\\Users\\nicol\\Documents\\Codex\\2026-10-20\\new-chat\\work\\m776048",
+        "worker_finished": {
+          "job_id": "776048",
+          "pipeline_complete": true,
+          "pending_diagnostics": [],
+          "at": 1792674998.5920658
+        }
+      }
+    },
+    {
+      "job": "776290",
+      "registry_sha256": "74ba2073d3eba14a0362ac1da95eec1ede54c3968836cd11a4d4218aa4ca7856",
+      "planning_analysis": "Je choisis N=4 pour explorer quatre leviers utiles et distincts du kernel O(N²) : réutilisation des sources en mémoire partagée, alternative par diffusion warp, réutilisation locale pour plusieurs cibles par thread, et réduction du coût arithmétique. Les deux premières pistes abordent le trafic redondant par des mécanismes différents. Le kernel fourni charge chaque source dans la boucle et calcule une racine carrée; ce sont des opportunités déduites du code, pas des goulots mesurés séparément. La mesure automatique disponible indique un baseline valide et correct, avec trois temps autour de 1,8343 ms; elle ne fournit pas de comparaison par taille ni de candidat optimisé. J’ai consulté la référence CUDA Math API 12.6.3 pour le contrat de rsqrtf, sans en déduire un gain ni une précision suffisante : les mesures et vérifications restent nécessaires. Le contexte donne GH200 et NVRTC 12.6.3, mais pas la compute capability exacte; aucune optimisation ne doit dépendre d’une capacité non vérifiée. Chaque arbre doit respecter l’interface, les fichiers permis, la correction pour toutes les entrées et le protocole gelé.",
+      "children": [
+        {
+          "objective": "Explorer le chargement par tuiles des Particle sources en mémoire partagée, avec réutilisation par les threads cibles d’un bloc. Étudier les tailles et dispositions de tuile, le chargement des queues et la synchronisation; ajuster block et items_per_block si utile. Conserver une sortie complète par particule, les entrées en lecture seule et toutes les contraintes numériques. Mesurer les candidats validés sur les trois tailles officielles et rapporter la configuration ainsi que les résultats.",
+          "role": "T1",
+          "subject": "Tuilage des sources en mémoire partagée"
+        },
+        {
+          "objective": "Explorer une voie alternative de réutilisation des sources par warp : chargement par lanes puis diffusion des champs nécessaires aux lanes qui accumulent les cibles, en évitant la mémoire partagée lorsque cela est pertinent. Traiter correctement les masques, les queues et l’exclusion i==j pour toute taille. Ne modifier que src/nbody_kernel.cu et src/launch.json; valider toutes les contraintes d’entrée et mesurer les trois tailles officielles.",
+          "role": "T2",
+          "subject": "Diffusion warp des sources par registres et shuffles"
+        },
+        {
+          "objective": "Étudier le traitement de plusieurs particules cibles par thread : conserver leurs états et accumulateurs en registres, puis réutiliser localement chaque source entre ces cibles. Explorer les compromis entre nombre de cibles, pression de registres et block/items_per_block. Garantir que chaque sortie est écrite exactement une fois, notamment pour les tailles non multiples, et mesurer uniquement les variantes validées sur les trois tailles officielles.",
+          "role": "T3",
+          "subject": "Blocage de plusieurs cibles par thread"
+        },
+        {
+          "objective": "Explorer des réductions du travail arithmétique, notamment la simplification masse-cible de l’accélération et les variantes sqrtf/rsqrtf ou réciproque, sans activer de fast-math global. Préserver G=1, l’adoucissement 0.001, la mise à jour vitesse-avant-position et les masses exactes. Comparer précision et temps; rejeter toute variante qui échoue aux cas limites, à l’oracle FP64 ou aux tolérances officielles.",
+          "role": "T4",
+          "subject": "Réduction arithmétique et calcul de l’inverse de la distance"
+        }
+      ],
+      "trials": [
+        {
+          "id": "35c7d193c8a34331",
+          "role": "T1",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 130.64291143417358,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0010052065501366123,
+            "reason": "",
+            "commit": "6a789960722c837acb749fe8301a22c61eb3bdc6",
+            "tree_hash": "2017ee7bd454e1d90ef6e88023effc8d868abf5e"
+          }
+        },
+        {
+          "id": "a47dcaea04a9475f",
+          "role": "T2",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 130.67113208770752,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009765583959055192,
+            "reason": "",
+            "commit": "0b6bfd71d9af49cf7214e6ff22695b276ddefe10",
+            "tree_hash": "25f9584d267bcbca8e4e0e2af68285b214806717"
+          }
+        },
+        {
+          "id": "377b57d9fd5245fb",
+          "role": "T3",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 130.69854974746704,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.002590768453984572,
+            "reason": "",
+            "commit": "ff17dac2bf3990093614024fc3fbf207136a374d",
+            "tree_hash": "1413285d942f4f1c8986d0ac24ac26ded5f1ec2c"
+          }
+        },
+        {
+          "id": "da61858a6bc84794",
+          "role": "T4",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 130.7238895893097,
+          "result": {
+            "status": "incorrect",
+            "correct": false,
+            "mean_seconds": null,
+            "reason": "Protected correctness checks failed",
+            "commit": "04e37bb7d534d521eded12da64c4debe4bb1743b",
+            "tree_hash": "19b4adec35970a3ff4e1fe94a08cee7e65437ecc"
+          }
+        },
+        {
+          "id": "52d4281997e54319",
+          "role": "T1",
+          "ordinal": 2,
+          "depth": 1,
+          "admitted_seconds": 226.55310916900635,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.001017050093915629,
+            "reason": "",
+            "commit": "c365e65de97c0abd2b76944714bbe053b52b1ed8",
+            "tree_hash": "bc0e912e24581950598749e4caba4145814e1bb6"
+          }
+        },
+        {
+          "id": "a47bc86ffef142bf",
+          "role": "T3",
+          "ordinal": 2,
+          "depth": 1,
+          "admitted_seconds": 241.83599662780762,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.00260925207265273,
+            "reason": "",
+            "commit": "0fb0746e56393c0dd1915874e27c94bb98a71987",
+            "tree_hash": "874cc1a19676cc4e3b9d4fb9ffaadd23a56e3367"
+          }
+        },
+        {
+          "id": "d826ec029be64b8b",
+          "role": "T2",
+          "ordinal": 2,
+          "depth": 2,
+          "admitted_seconds": 255.04110145568848,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0017382080513778494,
+            "reason": "",
+            "commit": "9a9386a713c6248337c9d6c57d2e571b5b70bdb9",
+            "tree_hash": "deb7841526ee3a6453a5650b8df238b5892fd6ca"
+          }
+        },
+        {
+          "id": "ea1e8dbc578e4807",
+          "role": "T1",
+          "ordinal": 3,
+          "depth": 1,
+          "admitted_seconds": 341.5019600391388,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.001614399094355997,
+            "reason": "",
+            "commit": "953662d8557cad51f1e683c54b33e7fd01b6bd57",
+            "tree_hash": "5bc332d81488172290e5d440e59a14c431b3b91f"
+          }
+        },
+        {
+          "id": "f4a29d1b77484ed3",
+          "role": "T4",
+          "ordinal": 2,
+          "depth": 2,
+          "admitted_seconds": 375.7048740386963,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0018146473276592938,
+            "reason": "",
+            "commit": "bbed8119a05b805b7a25191820d15fc50101df1d",
+            "tree_hash": "fe5c89b78ee7e6c24f509c2dedfe2481432b6c45"
+          }
+        },
+        {
+          "id": "ec3c2b107121491a",
+          "role": "T2",
+          "ordinal": 3,
+          "depth": 1,
+          "admitted_seconds": 395.3237044811249,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009042817822175674,
+            "reason": "",
+            "commit": "5d4c54791204ad2ff9975444085301910f58906c",
+            "tree_hash": "91e911ae87ee283a55e18abf70474f59b341baba"
+          }
+        },
+        {
+          "id": "6ae20d0a866240de",
+          "role": "T3",
+          "ordinal": 3,
+          "depth": 2,
+          "admitted_seconds": 421.0825319290161,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.004202550383076595,
+            "reason": "",
+            "commit": "d742cbb1c86bbbbf241d634b720df3aba3157f50",
+            "tree_hash": "f462c7b54103c4354800ca0ef7e9e6d9685da6f1"
+          }
+        },
+        {
+          "id": "34a8792fc6fe41b4",
+          "role": "T1",
+          "ordinal": 4,
+          "depth": 1,
+          "admitted_seconds": 435.36496472358704,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0016962717351140597,
+            "reason": "",
+            "commit": "a7506b0fa4b798d593eb978f3b895ecf16a04572",
+            "tree_hash": "0576fc3a5d4374abd0a01964a4a35419c8180c60"
+          }
+        },
+        {
+          "id": "99c33593615e4830",
+          "role": "T2",
+          "ordinal": 4,
+          "depth": 3,
+          "admitted_seconds": 515.2027637958527,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.001740540726256896,
+            "reason": "",
+            "commit": "c0e91b66f379ae36299d609c7034aecd15570e5c",
+            "tree_hash": "f429659a73e27f911ac3426615d2c98219844a77"
+          }
+        },
+        {
+          "id": "9fc61170db0a481f",
+          "role": "T1",
+          "ordinal": 5,
+          "depth": 2,
+          "admitted_seconds": 529.7466061115265,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.001698341942376118,
+            "reason": "",
+            "commit": "59552ca14b2132b313baa4e6658ce690718f769d",
+            "tree_hash": "d566f0ede4fd81fbdaf38d55f56c452d64d31e7c"
+          }
+        },
+        {
+          "id": "df91a829afbd4cb1",
+          "role": "T4",
+          "ordinal": 3,
+          "depth": 1,
+          "admitted_seconds": 544.2831878662109,
+          "result": {
+            "status": "generation_failed",
+            "correct": null,
+            "mean_seconds": null,
+            "reason": "Invalid Codex source proposal: Lesson references unseen or unrelated evidence",
+            "commit": null,
+            "tree_hash": null
+          }
+        },
+        {
+          "id": "f264cb6f7b244f1e",
+          "role": "T3",
+          "ordinal": 4,
+          "depth": 1,
+          "admitted_seconds": 616.4445533752441,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0027479572341866784,
+            "reason": "",
+            "commit": "bc9278bf047ae1eb16937f1cb5b0a0c6f9238cec",
+            "tree_hash": "7ca0b930adf14f3ab365d09e08bc3a6f7c8b4f35"
+          }
+        },
+        {
+          "id": "505a0137c1e74ebf",
+          "role": "T2",
+          "ordinal": 5,
+          "depth": 2,
+          "admitted_seconds": 626.6811680793762,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009360429172007438,
+            "reason": "",
+            "commit": "0a9e380aba53b2e73c346146338c1a25bc50d122",
+            "tree_hash": "ed16b759936d113660c3efeb7e7cd425e0471067"
+          }
+        },
+        {
+          "id": "f704764fdf4646db",
+          "role": "T3",
+          "ordinal": 5,
+          "depth": 1,
+          "admitted_seconds": 712.9690124988556,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.003420252830493068,
+            "reason": "",
+            "commit": "60a6fc9cd8b9bad70bcd1bd83c5956335e9323c2",
+            "tree_hash": "dea62792f3ab42a637632279274a2e1a17c05e77"
+          }
+        },
+        {
+          "id": "36621123dde34055",
+          "role": "T4",
+          "ordinal": 4,
+          "depth": 3,
+          "admitted_seconds": 713.0391449928284,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0010210093751093013,
+            "reason": "",
+            "commit": "6e67d230b71c7f424268c188f31730fe3b27f4fc",
+            "tree_hash": "1597010e74b1319c2401b69368088adb4c6b4418"
+          }
+        },
+        {
+          "id": "8d1b57c6a222477c",
+          "role": "T2",
+          "ordinal": 6,
+          "depth": 2,
+          "admitted_seconds": 732.5834650993347,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009772578006805978,
+            "reason": "",
+            "commit": "dcf91b8deedfcf2742340e119d2d0b99d180fe01",
+            "tree_hash": "3f5dcd3458585eebe32157c3ef18b2f3455e7c08"
+          }
+        },
+        {
+          "id": "f4d8f90ea00e469f",
+          "role": "T1",
+          "ordinal": 6,
+          "depth": 2,
+          "admitted_seconds": 748.1580533981323,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0011244958434336741,
+            "reason": "",
+            "commit": "755b9047a4b19857a30bd8827737c9715fe49e41",
+            "tree_hash": "6991288adc68ed0a3d95a6810ea8a46596ed3fdc"
+          }
+        },
+        {
+          "id": "2d8a76b886264ac3",
+          "role": "T4",
+          "ordinal": 5,
+          "depth": 3,
+          "admitted_seconds": 792.5109293460846,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009849584287135121,
+            "reason": "",
+            "commit": "d130006a8b75f8c5722f137d3a565bd930d167b5",
+            "tree_hash": "d9880a8258d676cb29af67dfab3a0200ad6cabb1"
+          }
+        },
+        {
+          "id": "2b123bd88aec470e",
+          "role": "T2",
+          "ordinal": 7,
+          "depth": 2,
+          "admitted_seconds": 823.1202237606049,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0008896800526437171,
+            "reason": "",
+            "commit": "4485f2ff248d9ba6ce180f45b2a881795a5f19eb",
+            "tree_hash": "ab7b16cf61878f922048b65eb6410edcb209f7c4"
+          }
+        },
+        {
+          "id": "4750d0315ca24212",
+          "role": "T4",
+          "ordinal": 6,
+          "depth": 3,
+          "admitted_seconds": 862.2584893703461,
+          "result": {
+            "status": "incorrect",
+            "correct": false,
+            "mean_seconds": null,
+            "reason": "Protected correctness checks failed",
+            "commit": "4a118ddd3d306d355128fe4f4a2fe5442a8d1d64",
+            "tree_hash": "a69992058c3202fcc7156cd25c4098e101eeb6ab"
+          }
+        },
+        {
+          "id": "5d697700e03a461a",
+          "role": "T3",
+          "ordinal": 6,
+          "depth": 1,
+          "admitted_seconds": 884.7173745632172,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.002714234800092077,
+            "reason": "",
+            "commit": "4695a0662a8964b5f88bcb7beb2bd8306df0a5ef",
+            "tree_hash": "d8a3ce1967c23840b5a152fed13083380c8335e9"
+          }
+        },
+        {
+          "id": "5ebf2310933040f2",
+          "role": "T2",
+          "ordinal": 8,
+          "depth": 1,
+          "admitted_seconds": 910.5199058055878,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0009422414074388199,
+            "reason": "",
+            "commit": "9c836ce1627175ef85e00417327dff57f7dbbb2d",
+            "tree_hash": "85d23f42c38bfd0c482176296ccd850ae06a0bf7"
+          }
+        },
+        {
+          "id": "2109090d5aa349b0",
+          "role": "T1",
+          "ordinal": 7,
+          "depth": 2,
+          "admitted_seconds": 949.1200988292694,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0033167415200292968,
+            "reason": "",
+            "commit": "cd88d9213b9fe92aca1c3794de508ce851c748c8",
+            "tree_hash": "8ae5ae192c704c9ce48d5ef10f86dad5e3af3cc5"
+          }
+        },
+        {
+          "id": "1650707a621649ef",
+          "role": "G",
+          "ordinal": 1,
+          "depth": 1,
+          "admitted_seconds": 1321.15856051445,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0008537054951286466,
+            "reason": "",
+            "commit": "6dc99abed60b4a25c79a582edf996c33bf83d242",
+            "tree_hash": "5bad7a1652f3ed4fe835e80d3b560a3172d1fe42"
+          }
+        },
+        {
+          "id": "5db7ae8c14c24b28",
+          "role": "G",
+          "ordinal": 2,
+          "depth": 1,
+          "admitted_seconds": 1583.7798969745636,
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0008539370019949712,
+            "reason": "",
+            "commit": "a8d4c48b71cf9c9acd03ea9a96063112bffa1030",
+            "tree_hash": "0eade56e2a395418614b920b2ee5168efb7ef4cf"
+          }
+        }
+      ],
+      "initial_selection_pages": {
+        "1": [
+          {
+            "id": "2109090d5aa349b0",
+            "role": "T1",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0033167415200292968,
+              "score": 0.3561088408233121
+            }
+          },
+          {
+            "id": "5ebf2310933040f2",
+            "role": "T2",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0009422414074388199,
+              "score": 0.6606480122933841
+            }
+          },
+          {
+            "id": "5d697700e03a461a",
+            "role": "T3",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.002714234800092077,
+              "score": 0.4032791224495682
+            }
+          },
+          {
+            "id": "4750d0315ca24212",
+            "role": "T4",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "incorrect",
+              "correct": false,
+              "mean_seconds": null,
+              "score": 0.0
+            }
+          },
+          {
+            "id": "baseline-e1",
+            "role": "baseline",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0018343488044135047,
+              "score": 0.5
+            }
+          },
+          {
+            "id": "2109090d5aa349b0-h01",
+            "role": "T1",
+            "kind": "development",
+            "measured_outcome": {
+              "status": "incorrect",
+              "correct": false,
+              "mean_seconds": null,
+              "score": null
+            }
+          }
+        ],
+        "2": [
+          {
+            "id": "1650707a621649ef",
+            "role": "G",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0008537054951286466,
+              "score": 0.682407645085869
+            }
+          },
+          {
+            "id": "2109090d5aa349b0",
+            "role": "T1",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0033167415200292968,
+              "score": 0.3561088408233121
+            }
+          },
+          {
+            "id": "5ebf2310933040f2",
+            "role": "T2",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0009422414074388199,
+              "score": 0.6606480122933841
+            }
+          },
+          {
+            "id": "5d697700e03a461a",
+            "role": "T3",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.002714234800092077,
+              "score": 0.4032791224495682
+            }
+          },
+          {
+            "id": "4750d0315ca24212",
+            "role": "T4",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "incorrect",
+              "correct": false,
+              "mean_seconds": null,
+              "score": 0.0
+            }
+          },
+          {
+            "id": "baseline-e1",
+            "role": "baseline",
+            "kind": "experiment",
+            "measured_outcome": {
+              "status": "valid",
+              "correct": true,
+              "mean_seconds": 0.0018343488044135047,
+              "score": 0.5
+            }
+          }
+        ]
+      },
+      "selections": [
+        {
+          "id": "memory-select-e1-r1-t1",
+          "round": 1,
+          "status": "complete",
+          "seconds": 33.82640552520752,
+          "error": null,
+          "raw_decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "Lire le kernel du candidat T2 valide et le plus rapide parmi les résultats disponibles avant de décider de l’intégration. Sa moyenne mesurée est 0,000890 s, contre 0,001834 s pour le baseline; le résultat plus lent de T2 (0,000942 s) et les essais T1/T3 n’offrent pas de meilleure base. Aucune combinaison n’est encore justifiée sans examiner le code réel.",
+            "read": {
+              "ids": [
+                "2b123bd88aec470e"
+              ],
+              "offset": 0,
+              "operation": "source",
+              "path": "src/nbody_kernel.cu",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "read_cards": []
+        },
+        {
+          "id": "memory-select-e1-r1-t2",
+          "round": 1,
+          "status": "complete",
+          "seconds": 24.302632808685303,
+          "error": null,
+          "raw_decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "Le candidat T2 lu est valide et rapide, mais la mémoire contient 73 enregistrements et la première page n’expose qu’un échantillon. Parcourir la page suivante d’expériences diverses avant de choisir la base d’intégration, en utilisant l’offset retourné.",
+            "read": {
+              "ids": [],
+              "offset": 6,
+              "operation": "search",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "read_cards": [
+            {
+              "id": "5ebf2310933040f2-h02",
+              "role": "T2",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            },
+            {
+              "id": "5d697700e03a461a-h02",
+              "role": "T3",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            },
+            {
+              "id": "4750d0315ca24212-h01",
+              "role": "T4",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": false,
+                "mean_seconds": null,
+                "score": null,
+                "status": "incorrect"
+              }
+            },
+            {
+              "id": "2109090d5aa349b0-h03",
+              "role": "T1",
+              "kind": "development",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": null,
+                "score": null,
+                "status": "development_valid"
+              }
+            },
+            {
+              "id": "2b123bd88aec470e",
+              "role": "T2",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": 0.0008896800526437171,
+                "score": 0.6733955110868974,
+                "status": "valid"
+              }
+            },
+            {
+              "id": "f704764fdf4646db",
+              "role": "T3",
+              "kind": "experiment",
+              "measured_outcome": {
+                "correct": true,
+                "mean_seconds": 0.003420252830493068,
+                "score": 0.34909379090278453,
+                "status": "valid"
+              }
+            }
+          ]
+        },
+        {
+          "id": "memory-select-e1-r1-t3",
+          "round": 1,
+          "status": "complete",
+          "seconds": 23.556397438049316,
+          "error": null,
+          "raw_decision": {
+            "action": "integrate",
+            "base_id": "2b123bd88aec470e",
+            "idea_ids": [],
+            "rationale": "Intégrer sans modification le candidat T2 : c’est le programme mesuré correct le plus rapide examiné (0,00088968 s contre 0,00183435 s pour le baseline), et sa source a été lue. Le T2 antérieur est plus lent (0,00094224 s); T1 et T3 sont nettement plus lents, et T4 est incorrect. Ne pas ajouter l’optimisation arithmétique conjecturale de T4. Le contrôleur doit recompiler et revérifier cette intégration; ces mesures de recherche ne constituent pas une confirmation indépendante.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "2b123bd88aec470e"
+            ]
+          },
+          "read_cards": []
+        },
+        {
+          "id": "memory-select-e1-r2-t1",
+          "round": 2,
+          "status": "rejected",
+          "seconds": 29.314473867416382,
+          "error": "Finish requires an already evaluated integration",
+          "raw_decision": {
+            "action": "finish",
+            "base_id": "1650707a621649ef",
+            "idea_ids": [],
+            "rationale": "La première intégration est correcte et mesurée à 0,00085371 s, mieux que le T2 seul (0,00088968 s) et le baseline (0,00183435 s). Les pistes mesurées T1 et T3 sont plus lentes; T4 est incorrecte. Les éléments disponibles ne justifient pas une nouvelle combinaison spéculative. Demander la confirmation indépendante de ce candidat et le conserver seulement s’il passe la vérification finale.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "1650707a621649ef"
+            ]
+          },
+          "read_cards": []
+        },
+        {
+          "id": "memory-select-e1-r2-t2",
+          "round": 2,
+          "status": "rejected",
+          "seconds": 57.83821654319763,
+          "error": "Selection contains unseen or too many evidence IDs",
+          "raw_decision": {
+            "action": "finish",
+            "base_id": "2b123bd88aec470e",
+            "idea_ids": [],
+            "rationale": "Terminer sur la combinaison déjà évaluée à partir de cette base : l’intégration 1650707a621649ef est correcte et mesure 0,00085371 s. Les alternatives archivées visibles sont plus lentes ou incorrectes; aucune nouvelle combinaison n’est justifiée. Demander la confirmation indépendante du candidat intégré avant de le déclarer final.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "2b123bd88aec470e"
+            ]
+          },
+          "read_cards": []
+        },
+        {
+          "id": "memory-select-e1-r2-t3",
+          "round": 2,
+          "status": "rejected",
+          "seconds": 38.06995916366577,
+          "error": "Finish requires an already evaluated integration",
+          "raw_decision": {
+            "action": "finish",
+            "base_id": "1650707a621649ef",
+            "idea_ids": [],
+            "rationale": "Terminer en conservant l’intégration G déjà évaluée : elle est correcte et son temps mesuré est de 0,00085371 s. Les essais archivés disponibles sont plus lents ou incorrects; aucune nouvelle transformation n’est étayée. Demander la confirmation indépendante finale avant de déclarer le candidat confirmé.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "read_cards": []
+        },
+        {
+          "id": "memory-select-e1-r2-t4",
+          "round": 2,
+          "status": "rejected",
+          "seconds": 61.84167194366455,
+          "error": "Finish requires an already evaluated integration",
+          "raw_decision": {
+            "action": "finish",
+            "base_id": "2b123bd88aec470e",
+            "idea_ids": [],
+            "rationale": "Terminer sur l’intégration déjà évaluée à partir de cette base : le candidat G est correct, avec un temps mesuré de 0,00085371 s. Les alternatives disponibles sont plus lentes ou incorrectes. Aucune nouvelle combinaison n’est étayée; la confirmation indépendante reste nécessaire.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "read_cards": []
+        }
+      ],
+      "selection_seconds": 268.7497572898865,
+      "rejected_selection_seconds": 187.06432151794434,
+      "integrations": [
+        {
+          "id": "1650707a621649ef",
+          "selection": {
+            "action": "integrate",
+            "base_id": "2b123bd88aec470e",
+            "idea_ids": [],
+            "rationale": "Intégrer sans modification le candidat T2 : c’est le programme mesuré correct le plus rapide examiné (0,00088968 s contre 0,00183435 s pour le baseline), et sa source a été lue. Le T2 antérieur est plus lent (0,00094224 s); T1 et T3 sont nettement plus lents, et T4 est incorrect. Ne pas ajouter l’optimisation arithmétique conjecturale de T4. Le contrôleur doit recompiler et revérifier cette intégration; ces mesures de recherche ne constituent pas une confirmation indépendante.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "2b123bd88aec470e"
+            ]
+          },
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0008537054951286466,
+            "reason": "",
+            "commit": "6dc99abed60b4a25c79a582edf996c33bf83d242",
+            "tree_hash": "5bad7a1652f3ed4fe835e80d3b560a3172d1fe42"
+          },
+          "diff_from_base": "diff --git a/src/launch.json b/src/launch.json\nindex 694a30a..f101e0e 100644\n--- a/src/launch.json\n+++ b/src/launch.json\n@@ -1,5 +1,5 @@\n-{\n-  \"block\": 256,\n-  \"items_per_block\": 256,\n-  \"shared_memory_bytes\": 0\n-}\n+{\n+  \"block\": 32,\n+  \"items_per_block\": 32,\n+  \"shared_memory_bytes\": 0\n+}\n"
+        },
+        {
+          "id": "5db7ae8c14c24b28",
+          "selection": {
+            "action": "integrate",
+            "base_id": "1650707a621649ef",
+            "controller_fallback": true,
+            "idea_ids": [],
+            "rationale": "Selection allowance exhausted; write a measured integration from the best verified reference",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "1650707a621649ef"
+            ]
+          },
+          "result": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.0008539370019949712,
+            "reason": "",
+            "commit": "a8d4c48b71cf9c9acd03ea9a96063112bffa1030",
+            "tree_hash": "0eade56e2a395418614b920b2ee5168efb7ef4cf"
+          },
+          "diff_from_base": "diff --git a/src/launch.json b/src/launch.json\nindex f101e0e..54d20e0 100644\n--- a/src/launch.json\n+++ b/src/launch.json\n@@ -1,5 +1,5 @@\n {\n-  \"block\": 32,\n-  \"items_per_block\": 32,\n+  \"block\": 64,\n+  \"items_per_block\": 64,\n   \"shared_memory_bytes\": 0\n }\n"
+        }
+      ],
+      "audit": {
+        "all_checks_passed": true,
+        "job_id": "776290",
+        "pipeline_complete": true,
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "search_policy": "ab-mcts-a",
+        "trees": 4,
+        "native_requests": 62,
+        "same_mother_turns": 10,
+        "development_snapshots_verified": 36,
+        "memory": {
+          "schema": "hpc-forest-memory-v1",
+          "mode": "active",
+          "records": [
+            {
+              "kind": "development",
+              "count": 36
+            },
+            {
+              "kind": "experiment",
+              "count": 30
+            },
+            {
+              "kind": "lesson",
+              "count": 11
+            }
+          ],
+          "measurements_owned_by": "controller",
+          "lessons_are": "model_interpretations"
+        },
+        "confirmed_source_sha256": "4b787d26122c687f91b78396f46200b2ce4526cae6de1da456bf0f26f2d3d86f",
+        "code_matches_native_proposals_and_confirmed_commit": true,
+        "confirmed_program_ids_checked": [
+          "baseline-e1",
+          "1650707a621649ef",
+          "5db7ae8c14c24b28"
+        ],
+        "confirmation_geometric_means_independently_recalculated": true,
+        "protected_validator_unchanged": true,
+        "original_user_source_unchanged": true,
+        "confirmed_baseline_seconds": 0.0018344090383947131,
+        "confirmed_winner_seconds": 0.0008538355094197641,
+        "speedup": 2.148433765235779,
+        "time_reduction_fraction": 0.5345446454150959,
+        "accepted_selection_reads": 2,
+        "rejected_selection_requests": 4,
+        "recursive_transfer_verification": "Directories copied; critical logs verified by remote SHA256, snapshots by recorded digest, Git objects by fsck and committed blobs",
+        "evidence_directory": "C:\\Users\\nicol\\Documents\\Codex\\2026-10-20\\new-chat\\work\\m776290",
+        "worker_finished": {
+          "job_id": "776290",
+          "pipeline_complete": true,
+          "pending_diagnostics": [],
+          "at": 1792677102.3958228
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "One independent run per version does not estimate outcome probabilities.",
+    "Structural kernel comparison is not a hardware profiling study.",
+    "Correcting retrieval/selection does not establish that the missing optimization will be rediscovered.",
+    "Recommendations are generic system changes, not implemented by this analysis."
+  ]
+}

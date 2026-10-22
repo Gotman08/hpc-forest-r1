@@ -1,0 +1,80 @@
+{
+  "job_id": "774157",
+  "scope": "cuda-nbody-luna-max-independent-v2",
+  "pipeline_complete": true,
+  "model": "gpt-6-luna",
+  "reasoning_effort": "max",
+  "token_limit": null,
+  "search_policy": "ab-mcts-a",
+  "trees": [
+    {
+      "role": "T1",
+      "subject": "Pair-interaction arithmetic and reciprocal-square-root optimization",
+      "objective": "In src/nbody_kernel.cu, investigate reducing pair-interaction math while retaining one thread per output. Try direct rsqrtf(distSq) with explicit reciprocal-cube multiplies and, if correct, algebraic cancellation of the target mass in the acceleration coefficient. Keep self-interaction skipping, float32 softening and update semantics, exact mass copying, and the existing single-kernel ABI. Do not enable global fast math or add launches or buffers. Validate every required case and compare the three-repeat benchmark geometric mean; provide the best correct source and launch.json.",
+      "trials": 2,
+      "valid_measured": 1,
+      "max_depth": 1,
+      "max_valid_depth": 1,
+      "best_search_ms": 1.1063099445907707
+    },
+    {
+      "role": "T2",
+      "subject": "Warp-cooperative source summation per output",
+      "objective": "Investigate assigning one warp to each output particle: lanes accumulate partial forces over distinct source indices and reduce the three components within the warp. Keep the pair arithmetic close to the supplied implementation to isolate this mapping change. Correctly handle tails, self-interaction, complete output state, and arbitrary supported N; tune block and items_per_block consistently. Validate the changed summation order against all required tolerances, then measure the official geometric mean and report the best correct source and launch.json.",
+      "trials": 9,
+      "valid_measured": 9,
+      "max_depth": 3,
+      "max_valid_depth": 3,
+      "best_search_ms": 0.1363666819378087
+    },
+    {
+      "role": "T3",
+      "subject": "CTA shared-memory source tiling",
+      "objective": "Investigate staging source Particle records in CTA shared memory, with one thread owning each output and reusing each staged source across the CTA's outputs. Handle source and output tails, synchronization, and the allowed shared-memory limit; tune the tile and launch configuration without adding a kernel or allocation. Keep the supplied force arithmetic/order as far as practical to isolate the reuse strategy. Validate all required cases and compare the official geometric mean; provide the best correct source and launch.json.",
+      "trials": 7,
+      "valid_measured": 7,
+      "max_depth": 2,
+      "max_valid_depth": 2,
+      "best_search_ms": 0.962585380585037
+    }
+  ],
+  "research_trials": 18,
+  "valid_measured_research": 17,
+  "incorrect_research": 1,
+  "infrastructure_errors": 0,
+  "native_calls": 27,
+  "tokens": {
+    "native_raw_counter_sum": 3451902,
+    "unique_consumption_reconciled": 1858462,
+    "method": "ephemeral child totals plus last cumulative Mother counter"
+  },
+  "mother_native_thread": "01a15ff7-fe72-7cf0-8cc1-120f90f5caf6",
+  "pairwise_steps": 2,
+  "assembly_native_calls": 3,
+  "same_mother": true,
+  "no_research_restart_after_assembly": true,
+  "final_g_confirmed": true,
+  "final_g_commit": "d03b3c48cb44ae96743978e193917906182b009d",
+  "final_g_ms": 0.11886131631471532,
+  "reference_ms": 1.8472126346455213,
+  "final_g_speedup": 15.540906763598006,
+  "best_confirmed_ms": 0.11879952719118883,
+  "best_commit": "5ccc99221db417330f56c5a7e7c16b72a0c8016b",
+  "duration_seconds": 1506.6805083751678,
+  "target_seconds": 1800,
+  "unused_seconds": 293.31949162483215,
+  "reserve_at_closure_seconds": 421.91735521308146,
+  "actual_finalization_seconds": 209.13397359848022,
+  "timing_goal_fully_used": false,
+  "observations": {
+    "romeo_tools_configured_all_calls": true,
+    "actual_model_mcp_calls": {
+      "hpc_docs": 13
+    },
+    "compaction_event_observed": false,
+    "compaction_policy": "native Codex CLI automatic"
+  },
+  "native_submission_sha256": "5abd8ed8869d352214e7d552fc091c401dc8286b7c0e43baf1d2ae8222c6b986",
+  "final_g_zip_sha256": "cca6f2247a6ce4c6ef1b3dc9537e3515703d0575269973e289ab3930594421d1",
+  "original_unchanged": true
+}

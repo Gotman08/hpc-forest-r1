@@ -250,10 +250,12 @@ class OllamaBackend:
             data = json.loads(response["message"]["content"])
             from .memory_contract import extract_memory
 
-            data, memory_read, lessons = extract_memory(data, context)
+            rejected_lessons = []
+            data, memory_read, lessons = extract_memory(data, context, rejected_lessons=rejected_lessons)
             data, research = extract_research(data, context)
             if context.get("memory", {}).get("enabled"):
                 generated.usage["memory_lessons"] = lessons
+                generated.usage["rejected_memory_lessons"] = rejected_lessons
             if memory_read is not None:
                 generated.usage["memory_request"] = memory_read
                 atomic_json(logs / "agent-memory-request.json", memory_read)

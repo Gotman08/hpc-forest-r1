@@ -123,7 +123,21 @@ def memory_contract(system, schema, context):
     return system, schema
 
 
-def extract_memory(data, context):
+def _validate_lesson(lesson, allowed):
+    if not isinstance(lesson, dict) or set(lesson) != set(LESSON_SCHEMA["required"]):
+        raise CandidateRejected("Invalid model lesson")
+    for key, limit in (("claim", 1200), ("applicability", 600), ("next_experiment", 600)):
+        if (not isinstance(lesson[key], str) or len(lesson[key]) > limit
+                or (key == "claim" and not lesson[key].strip())):
+            raise CandidateRejected("Invalid lesson text")
+    refs = lesson["evidence_ids"]
+    if (not isinstance(refs, list) or not 1 <= len(refs) <= 6
+            or any(not isinstance(v, str) or v not in allowed for v in refs)
+            or len(set(refs)) != len(refs)):
+        raise CandidateRejected("Lesson references unseen or unrelated evidence")
+
+
+def extract_memory(data, context, *, rejected_lessons=None):
     """Validate and strip extensions before the existing strict source validator."""
     if not context.get("memory", {}).get("enabled"):
         return data, None, []
@@ -132,21 +146,23 @@ def extract_memory(data, context):
     candidate = dict(data)
     request, lessons = candidate.pop("memory_read"), candidate.pop("memory_lessons")
     validate_read(request)
-    if not isinstance(lessons, list) or len(lessons) > 4:
-        raise CandidateRejected("Too many memory lessons")
     allowed = set(context["memory"].get("evidence_ids", []))
-    for lesson in lessons:
-        if not isinstance(lesson, dict) or set(lesson) != set(LESSON_SCHEMA["required"]):
-            raise CandidateRejected("Invalid model lesson")
-        for key, limit in (("claim", 1200), ("applicability", 600), ("next_experiment", 600)):
-            if (not isinstance(lesson[key], str) or len(lesson[key]) > limit
-                    or (key == "claim" and not lesson[key].strip())):
-                raise CandidateRejected("Invalid lesson text")
-        refs = lesson["evidence_ids"]
-        if (not isinstance(refs, list) or not 1 <= len(refs) <= 6
-                or any(not isinstance(v, str) or v not in allowed for v in refs)
-                or len(set(refs)) != len(refs)):
-            raise CandidateRejected("Lesson references unseen or unrelated evidence")
+    if not isinstance(lessons, list) or len(lessons) > 4:
+        if rejected_lessons is None:
+            raise CandidateRejected("Too many or malformed memory lessons")
+        rejected_lessons.append({"index": None, "reason": "Too many or malformed memory lessons"})
+        lessons = []
+    accepted = []
+    for index, lesson in enumerate(lessons):
+        try:
+            _validate_lesson(lesson, allowed)
+        except CandidateRejected as exc:
+            if rejected_lessons is None:
+                raise
+            rejected_lessons.append({"index": index, "reason": str(exc)})
+        else:
+            accepted.append(lesson)
+    lessons = accepted
     if request["operation"] == "none":
         return candidate, None, lessons
     if (set(candidate) - {"hypothesis", "notes", "files", "transformations", "sources_kept", "research"}

@@ -10,9 +10,16 @@ Le catalogue est visible dès le contexte initial de chaque mission. Un arbre ne
 
 Les pages sont bornées par leur taille JSON réelle. Si les faits occupent davantage de place, la page contient moins de sujets et renvoie un offset explicite. Les identifiants et les nombres ne sont jamais tronqués. La limite concerne chaque paquet mémoire, pas l'historique natif complet. La pagination est testée jusqu'à 600 arbres.
 
+## 2. Décisions et consultations — intégré
+
+Le schéma ne propose que les actions disponibles au tour courant. `finish` arrête la sélection après une intégration évaluée ; le contrôleur choisit le programme à confirmer. Les anciens champs d'identifiants sans effet sur cet arrêt sont normalisés et cette normalisation est tracée. Une sélection épuisée ne force plus un nouveau programme lorsqu'une intégration valide existe déjà.
+
+Les consultations sont conservées dans SQLite par campagne, protocole et conversation Mother. Un identifiant lu au tour précédent reste utilisable sans recopier tous les identifiants dans le contexte. Le nombre de résumés vus et non vus reste explicite ; avoir vu un résumé ne signifie pas avoir examiné toutes ses variantes.
+
+Les adaptateurs natif et Ollama isolent les leçons optionnelles invalides, conservent les leçons recevables et enregistrent les motifs de rejet. Le code passe toujours par les validations de fichiers, compilation, correction et mesure. Une demande de lecture incohérente reste rejetée.
+
 ## Étapes suivantes
 
-2. Rendre les décisions non ambiguës, conserver les preuves consultées entre tours et isoler les leçons optionnelles invalides.
 3. Ajouter une critique automatique et budgétée du plan initial, sans recette d'optimisation fournie par l'opérateur.
 4. Donner aux arbres des observations sur les approches déjà essayées et distinguer les transformations réelles des copies ou réglages de lancement.
 5. Fournir une comparaison de régularité entre campagnes indépendantes, avec médiane, mauvais résultats et fréquence d'amélioration, sans confondre tests fonctionnels et qualité de recherche.

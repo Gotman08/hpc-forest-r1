@@ -7,6 +7,7 @@ import math
 import time
 
 from .core import CandidateRejected, InfrastructureError, Mission, atomic_json
+from .memory_consultations import Consultations
 from .memory_contract import POLICY, READ_SCHEMA, empty_read, settings, validate_read
 from .memory_retrieval import MemoryReader, card, evidence_ids
 from .model_skills import bind
@@ -25,8 +26,14 @@ def limits(config, width):
 
 def selection_messages(context, config):
     cfg = settings(config)
+    selection = context.get("assembly_selection", {})
+    actions = ["integrate"]
+    if not selection.get("must_decide"):
+        actions.insert(0, "read")
+    if selection.get("can_finish"):
+        actions.append("finish")
     schema = {"type": "object", "additionalProperties": False, "properties": {
-        "action": {"type": "string", "enum": ["read", "integrate", "finish"]},
+        "action": {"type": "string", "enum": actions},
         "read": copy.deepcopy(READ_SCHEMA),
         "base_id": {"type": "string", "maxLength": 160},
         "source_ids": {"type": "array", "maxItems": cfg["sources_per_integration"],
@@ -55,7 +62,12 @@ def selection_messages(context, config):
         "Keep alternative branches available: a poor standalone result may combine well with another "
         "idea. You may return to any valid earlier base, not only the latest or fastest assembly. "
         "Use action=finish only after at least one actual integration, when further attempts are "
-        "unhelpful. When must_decide=true, do not request another read. Native conversation compaction "
+        "unhelpful. For finish, set read.operation=none, base_id='', source_ids=[], idea_ids=[]; "
+        "the controller selects the best verified program, not an ID attached to a finish action. "
+        "Consultation receipts persist across assembly rounds in this conversation. "
+        "Coverage counts describe summaries seen, not proof that every idea has been examined. "
+        "Do not infer that unseen variants or an entire tree are useless from one failed trial. "
+        "When must_decide=true, do not request another read. Native conversation compaction "
         "is managed by Codex; do not restart the conversation."
     )
     system, schema, binding = bind(system, schema, config.get("skills"), role="Mother", phase="assembly")
@@ -71,15 +83,26 @@ def validate_decision(value, reader, seen, cfg, *, can_finish, must_decide):
         "action", "read", "base_id", "source_ids", "idea_ids", "rationale"}
             or not isinstance(value["action"], str) or value["action"] not in {"read", "integrate", "finish"}
             or not isinstance(value["rationale"], str) or not 1 <= len(value["rationale"]) <= 2000
-            or not isinstance(value["base_id"], str)):
+            or not isinstance(value["base_id"], str) or len(value["base_id"]) > 160):
         raise CandidateRejected("Invalid Mother selection")
     validate_read(value["read"])
     for key, bound in (("source_ids", cfg["sources_per_integration"]), ("idea_ids", 6)):
         ids = value[key]
         if (not isinstance(ids, list) or len(ids) > bound
-                or any(not isinstance(v, str) or v not in seen for v in ids)
+                or any(not isinstance(v, str) or not v or len(v) > 160 for v in ids)
                 or len(set(ids)) != len(ids)):
-            raise CandidateRejected("Selection contains unseen or too many evidence IDs")
+            raise CandidateRejected(f"{key} must contain bounded, unique evidence IDs")
+    if value["action"] == "finish":
+        if not can_finish:
+            raise CandidateRejected("finish is unavailable before the first evaluated integration")
+        if value["read"] != empty_read():
+            raise CandidateRejected("finish.read must be inactive with empty arguments")
+        # IDs on a stop request have no effect. Normalize harmless legacy fields;
+        # never validate or import them as program inputs, nor spend a model retry.
+        return {**value, "base_id": "", "source_ids": [], "idea_ids": []}
+    for key in ("source_ids", "idea_ids"):
+        if any(identity not in seen for identity in value[key]):
+            raise CandidateRejected(f"{key} contains evidence not consulted in this conversation")
     if value["action"] == "read":
         if (must_decide or value["read"]["operation"] == "none" or value["base_id"]
                 or value["source_ids"] or value["idea_ids"]):
@@ -89,21 +112,17 @@ def validate_decision(value, reader, seen, cfg, *, can_finish, must_decide):
     else:
         if value["read"] != empty_read():
             raise CandidateRejected("Selection and reading are separate actions")
-        if value["action"] == "finish":
-            if not can_finish or value["base_id"] or value["source_ids"] or value["idea_ids"]:
-                raise CandidateRejected("Finish requires an already evaluated integration")
-        else:
-            if value["base_id"] not in value["source_ids"]:
-                raise CandidateRejected("The integration base must be one of its source programs")
-            for identity in value["source_ids"]:
-                record = reader.exact(identity)
-                facts = record.get("facts", {})
-                result = facts.get("outcome", {})
-                if (record["kind"] != "experiment" or result.get("correct") is not True
-                        or result.get("mean_seconds") is None or not facts.get("commit")):
-                    raise CandidateRejected("Integration source must be an exact, correct measured program")
-            for identity in value["idea_ids"]:
-                reader.exact(identity)
+        if value["base_id"] not in value["source_ids"]:
+            raise CandidateRejected("The integration base must be one of its source programs")
+        for identity in value["source_ids"]:
+            record = reader.exact(identity)
+            facts = record.get("facts", {})
+            result = facts.get("outcome", {})
+            if (record["kind"] != "experiment" or result.get("correct") is not True
+                    or result.get("mean_seconds") is None or not facts.get("commit")):
+                raise CandidateRejected("Integration source must be an exact, correct measured program")
+        for identity in value["idea_ids"]:
+            reader.exact(identity)
     return value
 
 
@@ -132,7 +151,11 @@ def _select(controller, epoch, baseline, state, number, bounds):
     with MemoryReader(controller.root, mission, controller.config, epoch["protocol_id"]) as reader:
         reference_card = card(reader.exact(reference["id"]))
         context["memory"]["reference"] = reference_card
-    seen = set(context["memory"]["evidence_ids"]) | {reference["id"]}
+    consultations = Consultations(db, epoch["id"], epoch["protocol_id"], context["mother_conversation"]["id"])
+    for page in (context["memory"]["page"], context["memory"]["catalog"], {"items": [reference_card]}):
+        consultations.remember(page)
+    seen = consultations.known()
+    total_topics = context["memory"]["catalog"]["total"]
     backend = getattr(controller.backend, "backend", controller.backend)
     context["assembly_selection"] = {"policy": POLICY, "round": number, "max_rounds": bounds["rounds"],
         "previous_integrations": [{"id": step["mission_id"], "correct": step["outcome"].get("correct"),
@@ -140,6 +163,7 @@ def _select(controller, epoch, baseline, state, number, bounds):
                                    "input_ids": step["input_ids"]} for step in state["steps"]],
         "can_finish": bool(state["steps"])}
     for turn in range(1, bounds["selection_calls_per_round"] + 1):
+        context["memory"]["coverage"] = state["coverage"] = consultations.coverage(total_topics)
         budget = assembly_admission(db)
         must_decide = turn == bounds["selection_calls_per_round"] or not budget["can_read"]
         context["assembly_selection"].update(must_decide=must_decide,
@@ -172,8 +196,11 @@ def _select(controller, epoch, baseline, state, number, bounds):
                 decision = validate_decision(generated.usage["assembly_decision"], reader, seen, cfg,
                                              can_finish=bool(state["steps"]), must_decide=must_decide)
                 entry.update(status="complete", decision=decision)
+                if decision != generated.usage["assembly_decision"]:
+                    entry["normalized_unused_finish_fields"] = True
                 if decision["action"] == "read":
                     page = reader.read(decision["read"])
+                    consultations.remember(page)
                     context["memory"]["last_read"] = page
                     seen.update(evidence_ids(page))
                     # The controller remembers all consultations; the next prompt does not
@@ -194,6 +221,10 @@ def _select(controller, epoch, baseline, state, number, bounds):
         if must_decide:
             break  # Do not spend the remaining time repeating a rejected selection.
     _record_selection_calls(db, turn)
+    if any(step.get("outcome", {}).get("correct") is True for step in state["steps"]):
+        return {"action": "finish", "base_id": "", "source_ids": [], "idea_ids": [],
+                "read": empty_read(), "rationale": "Selection allowance exhausted after a valid integration; "
+                "confirm the best measured program", "controller_fallback": True}
     # The finite selection allowance cannot prevent an actual code-writing/evaluation turn.
     return {"action": "integrate", "base_id": reference["id"], "source_ids": [reference["id"]],
             "idea_ids": [], "read": empty_read(), "rationale": "Selection allowance exhausted; "
@@ -222,7 +253,7 @@ def integrate_memory(controller, epoch, baseline, state):
             break
         decision = _select(controller, epoch, baseline, state, number, bounds)
         if decision["action"] == "finish":
-            state["stop_decision"] = decision
+            state["stop_decision"] = {**decision, "coverage": state.get("coverage")}
             break
         candidates = {row["id"]: row for row in controller.db.archive(epoch["id"])}
         original = {"id": f"baseline-e{epoch['id']}", "role": "baseline", "commit": epoch["base_commit"],

@@ -85,6 +85,9 @@ class MemoryNativeFixture:
                 value["memory_lessons"] = [{"claim": "Test this optimization against the reference",
                     "evidence_ids": ["baseline-e1"], "applicability": "current compiler and target",
                     "next_experiment": "combine layout and SIMD"}]
+            if role == "T2":
+                value["memory_lessons"].append({"claim": "An unsupported optional annotation",
+                    "evidence_ids": ["invented-evidence"], "applicability": "", "next_experiment": ""})
         if request.get("model_skills"):
             value["skill_usage"] = [{"name": entry["name"], "status": "applied",
                 "summary": "Offline fixture exercises the requested phase", "references": []}
@@ -134,6 +137,10 @@ def test_memory_reads_repairs_same_mother_code_and_real_independent_confirmation
         assert post["steps"][0]["outcome"]["correct"] is True
         research = controller.db.rows("SELECT * FROM trials WHERE role<>'G'")
         assert len(research) == 2 and all(json.loads(row["result"])["correct"] for row in research)
+        usage = [json.loads(row["payload"]) for row in controller.db.rows(
+            "SELECT payload FROM events WHERE kind='generation_usage'")]
+        assert any(attempt.get("rejected_memory_lessons") for row in usage
+                   for attempt in row.get("attempt_usage", [row]))
         t1 = next(row for row in research if row["role"] == "T1")
         journal = json.loads((root / "logs" / t1["id"] / "node-harness.json").read_text())
         assert [row["state"] for row in journal["attempts"]] == ["memory_read", "development_failed", "development_passed"]

@@ -85,6 +85,8 @@ def parser():
                       help="Target duration: 30m, 2h, 5h, 24h; admitted work may finish later")
     init.add_argument("--mother-trees", action="store_true",
                       help="Mother chooses N subjects; all N AB-MCTS trees run concurrently")
+    init.add_argument("--plan-review-calls", type=int,
+                      help="Bounded pre-launch critique turns; new --mother-trees campaigns default to 2")
     init.add_argument("--statement", type=Path, help="Problem text supplied to Mother as data")
     run = sub.add_parser("run", help="Run or resume bounded search")
     run.add_argument("workspace", type=Path)
@@ -174,9 +176,12 @@ def main(argv=None) -> int:
             if args.mother_trees:
                 from .model_skills import policy as skills_policy
 
-                config["forest"] = {"policy": "mother", "conversation": "persistent", "integration": "pairwise"}
+                config["forest"] = {"policy": "mother", "conversation": "persistent", "integration": "pairwise",
+                                    "plan_review_calls": 2}
                 config["skills"] = skills_policy()
                 config["schedule"].update(trials_per_role_per_cycle=1, integrations_per_cycle=0)
+            if args.plan_review_calls is not None:
+                config["forest"]["plan_review_calls"] = args.plan_review_calls
             if args.statement:
                 config.setdefault("forest", {})["statement"] = args.statement.read_text(encoding="utf-8")
             emit(

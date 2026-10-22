@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 
 from .core import ForestError
+from .support.validation import require_integer
 
 
 def model_selected(config: dict) -> bool:
@@ -70,6 +71,9 @@ def validate_forest(config: dict) -> None:
     if "integration" in settings and (settings["integration"] not in {"pairwise", "memory-guided-v1"}
                                       or not persistent_mother(config)):
         raise ForestError("Pairwise or memory-guided integration requires the persistent Mother conversation")
+    require_integer(settings.get("plan_review_calls", 0), "forest.plan_review_calls", minimum=0, maximum=32)
+    if settings.get("plan_review_calls", 0) and not persistent_mother(config):
+        raise ForestError("Plan review requires persistent Mother")
     if model_selected(config):
         if persistent_mother(config) and config["schedule"]["integrations_per_cycle"] != 0:
             raise ForestError("Persistent Mother assembles once after research; no G-to-research cycles")

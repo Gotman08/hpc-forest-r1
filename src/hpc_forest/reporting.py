@@ -73,6 +73,7 @@ def report(root: Path, output: Path | None = None) -> Path:
             "postprocess": postprocess,
             "final_g_confirmation": db.get(f"final_g_confirmation:{db.get('current_epoch')}"),
             "forest_plan": forest_plan(db),
+            "mother_plan_review": db.get(f"mother_plan_review:{db.get('current_epoch')}"),
             "mother_conversation": db.get(f"mother_conversation:{db.get('current_epoch')}"),
             "model_skills": campaign_traces(db),
             "memory": memory_summary(db),

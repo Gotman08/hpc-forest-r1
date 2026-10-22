@@ -200,7 +200,8 @@ def plan_for(controller, mission, context: dict, phase: str) -> dict:
     if persistent:
         request["conversation"] = first_turn()
         request["messages"][0]["content"] += (
-            " This is the single planning turn of your persistent conversation. "
+            " This is the initial planning turn of your persistent conversation. "
+            "The controller may request a bounded critique before committing this plan. "
             "The controller launches your N trees once as research processes. "
             "Later this same conversation resumes with their code and measurements. "
             "At that point you must assemble the code yourself and cannot launch, "
@@ -269,6 +270,8 @@ def prepare_forest(controller, epoch: dict, baseline: dict) -> dict:
     previous = forest_plan(controller.db, epoch["id"])
     if previous:
         mother = controller.db.get(f"mother_plan:preparation:{epoch['id']}", {})
+        review = controller.db.get(f"mother_plan_review:{epoch['id']}", {})
+        mother = review.get("result", mother)
         proposed = mother.get("plan", {})
         expected = [{"role": f"T{index}", **child}
                     for index, child in enumerate(proposed.get("children", []), 1)]
@@ -294,6 +297,10 @@ def prepare_forest(controller, epoch: dict, baseline: dict) -> dict:
         raise BudgetExhausted("Mother planning could not be admitted")
     if result["status"] != "complete":
         raise InfrastructureError("Mother did not produce a valid research forest: " + result["status"])
+    if controller.config["forest"].get("plan_review_calls", 0):
+        from .mother_review import review_plan
+
+        result = review_plan(controller, epoch, result)
     children = [{"role": f"T{index}", **child}
                 for index, child in enumerate(result["plan"]["children"], 1)]
     record = {"protocol": "hpc-forest-mother-forest-v1", "epoch": epoch["id"],
@@ -302,6 +309,8 @@ def prepare_forest(controller, epoch: dict, baseline: dict) -> dict:
               "plan_sha256": digest(result["plan"]), "mother_slot_id": result["slot_id"]}
     if persistent_mother(controller.config):
         record["conversation"] = result["conversation"]
+    if "review_coverage" in result:
+        record["review_coverage"] = result["review_coverage"]
     controller.db.set(f"forest_plan:{epoch['id']}", record)
     controller.db.event("mother_forest_selected", record)
     publish_forest(controller, record)

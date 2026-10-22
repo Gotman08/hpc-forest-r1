@@ -193,7 +193,8 @@ def campaign_traces(db) -> list[dict]:
             visit(attempt)
 
     for row in db.rows("SELECT kind,payload FROM events WHERE kind IN "
-                       "('generation_usage','mother_usage','memory_selection_usage') ORDER BY id"):
+                       "('generation_usage','mother_usage','mother_review_usage','memory_selection_usage') ORDER BY id"):
         event = json.loads(row["payload"])
-        visit(event.get("response", {}).get("usage", {}) if row["kind"] == "mother_usage" else event)
+        visit(event.get("response", {}).get("usage", {}) if row["kind"] in {
+            "mother_usage", "mother_review_usage"} else event)
     return list(found.values())

@@ -26,7 +26,7 @@ def validate_turn(turn: dict) -> None:
         valid = (turn["phase"] == "planning" and turn["thread_id"] is None
                  and turn["previous_request_sha256"] is None)
     else:
-        valid = (turn["phase"] == "assembly" and _thread_id(turn["thread_id"])
+        valid = (turn["phase"] in {"plan-review", "assembly"} and _thread_id(turn["thread_id"])
                  and isinstance(turn["previous_request_sha256"], str)
                  and re.fullmatch(r"[a-f0-9]{64}", turn["previous_request_sha256"]))
     if not valid:
@@ -38,11 +38,13 @@ def first_turn() -> dict:
             "previous_request_sha256": None}
 
 
-def next_turn(receipt: dict) -> dict:
+def next_turn(receipt: dict, *, phase="assembly") -> dict:
     if (not isinstance(receipt, dict) or type(receipt.get("turn")) is not int
             or not {"id", "thread_id", "request_sha256"}.issubset(receipt)):
         raise InfrastructureError("Mother continuation requires the preceding native receipt")
-    turn = {"id": receipt["id"], "turn": receipt["turn"] + 1, "phase": "assembly",
+    if phase == "plan-review" and receipt.get("phase") == "assembly":
+        raise InfrastructureError("Mother cannot review the plan after assembly starts")
+    turn = {"id": receipt["id"], "turn": receipt["turn"] + 1, "phase": phase,
             "thread_id": receipt["thread_id"], "previous_request_sha256": receipt["request_sha256"]}
     validate_turn(turn)
     return turn
@@ -83,6 +85,8 @@ def run_turn(request: dict, request_sha: str, output: Path, invoke) -> dict:
                 or previous.get("thread_id") != turn["thread_id"]
                 or previous.get("request_sha256") != turn["previous_request_sha256"]):
             raise InfrastructureError("Mother continuation has no matching completed native conversation")
+        if previous and previous.get("phase") == "assembly" and turn["phase"] == "plan-review":
+            raise InfrastructureError("Mother cannot return to planning after assembly")
         state = {**turn, "identity": identity, "request_sha256": request_sha, "status": "started"}
         atomic_json(path, state)
         try:

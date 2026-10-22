@@ -18,9 +18,16 @@ Les consultations sont conservées dans SQLite par campagne, protocole et conver
 
 Les adaptateurs natif et Ollama isolent les leçons optionnelles invalides, conservent les leçons recevables et enregistrent les motifs de rejet. Le code passe toujours par les validations de fichiers, compilation, correction et mesure. Une demande de lecture incohérente reste rejetée.
 
+## 3. Critique automatique du plan — intégré
+
+Avant de lancer les arbres, Mother peut reprendre sa conversation pour examiner les hypothèses communes, les redondances et les expériences contrastées manquantes. Elle propose elle-même les révisions. Le contrôleur conserve N et les identités, valide les sujets et refuse les révisions de rôles absents de la page. Le plan initial, les critiques et le plan accepté restent archivés séparément. Après le démarrage de l'assemblage, revenir à cette phase est interdit.
+
+Les objectifs sont présentés par pages exactes bornées ; les objectifs trop volumineux restent explicitement non examinés. Le bilan distingue les sujets examinés et non examinés, y compris lorsque le budget empêche de couvrir N. Les appels sont enregistrés et facturés dans la recherche, leur durée réduit le temps restant de la même campagne ; ils ne réinitialisent pas les 30 minutes. L'admission réserve d'abord du temps pour coder, mesurer et confirmer.
+
+Les nouvelles campagnes créées avec `init --mother-trees` autorisent deux tours de critique. `--plan-review-calls 0` permet une comparaison sans critique. Pour un fichier de configuration, utiliser `forest.plan_review_calls` ; une ancienne configuration sans ce champ conserve son comportement. Le contrôleur ne lance aucun nouveau modèle lors d'une simple reprise d'un plan déjà enregistré.
+
 ## Étapes suivantes
 
-3. Ajouter une critique automatique et budgétée du plan initial, sans recette d'optimisation fournie par l'opérateur.
 4. Donner aux arbres des observations sur les approches déjà essayées et distinguer les transformations réelles des copies ou réglages de lancement.
 5. Fournir une comparaison de régularité entre campagnes indépendantes, avec médiane, mauvais résultats et fréquence d'amélioration, sans confondre tests fonctionnels et qualité de recherche.
 

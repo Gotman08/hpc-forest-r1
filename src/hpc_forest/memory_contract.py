@@ -148,10 +148,10 @@ def extract_memory(data, context, *, rejected_lessons=None):
     """Validate and strip extensions before the existing strict source validator."""
     if not context.get("memory", {}).get("enabled"):
         return data, None, []
-    if not isinstance(data, dict) or not {"memory_read", "memory_lessons"} <= data.keys():
+    if not isinstance(data, dict) or "memory_read" not in data:
         raise CandidateRejected("Missing memory envelope")
     candidate = dict(data)
-    request, lessons = candidate.pop("memory_read"), candidate.pop("memory_lessons")
+    request, lessons = candidate.pop("memory_read"), candidate.pop("memory_lessons", None)
     validate_read(request)
     allowed = set(context["memory"].get("evidence_ids", []))
     if not isinstance(lessons, list) or len(lessons) > 4:

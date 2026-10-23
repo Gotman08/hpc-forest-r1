@@ -110,3 +110,12 @@ def test_only_invalid_lesson_is_dropped():
     assert extract_memory(value, {"memory": {"enabled": True, "evidence_ids": ["known"]}},
                           rejected_lessons=rejected)[2] == [good]
     assert rejected == [{"index": 1, "reason": "Lesson references unseen or unrelated evidence"}]
+
+
+def test_missing_optional_lessons_are_reported_without_discarding_code():
+    value = {"files": [{"path": "src/main.c", "content": "code awaiting controller checks"}],
+             "memory_read": empty_read()}
+    warnings = []
+    stripped, request, lessons = extract_memory(value, {"memory": {"enabled": True}}, rejected_lessons=warnings)
+    assert stripped["files"] == value["files"] and request is None and lessons == []
+    assert warnings == [{"index": None, "reason": "Too many or malformed memory lessons"}]

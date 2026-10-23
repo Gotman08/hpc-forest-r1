@@ -34,8 +34,26 @@ Le contrôleur compare les empreintes des fichiers des commits exacts. La mémoi
 
 Ces observations ne prouvent pas une différence sémantique : modifier un commentaire ou une constante dans un fichier source reste un changement de fichier. Les extensions `.json`, `.toml`, `.yaml`, `.yml`, `.ini` et `.cfg` servent uniquement à décrire les fichiers de configuration. Aucune variante n'est exclue ni récompensée en raison de cette classification. Une version lente reste consultable et utilisable. Une archive source indisponible produit un diagnostic absent, sans changer le résultat mesuré.
 
-## Étape suivante
+## 5. Mesurer la régularité — outillage intégré, validation expérimentale à mener
 
-5. Fournir une comparaison de régularité entre campagnes indépendantes, avec médiane, mauvais résultats et fréquence d'amélioration, sans confondre tests fonctionnels et qualité de recherche.
+`python -m hpc_forest reliability campagne-1 campagne-2 --output comparaison.json` lit les registres sans les modifier. Le rapport vérifie le reçu de confirmation, son commit et ses échantillons. Il présente, par groupe comparable, médiane, pire et meilleur facteur d'accélération, nombre de confirmations et fréquence d'amélioration au seuil de la campagne. Une campagne sans confirmation reste dans le dénominateur de cette fréquence ; aucun temps fictif ne lui est attribué. Les copies d'un même registre et les époques poursuivant une campagne sont exclues des répétitions indépendantes.
+
+Les groupes restent stricts : sources initiales, protocole, fichiers de validation, cible, moteur, modèle et budget. Les chemins ou noms de cible différents ne sont pas supposés équivalents automatiquement. Cela peut séparer deux anciennes campagnes réellement comparables ; un audit externe est alors nécessaire pour justifier cette équivalence. Les programmes différents ne sont jamais regroupés par leurs temps absolus. Un groupe d'une seule campagne n'établit pas la régularité.
+
+`python -m hpc_forest reliability-plan suite.json plan-repetitions` prépare plusieurs programmes et répétitions sans appeler de modèle ni allouer de calcul. Exemple de spécification, avec chemins relatifs au fichier :
+
+```json
+{
+  "seeds": [23, 29, 31, 37, 41],
+  "cases": [
+    {"name": "programme-a", "config": "a/config.json", "source": "a/original", "validation": "a/validation"},
+    {"name": "programme-b", "config": "b/config.json", "source": "b/original", "validation": "b/validation"}
+  ]
+}
+```
+
+Chaque répétition reçoit un nouveau workspace et, pour le transport natif, une session et une boîte aux lettres distinctes. L'ordre des cas alterne entre répétitions. Les configurations et les empreintes des sources et validations sont enregistrées ; un changement après préparation bloque le lancement concerné. L'exécution reste explicite via `pilot-run`, avec les services et autorisations habituels. Une seed contrôle la recherche, sans garantir la reproductibilité du modèle natif.
+
+Pour comparer les versions du système, enregistrer les cas et répétitions à l'avance, utiliser le même programme original, les mêmes tests et le même budget, puis conserver tous les résultats. Les relectures d'archives servent au diagnostic et restent séparées des campagnes repartant de zéro. Les tests ajoutés utilisent des fixtures synthétiques et des compilations locales ; ils ne démontrent pas que Luna Max retrouve systématiquement les meilleures optimisations. Aucune nouvelle campagne ROMEO n'est lancée par ces commandes de préparation ou de comparaison.
 
 Chaque lot vérifié est enregistré dans un commit local distinct. Une nouvelle campagne GPU ou une publication Git nécessite une demande explicite.

@@ -98,6 +98,12 @@ def parser():
     rep = sub.add_parser("report")
     rep.add_argument("workspace", type=Path)
     rep.add_argument("--output", type=Path)
+    reliability = sub.add_parser("reliability", help="Compare confirmed independent campaigns without changing them")
+    reliability.add_argument("workspaces", type=Path, nargs="+")
+    reliability.add_argument("--output", type=Path)
+    suite = sub.add_parser("reliability-plan", help="Prepare independent multi-program repeats; never run or allocate")
+    suite.add_argument("specification", type=Path)
+    suite.add_argument("destination", type=Path)
     pack = sub.add_parser("package")
     pack.add_argument("workspace", type=Path)
     pack.add_argument("output", type=Path)
@@ -212,6 +218,21 @@ def main(argv=None) -> int:
                     emit(controller.new_epoch())
         elif args.command == "report":
             emit({"report": str(report(args.workspace, args.output))})
+        elif args.command == "reliability":
+            from .reliability import compare
+
+            value = compare(args.workspaces)
+            if args.output:
+                output = args.output.resolve()
+                roots = [path.resolve() if path.is_dir() else path.resolve().parent for path in args.workspaces]
+                if any(output.is_relative_to(root) for root in roots):
+                    raise ForestError("Write the comparison outside the preserved input campaigns")
+                atomic_json(output, value)
+            emit(value)
+        elif args.command == "reliability-plan":
+            from .pilot import prepare_suite
+
+            emit({"plan": str(prepare_suite(args.specification, args.destination))})
         elif args.command == "package":
             emit({"package": str(package(args.workspace, args.output))})
         elif args.command == "docs":

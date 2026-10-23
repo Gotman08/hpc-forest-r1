@@ -50,7 +50,7 @@ Original user source, supplied as data:
 """
 
 
-def prepare(source, destination, repository, *, wall_seconds=1800):
+def prepare(source, destination, repository, *, wall_seconds=1800, plan_review_calls=2):
     source, destination, repository = source.resolve(strict=True), destination.resolve(), repository.resolve(strict=True)
     original = source.read_text(encoding="utf8")
     if original.count("__global__ void nbody_step_naive(") != 1 or "int main()" not in original:
@@ -82,7 +82,8 @@ def prepare(source, destination, repository, *, wall_seconds=1800):
     statement = STATEMENT + original
     config = copy.deepcopy(DEFAULT)
     config.update(problem="cuda-nbody", method="H", backend="codex", skills=policy(),
-        forest={"policy": "mother", "conversation": "persistent", "integration": POLICY, "statement": statement},
+        forest={"policy": "mother", "conversation": "persistent", "integration": POLICY,
+                "plan_review_calls": plan_review_calls, "statement": statement},
         memory={"mode": "active", "assembly_rounds": 16, "selection_calls": 4, "reads_per_mission": 3,
                 "page_size": 6, "context_characters": 12000, "sources_per_integration": 3},
         schedule={"cycles": None, "trials_per_role_per_cycle": 1, "integrations_per_cycle": 0})
@@ -156,6 +157,9 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--repository", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--wall-seconds", type=int, default=1800)
+    parser.add_argument("--plan-review-calls", type=int, default=2,
+                        help="Budgeted critique turns before research; use 0 for a comparison without critique")
     args = parser.parse_args()
-    value = prepare(args.source, args.output, args.repository, wall_seconds=args.wall_seconds)
+    value = prepare(args.source, args.output, args.repository, wall_seconds=args.wall_seconds,
+                    plan_review_calls=args.plan_review_calls)
     print(json.dumps({key: value[key] for key in ("artifact", "session_id", "payload_sha256", "allocation_submitted")}))

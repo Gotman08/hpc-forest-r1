@@ -9,7 +9,8 @@ import pytest
 from hpc_forest.core import file_digest
 
 
-def test_fresh_cuda_memory_payload_has_original_source_and_exact_validator(tmp_path):
+@pytest.mark.parametrize("review", [None, 0, 5])
+def test_fresh_cuda_memory_payload_has_original_source_and_exact_validator(tmp_path, review):
     repo = Path(__file__).resolve().parents[1]
     prepare = runpy.run_path(str(repo / "examples/cuda_nbody/prepare_memory.py"))["prepare"]
     source = tmp_path / "input/nbody_naive.cu"
@@ -25,7 +26,8 @@ def test_fresh_cuda_memory_payload_has_original_source_and_exact_validator(tmp_p
     (optimizer / "cuda_test_harness").mkdir()
     (optimizer / "cuda_test_harness/CMakeLists.txt").write_text("# never executed by preparation\n")
     destination = tmp_path / "prepared"
-    state = prepare(source, destination, repo, wall_seconds=1800)
+    options = {} if review is None else {"plan_review_calls": review}
+    state = prepare(source, destination, repo, wall_seconds=1800, **options)
     assert state["allocation_submitted"] is False
     assert source.read_text(encoding="utf8") == original
     payload = destination / "payload"
@@ -38,6 +40,9 @@ def test_fresh_cuda_memory_payload_has_original_source_and_exact_validator(tmp_p
     assert config["codex"]["model"] == "gpt-6-luna" and config["codex"]["reasoning_effort"] == "max"
     assert config["memory"]["mode"] == "active"
     assert config["forest"]["integration"] == "memory-guided-v1"
+    assert config["forest"]["plan_review_calls"] == (2 if review is None else review)
+    plan = json.loads((payload / "plan.json").read_text())
+    assert plan["forest"]["plan_review_calls"] == config["forest"]["plan_review_calls"]
     assert "children" not in config["forest"]  # Mother, not preparation, chooses N and the subjects.
     manifest = json.loads((payload / "runtime-manifest.json").read_text())
     assert all(file_digest(payload / name) == sha for name, sha in manifest.items())

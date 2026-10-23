@@ -3,6 +3,9 @@
 `prepare_memory.py` prépare le nouveau scope `cuda-nbody-luna-max-memory-v1` avec
 le moteur courant, le source original et le harnais mémoire actif. Il ne soumet
 aucun job. Mother choisit N ; ce nombre n'est pas fixé dans le profil.
+Les nouvelles préparations autorisent deux tours de critique du plan, déduits
+du budget de la campagne. `--plan-review-calls 0` désactive cette critique pour
+une comparaison explicite ; les payloads déjà préparés restent inchangés.
 
 ```powershell
 python examples/cuda_nbody/prepare_memory.py --source C:/chemin/nbody_naive.cu --output C:/chemin/nouvelle-campagne --wall-seconds 1800

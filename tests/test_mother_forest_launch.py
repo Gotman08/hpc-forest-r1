@@ -155,7 +155,9 @@ def test_completion_requires_every_chosen_tree_and_final_g(forest_native):
     assert not smoke.depth_completion(different_mother, trials_per_role=None)["pipeline_complete"]
 
 
-def test_cli_accepts_mother_choice_without_a_parallelism_knob(tmp_path, monkeypatch):
+@pytest.mark.parametrize("review_args,review_calls", [([], 2), (["--plan-review-calls", "0"], 0),
+                                                    (["--plan-review-calls", "5"], 5)])
+def test_cli_accepts_mother_choice_without_a_parallelism_knob(tmp_path, monkeypatch, review_args, review_calls):
     from test_mother_forest import settings
 
     from hpc_forest import cli
@@ -173,9 +175,9 @@ def test_cli_accepts_mother_choice_without_a_parallelism_knob(tmp_path, monkeypa
         return destination
     monkeypatch.setattr(cli, "create_workspace", create)
     assert cli.main(["init", str(tmp_path / "new"), "--config", str(path), "--duration", "5h",
-                     "--mother-trees", "--statement", str(statement)]) == 0
+                     "--mother-trees", "--statement", str(statement), *review_args]) == 0
     assert captured["forest"] == {"policy": "mother", "conversation": "persistent", "integration": "pairwise",
-                                  "statement": "The complete problem text."}
+                                  "statement": "The complete problem text.", "plan_review_calls": review_calls}
     assert captured["budget"]["wall_seconds"] == 18000
     from hpc_forest.model_skills import policy as skills_policy
 

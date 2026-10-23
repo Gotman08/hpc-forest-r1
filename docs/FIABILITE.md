@@ -24,6 +24,8 @@ Avant de lancer les arbres, Mother peut reprendre sa conversation pour examiner 
 
 Les objectifs sont présentés par pages exactes bornées ; les objectifs trop volumineux restent explicitement non examinés. Le bilan distingue les sujets examinés et non examinés, y compris lorsque le budget empêche de couvrir N. Les appels sont enregistrés et facturés dans la recherche, leur durée réduit le temps restant de la même campagne ; ils ne réinitialisent pas les 30 minutes. L'admission réserve d'abord du temps pour coder, mesurer et confirmer.
 
+Cette réserve utilise le N provisoire avant même de publier le plan : N−1 intégrations (au moins une) pour une fusion deux par deux, ou les tours nominaux de sélection et de code pour l'assemblage guidé par mémoire. Une critique facultative est refusée si elle entame ce temps réservé.
+
 Les nouvelles campagnes créées avec `init --mother-trees` autorisent deux tours de critique. `--plan-review-calls 0` permet une comparaison sans critique. Pour un fichier de configuration, utiliser `forest.plan_review_calls` ; une ancienne configuration sans ce champ conserve son comportement. Le contrôleur ne lance aucun nouveau modèle lors d'une simple reprise d'un plan déjà enregistré.
 
 ## 4. Expériences contrastées et changements observés — intégré

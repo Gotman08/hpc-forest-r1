@@ -9,9 +9,11 @@ from pathlib import Path
 from statistics import median
 
 from . import codex_mailbox as mailbox
-from .adaptive_budget import forecast, record_timing
+from .adaptive_budget import record_timing
 from .codex_conversation import next_turn, verify_receipt
 from .core import BudgetExhausted, InfrastructureError, atomic_json, canonical
+from .forest import pairwise_mother
+from .independent_budget import forecast_independent
 from .memory_contract import settings as memory_settings
 from .model_skills import bind
 
@@ -77,13 +79,20 @@ def revise(plan, page, value):
 
 
 def review_admission(db, width):
-    estimate = forecast(db, [f"T{i + 1}" for i in range(width)])
+    # Persistent Mother will dispatch independent trees, but neither their plan
+    # nor their scheduler is recorded yet. Reserve for this provisional width.
+    estimate = forecast_independent(db, [f"T{i + 1}" for i in range(width)])
     config = db.get("config")
     history = db.get("timing_samples", {}).get("mother_review", [])
     nominal = median(history[-5:]) if history else config["completion"].get("initial_model_seconds", 120)
-    required = estimate["reserve_seconds"] + estimate["next_work_seconds"] + estimate["safety_factor"] * nominal
+    extra_steps = (max(0, max(1, width - 1) - estimate["integration_steps"])
+                   if pairwise_mother(config) else 0)
+    required = (estimate["reserve_seconds"] + estimate["next_work_seconds"]
+                + estimate["safety_factor"] * (nominal + extra_steps * estimate["final_g_seconds"]))
     remaining = estimate["remaining_seconds"]
     return {"required_seconds": required, "remaining_seconds": remaining,
+            "planned_integration_steps": estimate["integration_steps"] + extra_steps,
+            "reserved_selection_seconds": estimate.get("selection_seconds", 0),
             "can_review": remaining is None or remaining >= required}
 
 

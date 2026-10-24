@@ -1,3 +1,4 @@
+import json
 import math
 import time
 from pathlib import Path
@@ -7,7 +8,7 @@ import pytest
 
 from hpc_forest.config import validate
 from hpc_forest.core import ForestError, InfrastructureError
-from hpc_forest.mother import plan_for
+from hpc_forest.mother import PLANNING_SOURCE_CHARACTERS, plan_for
 from hpc_forest.ollama_backend import OllamaBackend
 from hpc_forest.support.budgets import generation_deadline, search_deadline
 from hpc_forest.support.sources import SourceLimitExceeded, source_snapshot
@@ -187,7 +188,7 @@ def test_mother_phases_are_cached_and_accounted_without_replaying_calls(mother_s
 
 def test_mother_source_limit_releases_reservation_without_call(mother_setup, db, monkeypatch):
     controller, mission, context = mother_setup
-    (Path(mission.worktree) / "src" / "main.c").write_text("x" * 32001)
+    (Path(mission.worktree) / "src" / "main.c").write_text("x" * (PLANNING_SOURCE_CHARACTERS + 1))
     monkeypatch.setattr(
         "hpc_forest.mother.mailbox.publish_request",
         lambda *_: pytest.fail("Oversized source must not reach the model transport"),
@@ -196,6 +197,23 @@ def test_mother_source_limit_releases_reservation_without_call(mother_setup, db,
     assert result["status"] == "not_invoked_source_limit"
     assert result["model_calls"] == 0
     assert db.costs()["tokens_used"] == db.costs()["tokens_reserved"] == 0
+
+
+def test_mother_accepts_complete_source_above_former_limit(mother_setup, monkeypatch):
+    controller, mission, context = mother_setup
+    source = "/*" + "x" * 33487 + "*/\nint main(void) { return 0; }\n"
+    (Path(mission.worktree) / "src" / "main.c").write_bytes(source.encode())
+    requests = []
+    monkeypatch.setattr("hpc_forest.mother.mailbox.publish_request",
+                        lambda _channel, request: requests.append(request) or "a" * 64)
+    monkeypatch.setattr("hpc_forest.mother.mailbox.wait_response", lambda *_: {
+        "usage": {"token_accounting": "exact", "tokens": 17, "llm_calls": 1},
+        "data": dict.fromkeys(["analysis", "A", "B", "C", "G"], "bounded plan"),
+    })
+    assert plan_for(controller, mission, context, "preparation")["status"] == "complete"
+    assert len(requests) == 1
+    data = json.loads(requests[0]["messages"][1]["content"])
+    assert data["current_sources_as_data"]["src/main.c"] == source
 
 
 def test_expired_local_generation_never_contacts_metadata_or_model(tmp_path, config, monkeypatch):

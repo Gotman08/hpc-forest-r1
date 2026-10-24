@@ -149,10 +149,25 @@ def command_for(request: dict, output: Path, executable: str = "codex", *,
     return [*args, "-"]
 
 
+def authorized_discovery(item: dict, *, romeo: bool, documentation: bool) -> bool:
+    """Allow built-in metadata discovery only for explicitly bound MCP servers."""
+    servers = ({"romeo"} if romeo else set()) | ({"hpc_docs"} if documentation else set())
+    if (not servers or item.get("server") != "codex"
+            or item.get("tool") not in {"list_mcp_resources", "list_mcp_resource_templates"}):
+        return False
+    arguments = item.get("arguments")
+    if not isinstance(arguments, dict) or set(arguments) - {"server", "cursor"}:
+        return False
+    server, cursor = arguments.get("server"), arguments.get("cursor")
+    return ((server is None or isinstance(server, str) and server in servers)
+            and (cursor is None or isinstance(cursor, str)))
+
+
 def usage_from_events(path: Path, *, observe_only: bool = False,
                       allow_romeo_mcp: bool = False, allow_documentation: bool = False) -> tuple[dict, bool]:
     usage_events, tool_events = [], []
     mcp_calls, forbidden_tools, runtime_errors = {}, [], []
+    turn_failures = []
     for line in path.read_text(encoding="utf8", errors="replace").splitlines():
         try:
             event = json.loads(line)
@@ -160,6 +175,10 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
             continue
         if event.get("type") == "turn.completed" and isinstance(event.get("usage"), dict):
             usage_events.append(event["usage"])
+        failure = event.get("error")
+        if (event.get("type") == "turn.failed" and isinstance(failure, dict)
+                and isinstance(failure.get("message"), str)):
+            turn_failures.append(failure["message"])
         item = event.get("item", {})
         if event.get("type") in {"item.started", "item.completed", "item.updated"}:
             if item.get("type") == "error" and (allow_romeo_mcp or allow_documentation):
@@ -173,7 +192,9 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
                                (allow_romeo_mcp and item.get("server") == "romeo"
                                 and item["tool"] not in DISABLED_MODEL_TOOLS)
                                or (allow_documentation and item.get("server") == "hpc_docs"
-                                   and item["tool"] in DOCUMENTATION_TOOLS)))
+                                   and item["tool"] in DOCUMENTATION_TOOLS)
+                               or authorized_discovery(item, romeo=allow_romeo_mcp,
+                                                       documentation=allow_documentation)))
                 if not allowed:
                     forbidden_tools.append(item.get("type"))
                 if item.get("type") == "mcp_tool_call":
@@ -197,6 +218,7 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
         "cached_tokens_included_in_input": True, "tool_events": tool_events,
         "mcp_tool_calls": list(mcp_calls.values()), "forbidden_tool_events": forbidden_tools,
         "tool_runtime_errors": list(dict.fromkeys(runtime_errors)),
+        "turn_failure_messages": list(dict.fromkeys(turn_failures)),
         "codex_jsonl_sha256": sha256(path.read_bytes()),
     }, bool(forbidden_tools)
 
@@ -272,8 +294,15 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
     infra = False
     data = None
     reported, report_error = None, None
-    if result.returncode or result.timed_out:
-        error, infra = "Codex failed or exceeded the generation deadline; inspect its log", True
+    if result.returncode or result.timed_out or usage.get("turn_failure_messages"):
+        output_limit = usage.get("turn_failure_messages") == [
+            "Incomplete response returned, reason: max_output_tokens"]
+        if output_limit and not result.timed_out and not tools and not usage.get("tool_runtime_errors"):
+            # A known incomplete proposal is a generation failure, not a lost
+            # transport. Do not stop every independent tree or accept partial code.
+            error = "Codex generation exceeded the model output limit; no complete proposal"
+        else:
+            error, infra = "Codex failed or exceeded the generation deadline; inspect its log", True
     elif usage.get("tool_runtime_errors"):
         error, infra = "The native MCP tool runtime is unavailable; inspect its log", True
     elif tools:

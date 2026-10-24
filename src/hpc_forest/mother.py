@@ -22,6 +22,8 @@ from .support.budgets import (
 )
 from .support.sources import SourceLimitExceeded, source_snapshot
 
+PLANNING_SOURCE_CHARACTERS = 128000
+
 PLAN_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "properties": {"analysis": {"type": "string"},
@@ -156,7 +158,8 @@ def plan_for(controller, mission, context: dict, phase: str) -> dict:
     # Claim before publishing. A recovered controller never repeats a started call.
     controller.db.set(key, {"status": "started_without_final_response", "phase": phase})
     try:
-        sources = source_snapshot(Path(mission.worktree), max_characters=32000, errors="replace")
+        sources = source_snapshot(Path(mission.worktree),
+                                  max_characters=PLANNING_SOURCE_CHARACTERS, errors="replace")
     except SourceLimitExceeded:
         controller.db.settle_tokens(slot, 0)
         result = {"status": "not_invoked_source_limit", "phase": phase, "model_calls": 0}

@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n\nstatic bool validate_utf8(const char *b, size_t length) {\n  const uint8_t *bytes = (const uint8_t *)b;\n  size_t index = 0;\n\n  for (;;) {\n    while (index < length && bytes[index] < 0x80) {\n      ++index;\n    }\n    if (index == length) {\n      return true;\n    }\n\n    const uint8_t lead = bytes[index++];\n    if (lead < 0xc2) {\n      return false;\n    }\n\n    if (lead < 0xe0) {\n      if (length - index < 1 || (bytes[index] & 0xc0) != 0x80) {\n        return false;\n      }\n      ++index;\n      continue;\n    }\n\n    if (lead < 0xf0) {\n      if (length - index < 2) {\n        return false;\n      }\n      const uint8_t second = bytes[index];\n      const uint8_t third = bytes[index + 1];\n      if ((second & 0xc0) != 0x80 || (third & 0xc0) != 0x80 ||\n          (lead == 0xe0 && second < 0xa0) ||\n          (lead == 0xed && second >= 0xa0)) {\n        return false;\n      }\n      index += 2;\n      continue;\n    }\n\n    if (lead <= 0xf4) {\n      if (length - index < 3) {\n        return false;\n      }\n      const uint8_t second = bytes[index];\n      const uint8_t third = bytes[index + 1];\n      const uint8_t fourth = bytes[index + 2];\n      if ((second & 0xc0) != 0x80 || (third & 0xc0) != 0x80 ||\n          (fourth & 0xc0) != 0x80 ||\n          (lead == 0xf0 && second < 0x90) ||\n          (lead == 0xf4 && second > 0x8f)) {\n        return false;\n      }\n      index += 3;\n      continue;\n    }\n\n    return false;\n  }\n}\n\nextern \"C\" void run(const void *input1, const void *input2, void *output,\n                    int n, int parameter, int threads) {\n  *(uint32_t *)output = validate_utf8((const char *)input1, n);\n}\n",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "A lead-directed scalar decoder may reduce the per-byte table lookups and state-dependent transitions of the supplied DFA on mixed-width input by validating continuation bytes directly per code point, while retaining the ASCII-run fast path. This may instead lose from its lead-classification branches; controller measurement is needed.",
+  "notes": "This is a pure-scalar variant. The supplied baseline is correct on 18 cases and measured 49.623 microseconds mean across three samples (baseline-e1); this candidate has not been measured. The prior h01 attempt was incorrect: its correctness log reports a failure at n=1024, seed 23, pattern 0 (errors=1, max_abs_error=1.0); the available diagnostic is truncated, so its cause is unknown.",
+  "sources_kept": [],
+  "transformations": [
+    "Replace the byte-class and DFA transition tables with direct lead-range classification and continuation-byte checks grouped by UTF-8 sequence length.",
+    "Retain the ASCII-run scan and validate E0/ED and F0/F4 boundary restrictions explicitly.",
+    "Check remaining input length before each continuation-byte read to preserve bounds and malformed-input rejection."
+  ]
+}

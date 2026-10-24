@@ -1,0 +1,416 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "d30856c3f6581af0850cebf7b46861fafcd7bf6c5c8e6fc1c7317f84366e3ecb",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "3425905c04ab47b4",
+        "kind": "experiment",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "3425905c04ab47b4",
+        "facts": {
+          "commit": "ecca65b8422955258c7fa3823fc60f4078ca56ef",
+          "base_commit": "5f94cb3c61cc33a90f6e294d3857105cf35859da",
+          "parent_id": null,
+          "source_ids": [
+            "7035a0aa44b64d57",
+            "c85175aa6f3943de"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.171199972430865e-05,
+          "score": 0.835582747932829
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Un mapping multi-lignes par CTA peut réduire le nombre de CTA pour les réductions étroites, tandis que le mapping T1 à une ligne par CTA conserve son option pour les lignes larges. Le dispatch utilise des bandes de largeur rembourrée génériques; le bénéfice de l’hybride reste à mesurer.",
+          "transformations": "{\"files\":[\"src/candidate.py\"],\"retained\":[\"Conserve le noyau T1 fusionné à une ligne par CTA pour les largeurs rembourrées supérieures à 2048.\",\"Ajoute le noyau T2 fusionné multi-lignes par CTA pour les largeurs rembourrées jusqu’à 2048, avec les bandes de regroupement 16, 8 et 4 lignes.\",\"Sélectionne le mapping par bandes génériques de largeur rembourrée, avec les masques de rangées et de colonnes, les strides et l’accumulation en FP32 ou FP64.\",\"Conserve la soustraction du maximum avant exponentiation, le chemin PyTorch existant pour les entrées non éligibles, et aucun intermédiaire supplémentaire.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "066627659fe340df",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "066627659fe340df",
+        "facts": {
+          "commit": "ed33fd1a5b17dc7aa3041b89efcb610c3a95cbad",
+          "base_commit": "64473670b608fb98a0777e048a802c2d2ef795c1",
+          "parent_id": "87a952fb6cf140e0",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.35680008182923e-05,
+          "score": 0.829514149496644
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Test one warp for every one-row CTA. This may reduce coordination overhead, but increases per-thread work, especially for wide rows. The selected two-warp parent measured 41.616 µs; the best observed 4-warps-below-4096/2-warps-otherwise candidate measured 41.243 µs, so this configuration is only an improvement if it passes correctness and beats that measured result.",
+          "transformations": "{\"files\":[\"src/candidate.py\"],\"retained\":[\"Retain one program/CTA per complete row and the stable masked max-exp-sum-normalize computation.\",\"Use one warp for each row as a bounded launch-configuration contrast; do not introduce multi-row CTAs or streaming loops.\",\"Preserve existing tail masks, stride handling, dtype behavior, output layout, and fallback path.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "1087d7e03fea4861",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "1087d7e03fea4861",
+        "facts": {
+          "commit": "46bb17205a18224f39f0de553793b50e56e5c515",
+          "base_commit": "1a2ea391972a1c6907dd66ac0d41327d2ff197bf",
+          "parent_id": "33a5fc87ad6d40db",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.2783999194701514e-05,
+          "score": 0.8320668265710992
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Earlier grouped candidates were correct but clustered between 42.549 and 42.640 µs, so they do not establish a grouping benefit. This trial increases rows per CTA for padded widths through 256 while keeping the row-column tile no larger than 4096 elements through width 1024. Fewer CTAs may help narrow rows, but increased per-CTA state may hurt occupancy. Compare the measured result with T1's 42.154 µs target and official candidates; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.py\"],\"retained\":[\"Increase rows per CTA to 32, 16, 8, and 4 for padded widths up to 128, 256, 512, and 1024 respectively; retain 2 rows for wider widths.\",\"Keep the existing 4-warps-through-1024 and 8-warps-for-wider configuration and the complete-row, masked, max-subtracted per-row reductions.\",\"Preserve the existing stride-aware accesses, output allocation, and empty-dimension handling.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "6ef39c989c114d87",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "6ef39c989c114d87",
+        "facts": {
+          "commit": "9321af7578e5cc08cb9c76f9eb96635b19f2cf55",
+          "base_commit": "9bf195cdbbccb8e631f6cbf6dd7b3b9e4be5f5b7",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.8661333819230397e-05,
+          "score": 0.8133044147111461
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The best measured streaming variant averaged 56.096 µs using 4 warps and 1024-element tiles for widths up to 1024, otherwise 2048-element tiles. This experiment retains that tile policy but uses 8 warps only for wider rows. More warps may reduce per-thread tile work, though scheduling and reduction overhead could outweigh that benefit. The candidate awaits official correctness and timing; compare its result to the measured 4-warp variant.",
+          "transformations": "{\"files\":[\"src/candidate.py\"],\"retained\":[\"Replaced the eager tensor-operation sequence with one Triton CTA per row and a numerically stable running maximum and rescaled sum over tiles.\",\"Reread the tiles to write normalized output while retaining masked tails and input/output strides.\",\"Kept the measured 1024-element tile for widths up to 1024 and 2048-element tile for wider rows; use 8 warps only for wider rows to test that launch configuration against the prior 4-warp variant.\",\"Use float64 accumulation for float64 input and float32 accumulation otherwise.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "9bf195cdbbccb8e631f6cbf6dd7b3b9e4be5f5b7",
+          "base_commit": "9bf195cdbbccb8e631f6cbf6dd7b3b9e4be5f5b7",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00021198400358359018,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "3425905c04ab47b4-h01",
+        "kind": "development",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "3425905c04ab47b4",
+        "facts": {
+          "commit": null,
+          "base_commit": "5f94cb3c61cc33a90f6e294d3857105cf35859da",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Un mapping multi-lignes par CTA peut réduire le nombre de CTA pour les réductions étroites, tandis que le mapping T1 à une ligne par CTA conserve son option pour les lignes larges. Le dispatch utilise des bandes de largeur rembourrée génériques; le bénéfice de l’hybride reste à mesurer.",
+          "transformations": "{\"files\":[\"src/candidate.py\"],\"retained\":[\"Conserve le noyau T1 fusionné à une ligne par CTA pour les largeurs rembourrées supérieures à 2048.\",\"Ajoute le noyau T2 fusionné multi-lignes par CTA pour les largeurs rembourrées jusqu’à 2048, avec les bandes de regroupement 16, 8 et 4 lignes.\",\"Sélectionne le mapping par bandes génériques de largeur rembourrée, avec les masques de rangées et de colonnes, les strides et l’accumulation en FP32 ou FP64.\",\"Conserve la soustraction du maximum avant exponentiation, le chemin PyTorch existant pour les entrées non éligibles, et aucun intermédiaire supplémentaire.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 44,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Direct fused one-row-per-CTA kernel",
+        "objective": "Implement the direct, non-streaming Triton design with one program/CTA owning one complete row: masked load, stable max/exp/sum, and normalized store. Compare with the official tutorial and explore configurations for this one-row mapping only. Do not switch to multi-row CTAs or streaming loops. Support arbitrary valid widths and tails, preserve the stated accuracy and input/output requirements, and retain only correctness-passing measured improvements.",
+        "records": 14,
+        "results": {
+          "trials": 5,
+          "valid": 5,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 5,
+          "distinct_programs": 5,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "7035a0aa44b64d57",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.124266716341178e-05,
+          "hypothesis_as_data": "Both measured fused one-row candidates passed all eight cases; fixed four warps averaged 41.669 µs versus 42.155 µs for the adaptive 1/4/8-warps candidate. This experiment retains four warps below a 4096-element padded row and tests two war"
+        },
+        "latest": {
+          "id": "066627659fe340df",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.35680008182923e-05,
+          "hypothesis_as_data": "Test one warp for every one-row CTA. This may reduce coordination overhead, but increases per-thread work, especially for wide rows. The selected two-warp parent measured 41.616 µs; the best observed 4-warps-below-4096/2-warps-otherwise can"
+        },
+        "alternative": {
+          "id": "066627659fe340df",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.35680008182923e-05,
+          "hypothesis_as_data": "Test one warp for every one-row CTA. This may reduce coordination overhead, but increases per-thread work, especially for wide rows. The selected two-warp parent measured 41.616 µs; the best observed 4-warps-below-4096/2-warps-otherwise can"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "Grouped multi-row-per-CTA kernel",
+        "objective": "Test CTAs that compute multiple independent complete rows using per-row reductions. Explore rows-per-CTA and only the layout/warp choices needed for this grouped mapping; do not repeat T1’s one-row configuration search or use streaming or split-row algorithms. Compare against T1’s best measured direct one-row result and the official candidates. Support arbitrary valid shapes and tails and preserve the stated accuracy and input/output requirements.",
+        "records": 10,
+        "results": {
+          "trials": 4,
+          "valid": 4,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "c85175aa6f3943de",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.2549333224693934e-05,
+          "hypothesis_as_data": "The two measured T2 grouped mappings are both correct and close in mean time (42.587 µs and 42.640 µs), so the available evidence does not establish a benefit from their row grouping. This candidate tests a more graduated, larger grouping—1"
+        },
+        "latest": {
+          "id": "1087d7e03fea4861",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.2783999194701514e-05,
+          "hypothesis_as_data": "Earlier grouped candidates were correct but clustered between 42.549 and 42.640 µs, so they do not establish a grouping benefit. This trial increases rows per CTA for padded widths through 256 while keeping the row-column tile no larger tha"
+        },
+        "alternative": {
+          "id": "1087d7e03fea4861",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.2783999194701514e-05,
+          "hypothesis_as_data": "Earlier grouped candidates were correct but clustered between 42.549 and 42.640 µs, so they do not establish a grouping benefit. This trial increases rows per CTA for padded widths through 256 while keeping the row-column tile no larger tha"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T3",
+        "subject": "Streaming online reduction to reduce live row state",
+        "objective": "Explore a single-CTA-per-row streaming softmax that processes column tiles while maintaining a numerically stable running maximum and rescaled sum, then rereads tiles to produce normalized output. This tests whether reducing live per-row state outweighs extra input traffic for the performance shape. Support arbitrary widths and tails, preserve the stated accuracy and input/output requirements, and retain the approach only if official measurements justify it.",
+        "records": 16,
+        "results": {
+          "trials": 6,
+          "valid": 6,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 6,
+          "distinct_programs": 6,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "6ef39c989c114d87",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.8661333819230397e-05,
+          "hypothesis_as_data": "The best measured streaming variant averaged 56.096 µs using 4 warps and 1024-element tiles for widths up to 1024, otherwise 2048-element tiles. This experiment retains that tile policy but uses 8 warps only for wider rows. More warps may r"
+        },
+        "latest": {
+          "id": "6ef39c989c114d87",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.8661333819230397e-05,
+          "hypothesis_as_data": "The best measured streaming variant averaged 56.096 µs using 4 warps and 1024-element tiles for widths up to 1024, otherwise 2048-element tiles. This experiment retains that tile policy but uses 8 warps only for wider rows. More warps may r"
+        },
+        "alternative": {
+          "id": "619063e5341f46b5",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.609599997599919e-05,
+          "hypothesis_as_data": "Four measured streaming variants were correctness-valid, with 1024-element tiles fastest at 57.54 µs, compared with 59.73 µs for 512, 69.73 µs for 256, and 106.05 µs for 128. This experiment tests whether using 2048-element tiles only for w"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "Gm1",
+        "subject": "Intégration mesurée des mappings direct et groupé",
+        "objective": "À partir du meilleur candidat T1, intégrer le noyau T2 à plusieurs lignes par CTA comme alternative sélectionnée selon des dimensions génériques, sans seuil calé sur les seules formes de test. Garder le noyau direct comme option pour les lignes larges; préserver le softmax stable, les masques de queue, la correction et les contraintes d’entrée/sortie, sans intermédiaire supplémentaire. Mesurer le programme intégré selon le protocole officiel.",
+        "records": 3,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "3425905c04ab47b4",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.171199972430865e-05,
+          "hypothesis_as_data": "Un mapping multi-lignes par CTA peut réduire le nombre de CTA pour les réductions étroites, tandis que le mapping T1 à une ligne par CTA conserve son option pour les lignes larges. Le dispatch utilise des bandes de largeur rembourrée généri"
+        },
+        "latest": {
+          "id": "3425905c04ab47b4",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.171199972430865e-05,
+          "hypothesis_as_data": "Un mapping multi-lignes par CTA peut réduire le nombre de CTA pour les réductions étroites, tandis que le mapping T1 à une ligne par CTA conserve son option pour les lignes larges. Le dispatch utilise des bandes de largeur rembourrée généri"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 4,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "3425905c04ab47b4",
+    "066627659fe340df",
+    "1087d7e03fea4861",
+    "6ef39c989c114d87",
+    "baseline-e1",
+    "3425905c04ab47b4-h01",
+    "7035a0aa44b64d57",
+    "c85175aa6f3943de",
+    "619063e5341f46b5"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "5f94cb3c61cc33a90f6e294d3857105cf35859da",
+  "selected_parent_id": null
+}

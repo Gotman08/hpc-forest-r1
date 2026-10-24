@@ -1,0 +1,166 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "7af34e0eaefb7c68bd0bf0c071b2972e3188b50e8667616ff553de5a3205a8ac",
+    "tree_id": "e1:Gm1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "f014e1b6f1494b52",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "f014e1b6f1494b52",
+        "facts": {
+          "commit": "ab9192a40897ad8c85a23a6b0d8ace44f8a8b950",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03414717864990235,
+          "score": 0.5094584989033322
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Packing short H rows into each CTA should reduce CTA overhead and inactive threads in the separate forward and input-gradient passes. The mapping uses row_width=min(L,256) and packs floor(256/row_width) rows per CTA; for L=48, this assigns five rows to a 240-thread CTA instead of launching one 256-thread CTA per row. Rows of length at least 256 retain the existing one-row, 256-thread mapping. The baseline is correct at 35.464 ms mean for the full call, but it does not isolate these kernels; any benefit remains unmeasured.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Map each forward and input-gradient CTA across multiple H rows when L is below 256: block.x is L and block.y is floor(256/L), with a bounds guard for incomplete H groups.\",\"Keep 256-wide x tiles and one row per CTA for L >= 256, preserving the existing per-row output mapping for longer rows.\",\"Retain the separate FP32 forward and input-gradient passes, their bounds-safe zero padding and complete writes; leave the weight-gradient kernel unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "9b2a7876f05a474b",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "9b2a7876f05a474b",
+        "facts": {
+          "commit": "976f881a98d9f007e050086732c2972a834c0d75",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.014375462532043456,
+          "score": 0.7115647334137489
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A CTA per (h,j) can parallelize the weight-gradient accumulation over both batch and time, replacing the current serial B*L traversal for each output with per-thread FP32 accumulators and a shared-memory CTA reduction. The launch adapts its 2D block shape to B and L while capping the block at 256 threads. This may improve large reductions but add CTA and reduction overhead for small workloads; complete-call timing is needed to judge it.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Changed the weight-gradient kernel to assign one CTA to each (h,j), with threads distributed across B and L and a shared-memory FP32 reduction.\",\"Adapted the CTA dimensions from B and L, using at most 256 threads and no additional allocation or scratch access.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03546401341756185,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm1",
+        "subject": "Combiner le mapping T1 et la réduction gk T3",
+        "objective": "Partir du programme T3, le plus rapide mesuré, et y intégrer le mapping séparé des kernels forward et input-gradient de T1. Conserver la réduction gk de T3. Mesurer le programme complet et vérifier la correction; ne pas présumer que les gains s’additionnent.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "f014e1b6f1494b52",
+    "9b2a7876f05a474b",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "976f881a98d9f007e050086732c2972a834c0d75",
+  "selected_parent_id": null
+}

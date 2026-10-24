@@ -1,0 +1,136 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "import torch\nimport triton\nimport triton.language as tl\n\n\n@triton.jit\ndef _streaming_softmax_row(X, Y, N: tl.constexpr, SX0: tl.constexpr, SX1: tl.constexpr, BLOCK: tl.constexpr):\n    row = tl.program_id(0)\n    offsets = tl.arange(0, BLOCK)\n    acc_dtype = tl.float64 if X.dtype.element_ty == tl.float64 else tl.float32\n\n    running_max = tl.full((), -float(\"inf\"), acc_dtype)\n    running_sum = tl.full((), 0.0, acc_dtype)\n\n    # Accumulate the row's normalization statistics a tile at a time.\n    for tile in range(tl.cdiv(N, BLOCK)):\n        start = tile * BLOCK\n        cols = start + offsets\n        mask = cols < N\n        values = tl.load(X + row * SX0 + cols * SX1, mask=mask, other=0).to(acc_dtype)\n        values = tl.where(mask, values, -float(\"inf\"))\n\n        tile_max = tl.max(values, axis=0)\n        tile_sum = tl.sum(tl.exp(values - tile_max), axis=0)\n        new_max = tl.maximum(running_max, tile_max)\n        running_sum = running_sum * tl.exp(running_max - new_max) + tile_sum * tl.exp(tile_max - new_max)\n        running_max = new_max\n\n    # Reread each tile to write normalized values without retaining the whole row.\n    for tile in range(tl.cdiv(N, BLOCK)):\n        start = tile * BLOCK\n        cols = start + offsets\n        mask = cols < N\n        values = tl.load(X + row * SX0 + cols * SX1, mask=mask, other=0).to(acc_dtype)\n        probs = tl.exp(values - running_max) / running_sum\n        tl.store(Y + row * N + cols, probs, mask=mask)\n\n\ndef run(x):\n    \"\"\"Compute row-wise softmax with a tiled, online normalization pass.\"\"\"\n    rows, cols = x.shape\n    y = torch.empty((rows, cols), device=x.device, dtype=x.dtype)\n    if rows == 0:\n        return y\n\n    _streaming_softmax_row[(rows,)](\n        x,\n        y,\n        cols,\n        x.stride(0),\n        x.stride(1),\n        BLOCK=256,\n        num_warps=4,\n    )\n    return y\n",
+        "path": "src/candidate.py"
+      }
+    ],
+    "hypothesis": "A single CTA per row that accumulates a stable running maximum and rescaled sum over 256-element tiles limits live row state; rereading tiles to write outputs adds input traffic and loop overhead, so any benefit should be most plausible for wider rows and must be judged by official measurements.",
+    "memory_lessons": [],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "The baseline (baseline-e1) is correctness-valid at 211.984 µs mean over three samples. This candidate is unmeasured; no speedup or retention decision is claimed, and official correctness and performance evaluation should decide whether the reduced live state offsets reread traffic.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replaced the sequence of eager tensor operations with one Triton CTA per row.",
+      "Computed stable row statistics incrementally using per-tile maxima and rescaled sums.",
+      "Reread column tiles to produce normalized values without storing the full row in CTA state.",
+      "Used masked tail handling, input strides, and float64 accumulation for float64 inputs."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "b8277895c49f435fa3fc3d979d33b4b6",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "772f6d11cee48aefb478676298ab268eb169ed7424c1d2ae23717b2d1f8f741a",
+  "session_id": "4404c2b6a13c42989f9c7c7e042d7509",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "c5755e91e440535fa8a5cf8a74e234061d0862e84936ed0ab71076a4bf2a60ad",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 0,
+        "input_tokens": 11370,
+        "output_tokens": 7169,
+        "reasoning_output_tokens": 6151
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "22383847f36e4e69-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Proposed a tiled online normalization pass followed by a reread-and-output pass, with performance left to official measurement."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The implementation uses standard Triton operations rather than target-specific instructions; no additional environment inspection was needed for this proposal."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No version-specific API or hardware feature is assumed; the candidate uses basic Triton loads, reductions, exponentials, and stores."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Compared the proposal only with the supplied valid baseline measurement; the candidate has no result yet, so no performance conclusion is drawn."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "b8277895c49f435fa3fc3d979d33b4b6",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "772f6d11cee48aefb478676298ab268eb169ed7424c1d2ae23717b2d1f8f741a",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "4404c2b6a13c42989f9c7c7e042d7509"
+    },
+    "observed_tokens": 18539,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 18539,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

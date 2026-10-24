@@ -1,0 +1,135 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <cuda_runtime.h>\n/* Copyright (c) 1993-2015, NVIDIA CORPORATION. All rights reserved.\n *\n * Redistribution and use in source and binary forms, with or without\n * modification, are permitted provided that the following conditions\n * are met:\n *  * Redistributions of source code must retain the above copyright\n *    notice, this list of conditions and the following disclaimer.\n *  * Redistributions in binary form must reproduce the above copyright\n *    notice, this list of conditions and the following disclaimer in the\n *    documentation and/or other materials provided with the distribution.\n *  * Neither the name of NVIDIA CORPORATION nor the names of its\n *    contributors may be used to endorse or promote products derived\n *    from this software without specific prior written permission.\n *\n * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY\n * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\n * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR\n * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR\n * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,\n * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,\n * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR\n * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY\n * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING\n * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS\n * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n */\n\n#include <stdio.h>\n#include <assert.h>\n\n// Convenience function for checking CUDA runtime API results\n// can be wrapped around any runtime API call. No-op in release builds.\ninline\ncudaError_t checkCuda(cudaError_t result)\n{\n#if defined(DEBUG) || defined(_DEBUG)\n  if (result != cudaSuccess) {\n    fprintf(stderr, \"CUDA Runtime Error: %s\\n\", cudaGetErrorString(result));\n    assert(result == cudaSuccess);\n  }\n#endif\n  return result;\n}\n\nfloat fx = 1.0f, fy = 1.0f, fz = 1.0f;\nconst int mx = 64, my = 64, mz = 64;\n  \n// shared memory tiles will be m*-by-*Pencils\n// sPencils is used when each thread calculates the derivative at one point\n// lPencils is used for coalescing in y and z where each thread has to \n//     calculate the derivative at mutiple points\nconst int sPencils = 4;  // small # pencils\nconst int lPencils = 32; // large # pencils\n  \ndim3 grid[3][2], block[3][2];\n\n// stencil coefficients\n__constant__ float c_ax, c_bx, c_cx, c_dx;\n__constant__ float c_ay, c_by, c_cy, c_dy;\n__constant__ float c_az, c_bz, c_cz, c_dz;\n \n// host routine to set constant data\nvoid setDerivativeParameters()\n{\n  // check to make sure dimensions are integral multiples of sPencils\n  if ((mx % sPencils != 0) || (my %sPencils != 0) || (mz % sPencils != 0)) {\n    printf(\"'mx', 'my', and 'mz' must be integral multiples of sPencils\\n\");\n    exit(1);\n  }\n  \n  if ((mx % lPencils != 0) || (my % lPencils != 0)) {\n    printf(\"'mx' and 'my' must be multiples of lPencils\\n\");\n    exit(1);\n  }\n\n  // stencil weights (for unit length problem)\n  float dsinv = mx-1.f;\n  \n  float ax =  4.f / 5.f   * dsinv;\n  float bx = -1.f / 5.f   * dsinv;\n  float cx =  4.f / 105.f * dsinv;\n  float dx = -1.f / 280.f * dsinv;\n  checkCuda( cudaMemcpyToSymbol(c_ax, &ax, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_bx, &bx, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_cx, &cx, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_dx, &dx, sizeof(float), 0, cudaMemcpyHostToDevice) );\n\n  dsinv = my-1.f;\n  \n  float ay =  4.f / 5.f   * dsinv;\n  float by = -1.f / 5.f   * dsinv;\n  float cy =  4.f / 105.f * dsinv;\n  float dy = -1.f / 280.f * dsinv;\n  checkCuda( cudaMemcpyToSymbol(c_ay, &ay, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_by, &by, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_cy, &cy, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_dy, &dy, sizeof(float), 0, cudaMemcpyHostToDevice) );\n\n  dsinv = mz-1.f;\n  \n  float az =  4.f / 5.f   * dsinv;\n  float bz = -1.f / 5.f   * dsinv;\n  float cz =  4.f / 105.f * dsinv;\n  float dz = -1.f / 280.f * dsinv;\n  checkCuda( cudaMemcpyToSymbol(c_az, &az, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_bz, &bz, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_cz, &cz, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_dz, &dz, sizeof(float), 0, cudaMemcpyHostToDevice) );\n\n  // Execution configurations for small and large pencil tiles\n\n  grid[0][0]  = dim3(my / sPencils, mz, 1);\n  block[0][0] = dim3(mx, sPencils, 1);\n\n  grid[0][1]  = dim3(my / lPencils, mz, 1);\n  block[0][1] = dim3(mx, sPencils, 1);\n\n  grid[1][0]  = dim3(mx / sPencils, mz, 1);\n  block[1][0] = dim3(sPencils, my, 1);\n\n  grid[1][1]  = dim3(mx / lPencils, mz, 1);\n  // we want to use the same number of threads as above,\n  // so when we use lPencils instead of sPencils in one\n  // dimension, we multiply the other by sPencils/lPencils\n  block[1][1] = dim3(lPencils, my * sPencils / lPencils, 1);\n\n  grid[2][0]  = dim3(mx / sPencils, my, 1);\n  block[2][0] = dim3(sPencils, mz, 1);\n\n  grid[2][1]  = dim3(mx / lPencils, my, 1);\n  block[2][1] = dim3(lPencils, mz * sPencils / lPencils, 1);\n}\n\n// Tile 16 output rows with the four-row stencil halo on both sides.\n// Each warp covers contiguous X coordinates; each thread computes two Y rows.\nenum { yTileX = 32, yTileY = 16, yThreadsY = 8, yTileRows = yTileY + 8 };\n\n__global__ void derivative_y_tiled(const float *f, float *df)\n{\n  __shared__ float s_f[yTileRows][yTileX];\n\n  const int tx = threadIdx.x;\n  const int ty = threadIdx.y;\n  const int i = blockIdx.x * yTileX + tx;\n  const int k = blockIdx.z;\n  const int yBase = blockIdx.y * yTileY;\n\n  // Cooperatively initialize every shared row, including both halos.\n  // The endpoint planes remain distinct: only q < 0 or q > 63 is wrapped.\n  #pragma unroll\n  for (int part = 0; part < yTileRows / yThreadsY; ++part) {\n    const int tileY = ty + part * yThreadsY;\n    int q = yBase + tileY - 4;\n    if (q < 0) q += my - 1;\n    else if (q > my - 1) q -= my - 1;\n    s_f[tileY][tx] = f[k * mx * my + q * mx + i];\n  }\n\n  __syncthreads();\n\n  #pragma unroll\n  for (int output = 0; output < yTileY / yThreadsY; ++output) {\n    const int j = yBase + ty + output * yThreadsY;\n    const int sj = ty + 4 + output * yThreadsY;\n    const int globalIdx = k * mx * my + j * mx + i;\n\n    df[globalIdx] =\n      ( c_ay * ( s_f[sj+1][tx] - s_f[sj-1][tx] )\n      + c_by * ( s_f[sj+2][tx] - s_f[sj-2][tx] )\n      + c_cy * ( s_f[sj+3][tx] - s_f[sj-3][tx] )\n      + c_dy * ( s_f[sj+4][tx] - s_f[sj-4][tx] ) );\n  }\n}\n\n// y derivative using a 32-wide X tile and 16 output rows.\n// Each block cooperatively loads 24 rows (including halos) into shared memory.\n#include <cuda_runtime.h>\nextern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n{ static bool initialized=false; if(!initialized){setDerivativeParameters();initialized=true;} derivative_y_tiled<<<dim3(mx / yTileX, my / yTileY, mz), dim3(yTileX, yThreadsY, 1)>>>((const float*)A,C); }",
+        "path": "src/candidate.cu"
+      }
+    ],
+    "hypothesis": "Replacing the baseline's four-wide X pencils with 32 contiguous X lanes should reduce poorly utilized global-memory transactions. A 16-row Y output tile shares 24 cooperatively loaded rows, including explicitly wrapped halos, across two outputs per thread. The larger tile also adds halo loads and shared-memory work, so any timing benefit is uncertain and must be measured against the 3.5815 µs baseline after oracle validation.",
+    "memory_lessons": [],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "One candidate only; the catalog has no prior T2 candidates to compare for source diversity. The baseline is valid and correct (baseline-e1); this candidate has not been compiled, oracle-checked, or timed here. It preserves the stencil expression, full 64^3 output coverage, inputs, and unused scratch behavior. The 24 shared rows are all initialized; only coordinates below 0 or above 63 are wrapped by 63.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace the four-wide X-pencil Y derivative kernel with a 32-lane contiguous-X shared-memory tile.",
+      "Use a 16-row Y output tile with eight Y threads per block; each thread computes two output rows after loading three tile rows cooperatively.",
+      "Initialize all 24 shared rows, including halos; wrap only q < 0 or q > 63 by 63 so the in-range endpoint index 63 remains distinct."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "7953de01b1b541669cf67e1c6b1a35f8",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "7c1d8dff059caa2f990027a44f24f8777df996c4a35b4dfe0d3330c381e789bb",
+  "session_id": "88b17084a3a347fd952663a8e59aa214",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "f9064dc429f2e58cafb9d266381779ddbbd643dff118e9efc7802dbde2e0a7f9",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 13561,
+        "output_tokens": 10374,
+        "reasoning_output_tokens": 7334
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a3bf11d4fa1b442f3ce3b8f9d3db6ff8be9d5741a2c919159d96937ca556300c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "d2156ce3e167481b-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Proposed one measurable tiled-kernel contrast to the valid baseline, preserving its stencil and boundary convention; left correctness and speed claims to the controller."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Used the supplied fixed 64-cubed source and GH200/CUDA 12.6.3 target context; did not alter target or launch resources outside the kernel configuration."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "This candidate uses basic CUDA shared memory and thread/block indexing; it relies on no uncertain version-specific API or instruction."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Recorded the baseline mean of 3.5815466350566667e-06 seconds and made no speedup claim; official repeated measurements and oracle checks remain for the controller."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "7953de01b1b541669cf67e1c6b1a35f8",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "7c1d8dff059caa2f990027a44f24f8777df996c4a35b4dfe0d3330c381e789bb",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "88b17084a3a347fd952663a8e59aa214"
+    },
+    "observed_tokens": 23935,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 23935,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

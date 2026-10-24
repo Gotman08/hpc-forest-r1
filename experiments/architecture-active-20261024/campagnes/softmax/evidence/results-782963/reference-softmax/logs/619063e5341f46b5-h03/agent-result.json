@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "import torch\nimport triton\nimport triton.language as tl\n\n\n@triton.jit\ndef _streaming_softmax_kernel(\n    X,\n    Y,\n    N: tl.constexpr,\n    SX0: tl.constexpr,\n    SX1: tl.constexpr,\n    SY0: tl.constexpr,\n    SY1: tl.constexpr,\n    BLOCK: tl.constexpr,\n    ACC_TYPE: tl.constexpr,\n):\n    row = tl.program_id(0)\n    cols = tl.arange(0, BLOCK)\n    running_max = tl.full((), -float(\"inf\"), ACC_TYPE)\n    running_sum = tl.full((), 0.0, ACC_TYPE)\n\n    for base in range(0, N, BLOCK):\n        offsets = base + cols\n        mask = offsets < N\n        values = tl.load(\n            X + row * SX0 + offsets * SX1,\n            mask=mask,\n            other=-float(\"inf\"),\n        ).to(ACC_TYPE)\n        tile_max = tl.max(values, axis=0)\n        new_max = tl.maximum(running_max, tile_max)\n        tile_sum = tl.sum(tl.exp(values - new_max), axis=0)\n        running_sum = running_sum * tl.exp(running_max - new_max) + tile_sum\n        running_max = new_max\n\n    for base in range(0, N, BLOCK):\n        offsets = base + cols\n        mask = offsets < N\n        values = tl.load(\n            X + row * SX0 + offsets * SX1,\n            mask=mask,\n            other=-float(\"inf\"),\n        ).to(ACC_TYPE)\n        output = tl.exp(values - running_max) / running_sum\n        tl.store(Y + row * SY0 + offsets * SY1, output, mask=mask)\n\n\ndef run(x):\n    rows, cols = x.shape\n    ret = torch.empty_like(x)\n    acc_type = tl.float64 if x.dtype == torch.float64 else tl.float32\n    block = 1024 if cols <= 1024 else 2048\n    _streaming_softmax_kernel[(rows,)](\n        x,\n        ret,\n        cols,\n        x.stride(0),\n        x.stride(1),\n        ret.stride(0),\n        ret.stride(1),\n        block,\n        acc_type,\n        num_warps=4,\n    )\n    return ret\n",
+      "path": "src/candidate.py"
+    }
+  ],
+  "hypothesis": "Four measured streaming variants were correctness-valid, with 1024-element tiles fastest at 57.54 µs, compared with 59.73 µs for 512, 69.73 µs for 256, and 106.05 µs for 128. This experiment tests whether using 2048-element tiles only for wider rows reduces loop overhead enough to offset increased live tile state, while keeping 1024-element tiles for smaller rows. The supplied h02 diagnostic also identified a missing `triton` import; this proposal restores it. Official measurements must determine performance and correctness.",
+  "notes": "Single-CTA-per-row streaming algorithm retained, with masked tails, input/output strides, stable running max and rescaled sum, and float64 accumulation for float64 input. Added the missing `triton` import identified by the previous development diagnostic. No new measurement is claimed.",
+  "sources_kept": [],
+  "transformations": [
+    "Added the missing `triton` import required by the JIT decorator.",
+    "Selected a 1024-column tile for widths up to 1024 and a 2048-column tile for wider rows, testing reduced tile-loop overhead on wide rows.",
+    "Preserved stable running-maximum/rescaled-sum accumulation, a second masked pass to write output, arbitrary-width tail handling, stride support, and float64 accumulation for float64 inputs."
+  ]
+}

@@ -1,0 +1,333 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "890e61fde2073f79a1047764e06b2498b9cca063aec4f5109eae336ba016ae3f",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "26ece17080a44458",
+        "kind": "experiment",
+        "role": "G",
+        "tree_id": "e1:G-merge-1-1",
+        "mission_id": "26ece17080a44458",
+        "facts": {
+          "commit": "99419f81ba43a195d3dbe86a98d57a7bed66b810",
+          "base_commit": "0dbfeef7b88d7cfaacb9387b41a42607b2d5267d",
+          "parent_id": null,
+          "source_ids": [
+            "cef4bbb63e3e49cf",
+            "5f05ca36bcd347ee"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.29376004326e-06,
+          "score": 0.8370458340319211
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Combining cef4bbb63e3e49cf's four-value uint4 global transfers with 5f05ca36bcd347ee's XOR-swizzled shared-tile indexing may retain coalesced vector transfers while avoiding the padded tile. The combined performance is unmeasured; compare it with the base.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Retained the base candidate's aligned uint4 global loads and stores and 8x32-thread tile ownership.\",\"Replaced the padded 32x33 shared tile with a 32x32 XOR-swizzled layout: store logical tile[row][col] at tile[row][col ^ row] and apply the same XOR to retrieve each transposed element.\",\"Preserved unsigned bit-pattern transfers, the entry point, complete 32x32 tile coverage, and allocation behavior.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "24f22d4034d8481e",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "24f22d4034d8481e",
+        "facts": {
+          "commit": "2268ee45f4829af7a0f573f9bc219abc56aa1bd2",
+          "base_commit": "f86359bb59fa2e023aa759f29971b8c4a9ba1a8d",
+          "parent_id": "e8b5e81f11b14f29",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.3553067284333333e-06,
+          "score": 0.8345048202071027
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected 32x33 scalar tile uses a 32x8 block. This candidate instead assigns each thread a 2x2 subtile in a 16x16 block, using float2 transfers for adjacent input columns and, after the shared-memory transpose, adjacent output columns. This changes thread ownership and vector grouping; it may reduce transfer instruction overhead, but the narrower lane groups and changed shared-memory access pattern could offset that benefit. Compare it with the measured scalar and four-adjacent-element variants rather than assuming it is faster.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replaced the 32x8 scalar-thread tile kernel with a 16x16 block whose threads each own a 2x2 input subtile.\",\"Used float2 input loads and output stores around a padded 32x33 shared-memory tile, exchanging the tile orientation between coalesced load and store phases.\",\"Kept the run entry point and allocation behavior, used size_t linear offsets, and performed no arithmetic on matrix values.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "3163c605270145ae",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "3163c605270145ae",
+        "facts": {
+          "commit": "8d5bbe473f90548c932af9c613475af20f3a2a9e",
+          "base_commit": "771f60d59939b28395ee0ec2381d357e15f62237",
+          "parent_id": "51ce1da6ff424257",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.03359983365e-06,
+          "score": 0.770706403747801
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A warp can load a 4×32 input strip with adjacent lanes reading adjacent columns, then transpose four-lane subtiles by exchanging the two low lane bits with two register-index bits using only width-4, same-warp shuffles. This reduces values and shuffle stages per thread compared with the selected 16×16-subgroup parent, but requires eight warps per 32×32 tile and writes in four-float segments, so the store transactions or added warps may outweigh the reduced per-thread work.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Changed ownership to eight warps per 32×32 tile, with each warp loading a 4×32 strip and each lane holding four input-row values for one column.\",\"Transposed 4×4 subtiles by swapping two register-index bits and two low lane bits through width-4 warp-local XOR shuffles; no cross-warp shuffle, shared-memory staging, or CTA barrier is used.\",\"Stored bit-preserved unsigned float representations to output using size_t offsets; retained the run entry point and 32×32 grid coverage for positive n divisible by 32.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "c4229d9ed28395c6e6046c269dd1dd27f0a17cc7",
+          "base_commit": "c4229d9ed28395c6e6046c269dd1dd27f0a17cc7",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.6919040431599998e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "26ece17080a44458-h01",
+        "kind": "development",
+        "role": "G",
+        "tree_id": "e1:G-merge-1-1",
+        "mission_id": "26ece17080a44458",
+        "facts": {
+          "commit": null,
+          "base_commit": "0dbfeef7b88d7cfaacb9387b41a42607b2d5267d",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Combining cef4bbb63e3e49cf's four-value uint4 global transfers with 5f05ca36bcd347ee's XOR-swizzled shared-tile indexing may retain coalesced vector transfers while avoiding the padded tile. The combined performance is unmeasured; compare it with the base.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Retained the base candidate's aligned uint4 global loads and stores and 8x32-thread tile ownership.\",\"Replaced the padded 32x33 shared tile with a 32x32 XOR-swizzled layout: store logical tile[row][col] at tile[row][col ^ row] and apply the same XOR to retrieve each transposed element.\",\"Preserved unsigned bit-pattern transfers, the entry point, complete 32x32 tile coverage, and allocation behavior.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "24f22d4034d8481e-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "24f22d4034d8481e",
+        "facts": {
+          "commit": null,
+          "base_commit": "f86359bb59fa2e023aa759f29971b8c4a9ba1a8d",
+          "parent_id": "e8b5e81f11b14f29",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected 32x33 scalar tile uses a 32x8 block. This candidate instead assigns each thread a 2x2 subtile in a 16x16 block, using float2 transfers for adjacent input columns and, after the shared-memory transpose, adjacent output columns. This changes thread ownership and vector grouping; it may reduce transfer instruction overhead, but the narrower lane groups and changed shared-memory access pattern could offset that benefit. Compare it with the measured scalar and four-adjacent-element variants rather than assuming it is faster.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replaced the 32x8 scalar-thread tile kernel with a 16x16 block whose threads each own a 2x2 input subtile.\",\"Used float2 input loads and output stores around a padded 32x33 shared-memory tile, exchanging the tile orientation between coalesced load and store phases.\",\"Kept the run entry point and allocation behavior, used size_t linear offsets, and performed no arithmetic on matrix values.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 33,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Shared-memory transpos",
+        "objective": "Own only src/candidate.cu. Replace the baseline's strided global stores with a single-pass shared-memory tiled transpose: load input rows coalesced, exchange tile orientation in shared memory, then store output rows coalesced. Compare the padded 32x33 scalar tile with at least one meaningfully different shared-memory layout or multi-element/vectorized thread-ownership v",
+        "records": 17,
+        "results": {
+          "trials": 6,
+          "valid": 6,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 6,
+          "distinct_programs": 6,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "cef4bbb63e3e49cf",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.14218667336e-06,
+          "hypothesis_as_data": "A 32x33 padded shared tile with 8x32 threads, each owning four adjacent input and output values, may improve on the prio"
+        },
+        "latest": {
+          "id": "24f22d4034d8481e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.3553067284333333e-06,
+          "hypothesis_as_data": "The selected 32x33 scalar tile uses a 32x8 block. This candidate instead assigns each thread a 2x2 subtile in a 16x16 bl"
+        },
+        "alternative": {
+          "id": "24f22d4034d8481e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.3553067284333333e-06,
+          "hypothesis_as_data": "The selected 32x33 scalar tile uses a 32x8 block. This candidate instead assigns each thread a 2x2 subtile in a 16x16 bl"
+        },
+        "text_truncated": true
+      },
+      {
+        "role": "T2",
+        "subject": "Warp-local registe",
+        "objective": "Own only src/candidate.cu. Independently explore a warp-register transpose using warp lane permutations/shuffles to turn coalesced input loads into coalesced output stores, aiming to avoid CTA shared-memory staging and its block-wide synchronization. Design and describe element ownership so each shuffle exchange uses data held by participating lanes in the same warp; do not assume a warp",
+        "records": 12,
+        "results": {
+          "trials": 4,
+          "valid": 4,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "51ce1da6ff424257",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.382080079366667e-06,
+          "hypothesis_as_data": "Increasing each same-warp transpose subgroup from 8×8 to 16×16 reduces the lane/register-bit exchange count per 32×32 ti"
+        },
+        "latest": {
+          "id": "3163c605270145ae",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.03359983365e-06,
+          "hypothesis_as_data": "A warp can load a 4×32 input strip with adjacent lanes reading adjacent columns, then transpose four-lane subtiles by ex"
+        },
+        "alternative": {
+          "id": "3163c605270145ae",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.03359983365e-06,
+          "hypothesis_as_data": "A warp can load a 4×32 input strip with adjacent lanes reading adjacent columns, then transpose four-lane subtiles by ex"
+        },
+        "text_truncated": true
+      }
+    ],
+    "offset": 0,
+    "total": 2,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "26ece17080a44458",
+    "24f22d4034d8481e",
+    "3163c605270145ae",
+    "baseline-e1",
+    "26ece17080a44458-h01",
+    "24f22d4034d8481e-h01",
+    "cef4bbb63e3e49cf",
+    "51ce1da6ff424257"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "0dbfeef7b88d7cfaacb9387b41a42607b2d5267d",
+  "selected_parent_id": null
+}

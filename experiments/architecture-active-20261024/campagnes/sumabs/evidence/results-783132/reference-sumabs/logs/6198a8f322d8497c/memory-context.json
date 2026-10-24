@@ -1,0 +1,166 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "a1ef51a848fa6d317e2f8e784f3120aab226567e556433f8d42a38eb9d343297",
+    "tree_id": "e1:Gm1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "de3c9c834e5e486b",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "de3c9c834e5e486b",
+        "facts": {
+          "commit": "b30319ad82692c2a4ce5e28e709385060e48c666",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00045944908459981284,
+          "score": 0.7277408073952532
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Fusing absolute value into the first reduction removes the full-size temporary pass and its associated initialization. Choosing roughly one partial per 4096 input values, capped at 8192, should expose more CTAs for large inputs while keeping finalization to one CTA with at most 8192 partials; the controller must measure full-call time and validate the FP64 error bound.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(x[i]) into first-stage accumulation, eliminating the intermediate full-size absolute-value array.\",\"Partition input into contiguous CTA chunks sized by ceil(n/partial_count), with partial_count=ceil(n/4096) clamped to [1,8192].\",\"Reduce each CTA's scalar loads with CUB BlockReduce and write one current-call partial per CTA.\",\"Use one final CTA to reduce all partials and overwrite output without atomics or a separate output initialization.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "2f1c4897b2e14825",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "2f1c4897b2e14825",
+        "facts": {
+          "commit": "89e9028ac5aa2e6ef02c03881d97873fd6eacc69",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0002950901428858439,
+          "score": 0.8062675692781477
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Four independent per-thread accumulators should reduce the dependency chain in the input streaming loop while retaining the existing 1024-CTA, 256-thread grid-stride ownership. Fusing absolute value with each CTA's reduction also avoids materializing and rereading an n-element absolute-value array. The candidate is unmeasured; the supplied source does not contain a two-stage fused parent, so comparison with its measured baseline will not isolate the CTA mapping effect.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse absolute value and CTA-local reduction, replacing the full-size absolute-value scratch pass with one partial per CTA.\",\"Retain 1024 CTAs, 256 threads, and the existing grid-stride input ownership; use four independent accumulators per thread and guard all unrolled tail loads.\",\"Reduce the fixed 1024 partials in one 256-thread CUB finalizer and write the result directly, avoiding floating-point atomics.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0012280938784281412,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm1",
+        "subject": "Combinaison du mapping T3 et du partitionnement T1",
+        "objective": "Tester la composition du mapping à quatre accumulateurs par thread de T3 avec le partitionnement à 8192 partiels de T1. Valider tous les cas et comparer le temps complet au meilleur candidat T3; ne supposer aucun gain additif.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "de3c9c834e5e486b",
+    "2f1c4897b2e14825",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "89e9028ac5aa2e6ef02c03881d97873fd6eacc69",
+  "selected_parent_id": null
+}

@@ -1,0 +1,170 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "2d33d81cdcfbbc0125107dd390bec575ba5a2ce3cdcf202e3523a21b61c661cb",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "20d5d3610fd14da9",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "20d5d3610fd14da9",
+        "facts": {
+          "commit": "b41113f1f76033304a2f6892090a0b3806e4ca9d",
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.015874440047619048,
+          "score": 0.9972280570200296
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The parent’s row-column-K order walks B with a stride of n and performs no parallel work. Tiled i-k-j accumulation makes B and C accesses contiguous in the output-column loop; keeping an 8x128 C tile and 32x128 B panel active should improve locality. Static ownership of disjoint 8-row tiles can use up to eight threads for larger matrices, while serial execution below n=256 avoids parallel overhead on small cases. These are unmeasured expectations, not a speedup claim.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Zero the complete output on every call, then compute generic positive n dimensions without packing or explicit intrinsics.\",\"Tile the row, output-column, and K loops (8x128x32) while keeping the inner output-column loop contiguous and processing K blocks in ascending order.\",\"Use static OpenMP scheduling over disjoint row tiles for n >= 256, clamp worker count to 1..8, and use a serial path for smaller cases.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "20d5d3610fd14da9-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "20d5d3610fd14da9",
+        "facts": {
+          "commit": null,
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The parent’s row-column-K order walks B with a stride of n and performs no parallel work. Tiled i-k-j accumulation makes B and C accesses contiguous in the output-column loop; keeping an 8x128 C tile and 32x128 B panel active should improve locality. Static ownership of disjoint 8-row tiles can use up to eight threads for larger matrices, while serial execution below n=256 avoids parallel overhead on small cases. These are unmeasured expectations, not a speedup claim.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Zero the complete output on every call, then compute generic positive n dimensions without packing or explicit intrinsics.\",\"Tile the row, output-column, and K loops (8x128x32) while keeping the inner output-column loop contiguous and processing K blocks in ascending order.\",\"Use static OpenMP scheduling over disjoint row tiles for n >= 256, clamp worker count to 1..8, and use a serial path for smaller cases.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.710953334666667,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Unpacked cache-tiled loop ordering with OpenMP and compiler vectorization",
+        "objective": "In src/candidate.cpp, explore an unpacked GEMM route based on loop interchange (including i-k-j), cache tiling, and OpenMP ownership of disjoint output rows or tiles. Keep the output-column loop contiguous so the frozen GCC build can auto-vectorize it; do not pack matrices or use explicit x86 intrinsics, keeping this route distinct from the SIMD tree. Tune loop/tile order and scheduling using measured performance, including whether to avoid parallel overhead on small sizes. Respect threads (at most eight), read-only inputs, and complete output overwrite on every call. Preserve correctness for all supported sizes and signed, varying inputs within abs_error <= 0.002 + 5e-5*abs(reference). Change only src/candidate.cpp; record failed attempts and compare valid repeated native timings, prioritizing n=1024.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "20d5d3610fd14da9",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.015874440047619048,
+          "hypothesis_as_data": "The parent’s row-column-K order walks B with a stride of n and performs no parallel work. Tiled i-k-j accumulation makes B and C accesses contiguous in the output-column loop; keeping an 8x128 C tile and 32x128 B panel active should improve"
+        },
+        "latest": {
+          "id": "20d5d3610fd14da9",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.015874440047619048,
+          "hypothesis_as_data": "The parent’s row-column-K order walks B with a stride of n and performs no parallel work. Tiled i-k-j accumulation makes B and C accesses contiguous in the output-column loop; keeping an 8x128 C tile and 32x128 B panel active should improve"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "20d5d3610fd14da9",
+    "20d5d3610fd14da9-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+  "selected_parent_id": null
+}

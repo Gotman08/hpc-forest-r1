@@ -1,0 +1,288 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "a1ef51a848fa6d317e2f8e784f3120aab226567e556433f8d42a38eb9d343297",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "6d96df35e28240e2",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "6d96df35e28240e2",
+        "facts": {
+          "commit": "1be02196998453fc96547d83c8e1bc961d646d73",
+          "base_commit": "d1ae4c6a373696439a295fbc05e27eb16b870c3c",
+          "parent_id": "f505affbf906415b",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00030610346794128414,
+          "score": 0.8004797305472745
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected parent uses a target of 8192 elements per partial and a 2048-partial cap, measuring 0.000294683 s; the prior 4096-cap candidate measured 0.000289782 s. Raising the cap to 3072 while retaining the 8192 target tests whether 50% more first-stage CTAs than the parent improve large-input parallelism while keeping finalizer fan-in below 4096. No speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Keep the fused first-stage sum(abs(x)) with contiguous scalar loads and a 256-thread CUB block reduction.\",\"Retain the 8192-elements-per-partial target and raise the maximum partial count from 2048 to 3072, increasing large-input first-stage parallelism while bounding finalizer fan-in.\",\"Retain the single-CTA finalizer that reduces all current-call partials and overwrites output; retain explicit zero output for non-positive n.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "6d96df35e28240e2-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "6d96df35e28240e2",
+        "facts": {
+          "commit": null,
+          "base_commit": "d1ae4c6a373696439a295fbc05e27eb16b870c3c",
+          "parent_id": "f505affbf906415b",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected parent uses a target of 8192 elements per partial and a 2048-partial cap, measuring 0.000294683 s; the prior 4096-cap candidate measured 0.000289782 s. Raising the cap to 3072 while retaining the 8192 target tests whether 50% more first-stage CTAs than the parent improve large-input parallelism while keeping finalizer fan-in below 4096. No speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Keep the fused first-stage sum(abs(x)) with contiguous scalar loads and a 256-thread CUB block reduction.\",\"Retain the 8192-elements-per-partial target and raise the maximum partial count from 2048 to 3072, increasing large-input first-stage parallelism while bounding finalizer fan-in.\",\"Retain the single-CTA finalizer that reduces all current-call partials and overwrites output; retain explicit zero output for non-positive n.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "8546f4f034a64302",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "8546f4f034a64302",
+        "facts": {
+          "commit": "3040f1d26c466117af9a3b3c96b96e26ebf129af",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0002897824048995972,
+          "score": 0.8090869406930264
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The correct fused candidate with up to 8192 partials measured 0.459449 ms, while the 16384-partial variant measured 0.473368 ms. This candidate keeps approximately 4096 elements per partial until the cap, then limits the count to 4096; at the largest input that halves finalizer fan-in versus 8192 partials but also halves first-stage CTA count. It tests whether the cheaper finalization offsets reduced large-input parallelism. No speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(input[i]) into a first-stage block sum so no full-size absolute-value array or output initialization pass is needed.\",\"Set partial_count to ceil(n/4096), capped at 4096; partition the input into contiguous CTA chunks and use scalar loads with a conventional 256-thread CUB BlockReduce.\",\"Reduce all current-call partials in one final CTA and directly overwrite output; explicitly zero output for non-positive n.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "8546f4f034a64302-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "8546f4f034a64302",
+        "facts": {
+          "commit": null,
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The correct fused candidate with up to 8192 partials measured 0.459449 ms, while the 16384-partial variant measured 0.473368 ms. This candidate keeps approximately 4096 elements per partial until the cap, then limits the count to 4096; at the largest input that halves finalizer fan-in versus 8192 partials but also halves first-stage CTA count. It tests whether the cheaper finalization offsets reduced large-input parallelism. No speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(input[i]) into a first-stage block sum so no full-size absolute-value array or output initialization pass is needed.\",\"Set partial_count to ceil(n/4096), capped at 4096; partition the input into contiguous CTA chunks and use scalar loads with a conventional 256-thread CUB BlockReduce.\",\"Reduce all current-call partials in one final CTA and directly overwrite output; explicitly zero output for non-positive n.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "f505affbf906415b",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "f505affbf906415b",
+        "facts": {
+          "commit": "d1ae4c6a373696439a295fbc05e27eb16b870c3c",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0002946832021077474,
+          "score": 0.8064830329570997
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The fastest observed correct T1 candidate used at most 4096 partials (0.000289782 s), while the 8192- and 16384-partial candidates were slower. This candidate targets one partial per 8192 inputs and caps the count at 2048, halving the maximum finalizer fan-in and partial writes versus the 4096-cap candidate, while doubling the largest per-CTA chunk. It tests whether that lower overhead still provides enough large-input parallelism; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(input[i]) into a first-stage contiguous scalar-load sum, using 256-thread CUB BlockReduce per CTA.\",\"Choose partial_count = ceil(n/8192), capped at 2048; proportionally partition all input elements into contiguous CTA chunks.\",\"Use one final 256-thread CTA to reduce every current-call partial and overwrite the output; explicitly overwrite output with zero when n is non-positive.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "f505affbf906415b-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "f505affbf906415b",
+        "facts": {
+          "commit": null,
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The fastest observed correct T1 candidate used at most 4096 partials (0.000289782 s), while the 8192- and 16384-partial candidates were slower. This candidate targets one partial per 8192 inputs and caps the count at 2048, halving the maximum finalizer fan-in and partial writes versus the 4096-cap candidate, while doubling the largest per-CTA chunk. It tests whether that lower overhead still provides enough large-input parallelism; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(input[i]) into a first-stage contiguous scalar-load sum, using 256-thread CUB BlockReduce per CTA.\",\"Choose partial_count = ceil(n/8192), capped at 2048; proportionally partition all input elements into contiguous CTA chunks.\",\"Use one final 256-thread CTA to reduce every current-call partial and overwrite the output; explicitly overwrite output with zero when n is non-positive.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 16,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Hierarchical fusion: partial granularity and finalization",
+        "objective": "Build a two-stage fused sum(abs(x)) with simple contiguous scalar loads and a conventional per-CTA reduction. Explore global work partitioning: vary first-stage partial count/granularity and the finalizer’s fan-in so the large input is sufficiently parallel while finalization stays cheap. Leave vectorized loads and thread/block mapping to T3. Every consumed partial must be written in the current call, and the finalizer must overwrite output. Validate all required sizes and the stated FP64 error bound; compare full-call time.",
+        "records": 14,
+        "results": {
+          "trials": 5,
+          "valid": 5,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 5,
+          "distinct_programs": 5,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "8546f4f034a64302",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0002897824048995972,
+          "hypothesis_as_data": "The correct fused candidate with up to 8192 partials measured 0.459449 ms, while the 16384-partial variant measured 0.473368 ms. This candidate keeps approximately 4096 elements per partial until the cap, then limits the count to 4096; at t"
+        },
+        "latest": {
+          "id": "6d96df35e28240e2",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00030610346794128414,
+          "hypothesis_as_data": "The selected parent uses a target of 8192 elements per partial and a 2048-partial cap, measuring 0.000294683 s; the prior 4096-cap candidate measured 0.000289782 s. Raising the cap to 3072 while retaining the 8192 target tests whether 50% m"
+        },
+        "alternative": {
+          "id": "6d96df35e28240e2",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00030610346794128414,
+          "hypothesis_as_data": "The selected parent uses a target of 8192 elements per partial and a 2048-partial cap, measuring 0.000294683 s; the prior 4096-cap candidate measured 0.000289782 s. Raising the cap to 3072 while retaining the 8192 target tests whether 50% m"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "6d96df35e28240e2",
+    "6d96df35e28240e2-h01",
+    "8546f4f034a64302",
+    "8546f4f034a64302-h01",
+    "f505affbf906415b",
+    "f505affbf906415b-h01"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "cae3944bd9d8cd8008b7362684cd778bced778a0",
+  "selected_parent_id": "ae1d98143ce04df2"
+}

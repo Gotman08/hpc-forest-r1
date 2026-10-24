@@ -1,0 +1,166 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "2d33d81cdcfbbc0125107dd390bec575ba5a2ce3cdcf202e3523a21b61c661cb",
+    "tree_id": "e1:Gm1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "20d5d3610fd14da9",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "20d5d3610fd14da9",
+        "facts": {
+          "commit": "b41113f1f76033304a2f6892090a0b3806e4ca9d",
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.015874440047619048,
+          "score": 0.9972280570200296
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The parent’s row-column-K order walks B with a stride of n and performs no parallel work. Tiled i-k-j accumulation makes B and C accesses contiguous in the output-column loop; keeping an 8x128 C tile and 32x128 B panel active should improve locality. Static ownership of disjoint 8-row tiles can use up to eight threads for larger matrices, while serial execution below n=256 avoids parallel overhead on small cases. These are unmeasured expectations, not a speedup claim.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Zero the complete output on every call, then compute generic positive n dimensions without packing or explicit intrinsics.\",\"Tile the row, output-column, and K loops (8x128x32) while keeping the inner output-column loop contiguous and processing K blocks in ascending order.\",\"Use static OpenMP scheduling over disjoint row tiles for n >= 256, clamp worker count to 1..8, and use a serial path for smaller cases.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4184453b5e7a41a6",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "4184453b5e7a41a6",
+        "facts": {
+          "commit": "359c83cd5e093c1682fec2365f7f375dc7dd2b15",
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0034432215904214554,
+          "score": 0.9993974479095871
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "An 8x16 register-tiled AVX-512 FMA kernel should accelerate the large GEMM relative to the measured serial baseline. B-only 128x128 panels may improve reuse for larger matrices, but their per-call allocation and packing cost could offset that benefit; the same tile kernel uses direct B access below a generic two-panel threshold. A later matched-size direct-versus-packed run is needed to isolate the packing effect.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace fixed-size scalar GEMM with generic 8-row by 16-column output tiles and explicit AVX-512 FMA microkernel, guarded by runtime AVX-512F/FMA detection; use a scalar fallback for unsupported targets and row tails.\",\"Assign disjoint output row/column tiles to an OpenMP team clamped to at most eight threads.\",\"Use direct B access for dimensions below two 128-column panels; for larger dimensions, allocate a per-call 128x128 B-panel buffer, pack each K/column panel, and reuse the same microkernel across row tiles.\",\"Initialize each output tile from zero on the first K panel and accumulate later panels, ensuring all output elements are overwritten on every invocation and handling K, row, and column tails generically.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.710953334666667,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm1",
+        "subject": "Intégration mesurée du tuilage T1 autour du noyau SIMD T2",
+        "objective": "Demander une intégration mesurée en partant de la source T2, la plus rapide. Tester si l’ordonnancement ou le tuilage de la source T1 peut compléter le noyau SIMD de T2; ne retenir que les modifications compatibles et mesurées, sans présumer d’un gain additif. Préserver la voie T2 comme référence et valider la correction ainsi que les performances avec le protocole inchangé.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "20d5d3610fd14da9",
+    "4184453b5e7a41a6",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "359c83cd5e093c1682fec2365f7f375dc7dd2b15",
+  "selected_parent_id": null
+}

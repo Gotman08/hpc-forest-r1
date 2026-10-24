@@ -1,0 +1,12 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "id": "01dca30e10394426",
+  "commit": "f4c150a44f6fe967f844bfd23d1dbdd97935cdc0",
+  "snapshot_digest": "90608f57fb770841fb5977aedb39cd87bb3d4151a869d96f0a4099986dc04b37",
+  "offset_unit": "characters",
+  "path": "src/candidate.cpp",
+  "file_sha256": "7d00d5f871de60dd94a1ff761df23016000648f77f4017a2066988b91da2a328",
+  "total_characters": 1110,
+  "text": "/*\n * Copyright (c) 2007 Bart Massey\n * [This program is licensed under the \"MIT License\"]\n * Please see the file LICENSE in the source\n * distribution of this software for license terms.\n */\n\n#include <cstdint>\nstatic inline uint32_t\npopcount_naive(uint32_t n) {\n    uint32_t c = 0;\n    while (n) {\n\tc += n & 1;\n\tn >>= 1;\n    }\n    return c;\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1, const void* input2, void* output,\n                    int n, int parameter, int threads)\n{\n    const uint32_t* a = (const uint32_t*)input1;\n    uint32_t result = 0;\n\n    for (int j = 0; j < parameter; ++j) {\n        int i = 0;\n        for (; n - i >= 4; i += 4) {\n            result += popcount_naive(a[i] ^ result);\n            result += popcount_naive(a[i + 1] ^ result);\n            result += popcount_naive(a[i + 2] ^ result);\n            result += popcount_naive(a[i + 3] ^ result);\n        }\n        for (; i < n; ++i) {\n            result += popcount_naive(a[i] ^ result);\n        }\n    }\n\n    *(uint32_t*)output = result;\n}\n",
+  "next_offset": null
+}

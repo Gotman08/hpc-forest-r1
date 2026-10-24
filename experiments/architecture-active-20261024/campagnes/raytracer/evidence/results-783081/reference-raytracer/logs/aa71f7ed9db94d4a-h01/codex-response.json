@@ -1,0 +1,147 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "/*\n  Copyright (c) 2010-2023, Intel Corporation\n\n  SPDX-License-Identifier: BSD-3-Clause\n*/\n\n#ifdef _MSC_VER\n#define _CRT_SECURE_NO_WARNINGS\n#define NOMINMAX\n#pragma warning(disable : 4244)\n#pragma warning(disable : 4305)\n#endif\n\n#include <algorithm>\n#include <stdint.h>\n\n// Just enough of a float3 class to do what we need in this file.\n#ifdef _MSC_VER\n__declspec(align(16))\n#endif\n    struct float3 {\n    float3() { x = y = z = pad = 0.; }\n    float3(float xx, float yy, float zz) {\n        x = xx;\n        y = yy;\n        z = zz;\n        pad = 0.;\n    }\n\n    float3 operator*(float f) const { return float3(x * f, y * f, z * f); }\n    float3 operator-(const float3 &f2) const { return float3(x - f2.x, y - f2.y, z - f2.z); }\n    float3 operator*(const float3 &f2) const { return float3(x * f2.x, y * f2.y, z * f2.z); }\n    float x, y, z;\n    float pad; // match padding/alignment of ispc version\n}\n#ifndef _MSC_VER\n__attribute__((aligned(16)))\n#endif\n;\n\nstruct Ray {\n    float3 origin, dir, invDir;\n    unsigned int dirIsNeg[3];\n    float mint, maxt;\n    int hitId;\n};\n\n// Declare these in a namespace so the mangling matches\nnamespace ispc {\nstruct Triangle {\n    float p[3][4]; // extra float pad after each vertex\n    int32_t id;\n    int32_t pad[3]; // make 16 x 32-bits\n};\n\nstruct LinearBVHNode {\n    float bounds[2][3];\n    int32_t offset; // primitives for leaf, second child for interior\n    uint8_t nPrimitives;\n    uint8_t splitAxis;\n    uint16_t pad;\n};\n} // namespace ispc\n\nusing namespace ispc;\n\ninline float3 Cross(const float3 &v1, const float3 &v2) {\n    float v1x = v1.x, v1y = v1.y, v1z = v1.z;\n    float v2x = v2.x, v2y = v2.y, v2z = v2.z;\n    float3 ret;\n    ret.x = (v1y * v2z) - (v1z * v2y);\n    ret.y = (v1z * v2x) - (v1x * v2z);\n    ret.z = (v1x * v2y) - (v1y * v2x);\n    return ret;\n}\n\ninline float Dot(const float3 &a, const float3 &b) { return a.x * b.x + a.y * b.y + a.z * b.z; }\n\nstatic void generateRay(const float raster2camera[4][4], const float camera2world[4][4], float x, float y, Ray &ray) {\n    ray.mint = 0.f;\n    ray.maxt = 1e30f;\n\n    ray.hitId = 0;\n\n    // transform raster coordinate (x, y, 0) to camera space\n    float camx = raster2camera[0][0] * x + raster2camera[0][1] * y + raster2camera[0][3];\n    float camy = raster2camera[1][0] * x + raster2camera[1][1] * y + raster2camera[1][3];\n    float camz = raster2camera[2][3];\n    float camw = raster2camera[3][3];\n    camx /= camw;\n    camy /= camw;\n    camz /= camw;\n\n    ray.dir.x = camera2world[0][0] * camx + camera2world[0][1] * camy + camera2world[0][2] * camz;\n    ray.dir.y = camera2world[1][0] * camx + camera2world[1][1] * camy + camera2world[1][2] * camz;\n    ray.dir.z = camera2world[2][0] * camx + camera2world[2][1] * camy + camera2world[2][2] * camz;\n\n    ray.origin.x = camera2world[0][3] / camera2world[3][3];\n    ray.origin.y = camera2world[1][3] / camera2world[3][3];\n    ray.origin.z = camera2world[2][3] / camera2world[3][3];\n\n    ray.invDir.x = 1.f / ray.dir.x;\n    ray.invDir.y = 1.f / ray.dir.y;\n    ray.invDir.z = 1.f / ray.dir.z;\n\n    ray.dirIsNeg[0] = (ray.invDir.x < 0) ? 1 : 0;\n    ray.dirIsNeg[1] = (ray.invDir.y < 0) ? 1 : 0;\n    ray.dirIsNeg[2] = (ray.invDir.z < 0) ? 1 : 0;\n}\n\nstatic inline bool BBoxIntersect(const float bounds[2][3], const Ray &ray) {\n    float3 bounds0(bounds[0][0], bounds[0][1], bounds[0][2]);\n    float3 bounds1(bounds[1][0], bounds[1][1], bounds[1][2]);\n    float t0 = ray.mint, t1 = ray.maxt;\n\n    float3 tNear = (bounds0 - ray.origin) * ray.invDir;\n    float3 tFar = (bounds1 - ray.origin) * ray.invDir;\n    if (tNear.x > tFar.x) {\n        float tmp = tNear.x;\n        tNear.x = tFar.x;\n        tFar.x = tmp;\n    }\n    t0 = std::max(tNear.x, t0);\n    t1 = std::min(tFar.x, t1);\n\n    if (tNear.y > tFar.y) {\n        float tmp = tNear.y;\n        tNear.y = tFar.y;\n        tFar.y = tmp;\n    }\n    t0 = std::max(tNear.y, t0);\n    t1 = std::min(tFar.y, t1);\n\n    if (tNear.z > tFar.z) {\n        float tmp = tNear.z;\n        tNear.z = tFar.z;\n        tFar.z = tmp;\n    }\n    t0 = std::max(tNear.z, t0);\n    t1 = std::min(tFar.z, t1);\n\n    return (t0 <= t1);\n}\n\ninline bool TriIntersect(const Triangle &tri, Ray &ray) {\n    float3 p0(tri.p[0][0], tri.p[0][1], tri.p[0][2]);\n    float3 p1(tri.p[1][0], tri.p[1][1], tri.p[1][2]);\n    float3 p2(tri.p[2][0], tri.p[2][1], tri.p[2][2]);\n    float3 e1 = p1 - p0;\n    float3 e2 = p2 - p0;\n\n    float3 s1 = Cross(ray.dir, e2);\n    float divisor = Dot(s1, e1);\n\n    if (divisor == 0.)\n        return false;\n    float invDivisor = 1.f / divisor;\n\n    // Compute first barycentric coordinate\n    float3 d = ray.origin - p0;\n    float b1 = Dot(d, s1) * invDivisor;\n    if (b1 < 0. || b1 > 1.)\n        return false;\n\n    // Compute second barycentric coordinate\n    float3 s2 = Cross(d, e1);\n    float b2 = Dot(ray.dir, s2) * invDivisor;\n    if (b2 < 0. || b1 + b2 > 1.)\n        return false;\n\n    // Compute _t_ to intersection point\n    float t = Dot(e2, s2) * invDivisor;\n    if (t < ray.mint || t > ray.maxt)\n        return false;\n\n    ray.maxt = t;\n    ray.hitId = tri.id;\n    return true;\n}\n\nbool BVHIntersect(const LinearBVHNode nodes[], const Triangle tris[], Ray &r) {\n    Ray ray = r;\n    bool hit = false;\n    // Follow ray through BVH nodes to find primitive intersections\n    int todoOffset = 0, nodeNum = 0;\n    int todo[64];\n\n    while (true) {\n        // Check ray against BVH node\n        const LinearBVHNode &node = nodes[nodeNum];\n        if (BBoxIntersect(node.bounds, ray)) {\n            unsigned int nPrimitives = node.nPrimitives;\n            if (nPrimitives > 0) {\n                // Intersect ray with primitives in leaf BVH node\n                unsigned int primitivesOffset = node.offset;\n                for (unsigned int i = 0; i < nPrimitives; ++i) {\n                    if (TriIntersect(tris[primitivesOffset + i], ray))\n                        hit = true;\n                }\n                if (todoOffset == 0)\n                    break;\n                nodeNum = todo[--todoOffset];\n            } else {\n                // Put far BVH node on _todo_ stack, advance to near node\n                if (r.dirIsNeg[node.splitAxis]) {\n                    todo[todoOffset++] = nodeNum + 1;\n                    nodeNum = node.offset;\n                } else {\n                    todo[todoOffset++] = node.offset;\n                    nodeNum = nodeNum + 1;\n                }\n            }\n        } else {\n            if (todoOffset == 0)\n                break;\n            nodeNum = todo[--todoOffset];\n        }\n    }\n    r.maxt = ray.maxt;\n    r.hitId = ray.hitId;\n\n    return hit;\n}\n\nstatic inline void raytrace_row(int width, int y, float widthScale, float heightScale,\n                                const float raster2camera[4][4], const float camera2world[4][4],\n                                float image[], int id[], const LinearBVHNode nodes[], const Triangle triangles[]) {\n    for (int x = 0; x < width; ++x) {\n        Ray ray;\n        generateRay(raster2camera, camera2world, x * widthScale, y * heightScale, ray);\n        BVHIntersect(nodes, triangles, ray);\n\n        int offset = y * width + x;\n        image[offset] = ray.maxt;\n        id[offset] = ray.hitId;\n    }\n}\n\nvoid raytrace_serial(int width, int height, int baseWidth, int baseHeight, const float raster2camera[4][4],\n                     const float camera2world[4][4], float image[], int id[], const LinearBVHNode nodes[],\n                     const Triangle triangles[]) {\n    float widthScale = float(baseWidth) / float(width);\n    float heightScale = float(baseHeight) / float(height);\n\n    for (int y = 0; y < height; ++y)\n        raytrace_row(width, y, widthScale, heightScale, raster2camera, camera2world, image, id, nodes, triangles);\n}\n\nstatic void raytrace_openmp(int width, int height, int baseWidth, int baseHeight,\n                            const float raster2camera[4][4], const float camera2world[4][4],\n                            float image[], int id[], const LinearBVHNode nodes[], const Triangle triangles[],\n                            int threads) {\n    int teamSize = threads;\n    if (teamSize > height)\n        teamSize = height;\n\n    if (teamSize <= 1) {\n        raytrace_serial(width, height, baseWidth, baseHeight, raster2camera, camera2world,\n                        image, id, nodes, triangles);\n        return;\n    }\n\n    float widthScale = float(baseWidth) / float(width);\n    float heightScale = float(baseHeight) / float(height);\n\n#pragma omp parallel for schedule(dynamic, 2) num_threads(teamSize)\n    for (int y = 0; y < height; ++y)\n        raytrace_row(width, y, widthScale, heightScale, raster2camera, camera2world,\n                     image, id, nodes, triangles);\n}\n\n#include <cstring>\n#include \"render_context.h\"\nextern \"C\" void run(RenderInput*c,float*image,int*ids,int threads){raytrace_openmp(c->width,c->height,c->baseWidth,c->baseHeight,c->raster2camera,c->camera2world,image,ids,(const ispc::LinearBVHNode*)c->nodes,(const ispc::Triangle*)c->triangles,threads);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "Le catalogue compte cinq programmes distincts sans répétition : le parent sélectionné emploie static jusqu’à 4 threads puis guided,1 (0,049811 s), tandis que le meilleur résultat observé est static jusqu’à 4 puis dynamic,4 (0,046600 s). Je teste une politique réellement différente, dynamic,2 pour toute équipe OpenMP de taille supérieure à 1 : à 4 threads, la répartition dynamique pourrait mieux absorber les différences de coût entre lignes mais payer plus d’ordonnancement; à 40 threads, des lots de deux lignes pourraient réduire le coût d’attribution par rapport à dynamic,1 tout en gardant assez de lots pour équilibrer le travail. Le chemin série reste utilisé à threads effectifs 1. Aucun gain n’est présumé.",
+    "memory_lessons": [
+      {
+        "applicability": "Pour les rendus où une équipe plus grande traite des lignes aux coûts variables, tester une granularité intermédiaire à 4 et 40 threads; le gagnant mesuré jusqu’ici ne garantit pas le meilleur compromis ailleurs.",
+        "claim": "Dans les mesures disponibles, static/dynamic,4 a la moyenne la plus basse parmi les variantes citées (0,046600 s, étendue de 0,000143 s sur trois répétitions), devant guided,1 du parent (0,049811 s, étendue de 0,000598 s). Ces résultats n’établissent pas que la taille de lot 4 est optimale.",
+        "evidence_ids": [
+          "cf02499191ba4562",
+          "091f27d7c3174248"
+        ],
+        "next_experiment": "Mesurer dynamic,2 sur les mêmes cas, en particulier à 4 et 40 threads, puis comparer moyenne et dispersion avec les variantes existantes."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Aucune mesure nouvelle n’a été effectuée. Comparaisons contrôleur existantes : cf02499191ba4562 (trois temps 0,046678338, 0,046587246 et 0,046535587 s; moyenne 0,046600391 s; étendue 0,000142751 s), parent 091f27d7c3174248 (0,050170868, 0,049690468 et 0,049572435 s; moyenne 0,049811257 s; étendue 0,000598433 s), et e3511f70efc242a6 (moyenne 0,047291649 s; temps à 1/4/40 threads rapportés pour le seed 23). Les six contrôles de correction précédents couvraient les résolutions 112, 224 et 900 et deux seeds à threads=4; ces validations et mesures ne préjugent pas du résultat de cette proposition. Chaque ligne est exécutée une seule fois par la boucle OpenMP et raytrace_row écrit les deux sorties pour tous ses pixels.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Conserve le chemin série lorsque threads ou la hauteur limitent l’équipe effective à un travailleur, ainsi que le plafond teamSize=min(threads,height).",
+      "Utilise schedule(dynamic,2) pour toutes les équipes parallèles, contrastant avec static pour les petites équipes et guided,1 ou dynamic,4 pour les grandes équipes déjà observés.",
+      "Conserve le calcul par rayon dans raytrace_row et l’écriture complète de l’image et des identifiants pour chaque pixel."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "ab505fc6d8b5412fa55741e9bcbf4b8b",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "c2bc33074ac9b55941e73abc2e4485f4f8e1689fbfe69950199054c5b03c0ee5",
+  "session_id": "364c7e9906bf4f8481f5afcdbdc7e340",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "1f7d4ef3d86939caa802f06fbc6a50acb82f00bd4cbece43060175d49dbd8314",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4352,
+        "input_tokens": 23876,
+        "output_tokens": 8625,
+        "reasoning_output_tokens": 4588
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "312153914191ed4adba7f5c132d54f0a335d7d445b0797c190a6ee9712c6ab2c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "aa71f7ed9db94d4a-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "cf02499191ba4562",
+            "091f27d7c3174248"
+          ],
+          "status": "applied",
+          "summary": "Compare les ordonnancements déjà mesurés et propose le contraste dynamique à lots de deux lignes, sans annoncer de gain."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "Le candidat ne dépend d’aucune capacité matérielle nouvelle; il ajuste seulement l’ordonnancement OpenMP déjà présent."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "La modification utilise la clause schedule(dynamic, chunk) déjà employée dans cette campagne; aucune propriété d’API incertaine n’est nécessaire."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "cf02499191ba4562",
+            "091f27d7c3174248"
+          ],
+          "status": "applied",
+          "summary": "Rapporte les moyennes et étendues des trois répétitions antérieures, et précise qu’aucune mesure ni validation officielle nouvelle n’est disponible pour ce candidat."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "ab505fc6d8b5412fa55741e9bcbf4b8b",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "c2bc33074ac9b55941e73abc2e4485f4f8e1689fbfe69950199054c5b03c0ee5",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "364c7e9906bf4f8481f5afcdbdc7e340"
+    },
+    "observed_tokens": 32501,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 32501,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "fc2c46859783d64748999309381d3a53911500175caeec8d8dd5042b6c6b8c46",
+    "tree_id": "e1:Gm1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "164618338efd47c5",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "164618338efd47c5",
+        "facts": {
+          "commit": "9ad4e02526e0ed561c71716d317061ed4a0b2a02",
+          "base_commit": "47e69a2108b11b6944d058afe08fffba262a9e2b",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.08128817270752887,
+          "score": 0.8511732140521799
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Hoisting row bases and applying a compile-gated OpenMP SIMD hint to the contiguous-x loop may help the compiler vectorize the radius-3 update when its OpenMP support is available. The ordinary loop remains as a fallback; no target ISA, row alignment, or fixed vector width is assumed. Measure both core budgets, including setup costs, and validate the fixed tolerance before drawing conclusions.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Hoisted each z/y row base and used row pointers for the x-contiguous stencil accesses.\",\"Added an OpenMP SIMD directive for the x loop only when _OPENMP indicates OpenMP 4.0 or newer; left the loop unaligned and with a generic scalar fallback.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "806fdef9ee5b4dc6",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "806fdef9ee5b4dc6",
+        "facts": {
+          "commit": "0955fad48d971b771932a38929030516ac8df8ff",
+          "base_commit": "47e69a2108b11b6944d058afe08fffba262a9e2b",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.24164470840433344,
+          "score": 0.6579933309419804
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A persistent OpenMP team should avoid repeatedly creating a team across six dependent timesteps. Static worksharing over disjoint (z,y) rows keeps x contiguous; each worksharing loop's implicit barrier ensures the next timestep sees completed output. This trades fork/join overhead for six synchronization points and tests one implementation against the serial baseline; it does not establish a comparison with a per-step-team implementation before controller measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace the serial six-step sweep with one OpenMP team whose lifetime spans all timesteps.\",\"Use static collapse(2) worksharing across interior z/y rows while retaining contiguous x traversal.\",\"Rely on the implicit worksharing barrier between steps to preserve timestep dependencies and buffer parity.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "47e69a2108b11b6944d058afe08fffba262a9e2b",
+          "base_commit": "47e69a2108b11b6944d058afe08fffba262a9e2b",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.4649049886231819,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm1",
+        "subject": "Combiner SIMD sur x et parallélisme OpenMP par lignes",
+        "objective": "Demander un candidat mesuré combinant le noyau à bases de lignes et directive SIMD OpenMP de T2 avec la parallélisation OpenMP persistante et le partitionnement par lignes de T1. Partir du candidat T2 le plus rapide; éviter le parallélisme imbriqué, conserver les barrières entre pas, respecter threads et toutes les contraintes de correction. Comparer aux deux sources aux budgets d’un et quatre cœurs; ne pas présumer que les gains s’additionnent.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "164618338efd47c5",
+    "806fdef9ee5b4dc6",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "9ad4e02526e0ed561c71716d317061ed4a0b2a02",
+  "selected_parent_id": null
+}

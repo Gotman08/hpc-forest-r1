@@ -1,0 +1,288 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "f5b8308af44dbc5b1b6042f1ddc18f5fe9b80f2ad7aa5cc48c853618cc37080b",
+    "tree_id": "e1:T3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "b92199b34cf641e7",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "b92199b34cf641e7",
+        "facts": {
+          "commit": "fbed94580a3b667a35723cf74518f0a09633420f",
+          "base_commit": "ded45572d5e87e545f980a3e578d98f1d248441b",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.7672719994248653,
+          "score": 0.37353197753258344
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Fusing two consecutive timesteps per 32^3 core tile may reuse the first-step values while they are cache-resident and reduce repeated full-grid traffic. The radius-3 halo recomputes some first-step cells, and full-volume scratch copies may offset that benefit. The supplied baseline is correct at a mean 0.4575 s, but no spatial-only blocking result is available, so this is a temporal-fusion test rather than evidence of a win over that control.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Fuse timesteps in pairs over spatial tiles with a 32-cell core extent.\",\"Compute the first timestep over each tile expanded by radius 3, clipped to the updated interior, then compute the second timestep on the tile core.\",\"Snapshot the old current buffer and retain an initialized middle buffer so each recurrence uses the correct previous time level and tile writes cannot corrupt later inputs.\",\"Preserve full output initialization and untouched boundaries; allocate scratch during run and retain a serial fallback if scratch allocation fails.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "b92199b34cf641e7-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "b92199b34cf641e7",
+        "facts": {
+          "commit": null,
+          "base_commit": "ded45572d5e87e545f980a3e578d98f1d248441b",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Fusing two consecutive timesteps per 32^3 core tile may reuse the first-step values while they are cache-resident and reduce repeated full-grid traffic. The radius-3 halo recomputes some first-step cells, and full-volume scratch copies may offset that benefit. The supplied baseline is correct at a mean 0.4575 s, but no spatial-only blocking result is available, so this is a temporal-fusion test rather than evidence of a win over that control.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Fuse timesteps in pairs over spatial tiles with a 32-cell core extent.\",\"Compute the first timestep over each tile expanded by radius 3, clipped to the updated interior, then compute the second timestep on the tile core.\",\"Snapshot the old current buffer and retain an initialized middle buffer so each recurrence uses the correct previous time level and tile writes cannot corrupt later inputs.\",\"Preserve full output initialization and untouched boundaries; allocate scratch during run and retain a serial fallback if scratch allocation fails.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "52ebffda45914d7f",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "52ebffda45914d7f",
+        "facts": {
+          "commit": "c220ed0c9c8d55ce7e1c42af1f3a46e13765aa8a",
+          "base_commit": "fbed94580a3b667a35723cf74518f0a09633420f",
+          "parent_id": "b92199b34cf641e7",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.9847784925660423,
+          "score": 0.31720000376977897
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured 32³ pair-fused candidate was slower than both the valid baseline and the single-step spatial-blocked candidate. This 32³ three-step tile tests whether deeper reuse can offset more work: the first substep expands the core by radius 6, the second by radius 3, and the third writes the core. Added scratch allocation, copies, and halo recomputation may instead make it slower.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace pairwise temporal fusion with three consecutive timesteps fused per 32³ core tile.\",\"Compute the first intermediate over a radius-6 expanded region and the second over a radius-3 expanded region, clipped to the updated interior; write the third timestep only to the core.\",\"Snapshot both time levels and initialize scratch grids from their corresponding buffers so recurrence inputs, untouched boundaries, and intermediate parity remain correct across tiles.\",\"Run two triplets for six total timesteps, choosing current and previous buffers from timestep parity; allocate and release all scratch inside run, with a serial fallback on allocation failure.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "52ebffda45914d7f-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "52ebffda45914d7f",
+        "facts": {
+          "commit": null,
+          "base_commit": "fbed94580a3b667a35723cf74518f0a09633420f",
+          "parent_id": "b92199b34cf641e7",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured 32³ pair-fused candidate was slower than both the valid baseline and the single-step spatial-blocked candidate. This 32³ three-step tile tests whether deeper reuse can offset more work: the first substep expands the core by radius 6, the second by radius 3, and the third writes the core. Added scratch allocation, copies, and halo recomputation may instead make it slower.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace pairwise temporal fusion with three consecutive timesteps fused per 32³ core tile.\",\"Compute the first intermediate over a radius-6 expanded region and the second over a radius-3 expanded region, clipped to the updated interior; write the third timestep only to the core.\",\"Snapshot both time levels and initialize scratch grids from their corresponding buffers so recurrence inputs, untouched boundaries, and intermediate parity remain correct across tiles.\",\"Run two triplets for six total timesteps, choosing current and previous buffers from timestep parity; allocate and release all scratch inside run, with a serial fallback on allocation failure.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "ec0a904c56504335",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "ec0a904c56504335",
+        "facts": {
+          "commit": "34807846bf2a8ea4cdbc7097df497b295e1d6996",
+          "base_commit": "ded45572d5e87e545f980a3e578d98f1d248441b",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.5601224131161878,
+          "score": 0.4495700290432728
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A 64×16×8 spatial output tile may improve reuse of input planes within one stencil sweep, but the existing contiguous traversal may already be effective and tile-loop overhead could regress. This single-timestep control avoids temporal halo recomputation and full-volume scratch used by the prior pair-fusion candidate, which was valid but measured at 0.7673 s versus the 0.4575 s baseline; measuring this control can help distinguish the costs, without presuming a speedup.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Tile each timestep's output region in 64×16×8 blocks; stencil reads still access the complete input grid, so there is no temporal halo expansion or duplicated timestep computation.\",\"Keep the original recurrence, update bounds, even/odd buffer selection, and full initialization of both output buffers.\",\"Use serial loops only; allocate no additional scratch buffers.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "ec0a904c56504335-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "ec0a904c56504335",
+        "facts": {
+          "commit": null,
+          "base_commit": "ded45572d5e87e545f980a3e578d98f1d248441b",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A 64×16×8 spatial output tile may improve reuse of input planes within one stencil sweep, but the existing contiguous traversal may already be effective and tile-loop overhead could regress. This single-timestep control avoids temporal halo recomputation and full-volume scratch used by the prior pair-fusion candidate, which was valid but measured at 0.7673 s versus the 0.4575 s baseline; measuring this control can help distinguish the costs, without presuming a speedup.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Tile each timestep's output region in 64×16×8 blocks; stencil reads still access the complete input grid, so there is no temporal halo expansion or duplicated timestep computation.\",\"Keep the original recurrence, update bounds, even/odd buffer selection, and full initialization of both output buffers.\",\"Use serial loops only; allocate no additional scratch buffers.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 9,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T3",
+        "subject": "Spatial and temporal cache-blocking controls",
+        "objective": "In `src/candidate.cpp`, compare spatial blocking within one timestep against halo-correct fusion of multiple consecutive timesteps per tile. Account for the radius-3 expanding halo, the recurrence's dependence on both time levels, even/odd buffer parity, and untouched boundaries. Keep explicit SIMD and thread parallelization out of scope; include scratch allocation in timing. Preserve full output initialization and numerical tolerance, validate smaller checks and n=256, and record correct results even if a variant is slower, since it may inform a later combination.",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "ec0a904c56504335",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.5601224131161878,
+          "hypothesis_as_data": "A 64×16×8 spatial output tile may improve reuse of input planes within one stencil sweep, but the existing contiguous traversal may already be effective and tile-loop overhead could regress. This single-timestep control avoids temporal halo"
+        },
+        "latest": {
+          "id": "52ebffda45914d7f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.9847784925660423,
+          "hypothesis_as_data": "The measured 32³ pair-fused candidate was slower than both the valid baseline and the single-step spatial-blocked candidate. This 32³ three-step tile tests whether deeper reuse can offset more work: the first substep expands the core by rad"
+        },
+        "alternative": {
+          "id": "52ebffda45914d7f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.9847784925660423,
+          "hypothesis_as_data": "The measured 32³ pair-fused candidate was slower than both the valid baseline and the single-step spatial-blocked candidate. This 32³ three-step tile tests whether deeper reuse can offset more work: the first substep expands the core by rad"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "b92199b34cf641e7",
+    "b92199b34cf641e7-h01",
+    "52ebffda45914d7f",
+    "52ebffda45914d7f-h01",
+    "ec0a904c56504335",
+    "ec0a904c56504335-h01"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "ded45572d5e87e545f980a3e578d98f1d248441b",
+  "selected_parent_id": null
+}

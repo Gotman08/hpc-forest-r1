@@ -1,0 +1,412 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "2d33d81cdcfbbc0125107dd390bec575ba5a2ce3cdcf202e3523a21b61c661cb",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "30462536c13c4e5d",
+        "kind": "experiment",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "30462536c13c4e5d",
+        "facts": {
+          "commit": "2556f8effe9d1d1f8ee6297517b1466e98fe4958",
+          "base_commit": "359c83cd5e093c1682fec2365f7f375dc7dd2b15",
+          "parent_id": null,
+          "source_ids": [
+            "4184453b5e7a41a6",
+            "20d5d3610fd14da9"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0034172374333333332,
+          "score": 0.9994019923296508
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le noyau SIMD AVX-512 et le chemin de panneaux empaquetés de T2 sont déjà plus rapides que T1 pris seul. Pour les petites dimensions non empaquetées, le lancement de l'équipe OpenMP et le parcours parallèle collapse(2) peuvent coûter plus que le calcul. Appliquer la politique sérielle de T1 sous n=256 tout en conservant le micro-noyau SIMD pourrait réduire ce surcoût; seule la mesure contrôleur dira si cela compense d'éventuelles pertes à n=128.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Conserver le noyau SIMD AVX-512 à dispatch d'exécution, son repli scalaire et le chemin T2 de panneaux B empaquetés pour les grandes dimensions.\",\"Dans le chemin direct n<256, remplacer la région OpenMP collapse(2) par le parcours sériel des mêmes tuiles 8x16, reprenant la politique sérielle de T1 pour les petits cas; tous les autres chemins restent inchangés.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "fb2b011885c849d7",
+        "kind": "experiment",
+        "role": "Gm2",
+        "tree_id": "e1:Gm2",
+        "mission_id": "fb2b011885c849d7",
+        "facts": {
+          "commit": "fcecec9ec9afd614455a72a5fabe42ffa3fb0e58",
+          "base_commit": "18b77394715a712d096a7d2ec4182ed14235491c",
+          "parent_id": null,
+          "source_ids": [
+            "5bf16cd2c3b8448f",
+            "30462536c13c4e5d"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.002788934231481481,
+          "score": 0.9995118900888018
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le changement Gm1 (parcours direct sériel sous n=256) peut réduire le coût de lancement pour les petits cas, mais son résultat agrégé antérieur est légèrement plus lent que T2 et ne démontre pas de gain à n=1024. Pour tester une composition pertinente à n=1024, je conserve ce parcours et remplace le packing B sériel du panneau par un omp for statique sur ses lignes K, avec une ligne exclusive par itération et la même barrière avant le micro-noyau. Cela peut réduire le chemin critique de packing, mais le coût de synchronisation peut annuler le gain; correction et vitesse restent à mesurer.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Conserver le noyau AVX-512/FMA 8x16 à dispatch d’exécution, le repli scalaire, les panneaux et le GEMM générique de T2.\",\"Adopter la traversée sérielle des tuiles SIMD directes pour n<256 de Gm1; le repli direct en cas d’échec d’allocation reste parallèle.\",\"Dans le chemin empaqueté, remplacer le packing B sous omp single par un omp for schedule(static) sur les lignes K, avec écritures disjointes et barrière implicite avant le calcul; garder l’ordre K, les dimensions de panneaux et les tuiles de sortie.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "1ebc3c277286431d",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "1ebc3c277286431d",
+        "facts": {
+          "commit": "e1ed1f1a7afabd7a3b50d99c7d14927acb6a8e76",
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.01619630738095238,
+          "score": 0.9971720125379574
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The supplied T1 candidates are all valid and have repeated aggregate means of 0.01140523 s (4x256x16), 0.01587444 s (8x128x32), and 0.02015676 s (8x64x32), but no per-size timings are available to attribute a result specifically to n=1024. This contrasting 4x128x16 scheme assigns independent row/column output tiles under static OpenMP scheduling, potentially improving cache residency and work distribution at large sizes; the smaller tiles and extra tile-loop work may instead hurt. It retains serial execution below n=256 and contiguous i-k-j output-column updates.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace fixed-size dispatch with generic handling for every positive n and zero the complete output before accumulation.\",\"Use unpacked 4x128x16 row/column/K tiles with ascending K blocks and an i-k-j update whose innermost output-column loop is contiguous.\",\"Assign disjoint row/column output tiles with static collapsed OpenMP scheduling for n >= 256; run serially below that threshold or when only one worker is requested.\",\"Clamp the requested worker count to the range 1..8; do not pack matrices or use explicit intrinsics.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "52c15139e2464dfa",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "52c15139e2464dfa",
+        "facts": {
+          "commit": "1d52fdd1529dba6722ab201df36665dff7273322",
+          "base_commit": "359c83cd5e093c1682fec2365f7f375dc7dd2b15",
+          "parent_id": "4184453b5e7a41a6",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.003459756584674329,
+          "score": 0.9993945560936134
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Building on selected parent 4184453b5e7a41a6, keep its 8-row AVX-512 FMA kernel family, B-only 128x128 packing, KC/NC, threshold, and OpenMP ownership, but widen NR from 16 to 32. One A broadcast can then feed two column vectors and the wider tile may reduce per-row-block tile overhead; the additional accumulators may instead increase register pressure. This isolates tile width without assuming it improves n=1024 performance.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Widened the explicit AVX-512 microkernel from 8x16 to 8x32, using two 16-lane vectors and reusing each row's A broadcast across both vectors.\",\"Expanded the generic scalar tile storage and increased NR to 32; handled incomplete column tiles with separate masks and accessed the high vector only when the tile actually contains columns beyond lane 16.\",\"Kept the selected parent's B-only KC=128, NC=128 packing, direct-access threshold, per-call scratch allocation, and OpenMP disjoint output ownership to isolate the microkernel-width change.\",\"Retained runtime AVX-512F/FMA detection, scalar fallback for row tails or unsupported CPUs, at most eight OpenMP threads, and first-K-panel initialization so each invocation fully overwrites output.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.710953334666667,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "30462536c13c4e5d-h01",
+        "kind": "development",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "30462536c13c4e5d",
+        "facts": {
+          "commit": null,
+          "base_commit": "359c83cd5e093c1682fec2365f7f375dc7dd2b15",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le noyau SIMD AVX-512 et le chemin de panneaux empaquetés de T2 sont déjà plus rapides que T1 pris seul. Pour les petites dimensions non empaquetées, le lancement de l'équipe OpenMP et le parcours parallèle collapse(2) peuvent coûter plus que le calcul. Appliquer la politique sérielle de T1 sous n=256 tout en conservant le micro-noyau SIMD pourrait réduire ce surcoût; seule la mesure contrôleur dira si cela compense d'éventuelles pertes à n=128.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Conserver le noyau SIMD AVX-512 à dispatch d'exécution, son repli scalaire et le chemin T2 de panneaux B empaquetés pour les grandes dimensions.\",\"Dans le chemin direct n<256, remplacer la région OpenMP collapse(2) par le parcours sériel des mêmes tuiles 8x16, reprenant la politique sérielle de T1 pour les petits cas; tous les autres chemins restent inchangés.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 38,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Unpacked cache-tiled loop ordering with OpenMP and compiler vectorization",
+        "objective": "In src/candidate.cpp, explore an unpacked GEMM route based on loop interchange (including i-k-j), cache tiling, and OpenMP ownership of disjoint output rows or tiles. Keep the output-column loop contiguous so the frozen GCC build can auto-vectorize it; do not pack matrices or use explicit x86 intrinsics, keeping this route distinct from the SIMD tree. Tune loop/tile order and scheduling using measured performance, including whether to avoid parallel overhead on small sizes. Respect threads (at most eight), read-only inputs, and complete output overwrite on every call. Preserve correctness for all supported sizes and signed, varying inputs within abs_error <= 0.002 + 5e-5*abs(reference). Change only src/candidate.cpp; record failed attempts and compare valid repeated native timings, prioritizing n=1024.",
+        "records": 11,
+        "results": {
+          "trials": 4,
+          "valid": 4,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "dc71b5b85c424453",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.011405230925925923,
+          "hypothesis_as_data": "The only measured T1 variant used 8x128x32 tiles and static row-tile ownership, with a valid reported mean of 0.01587444 s but no per-size timing in the supplied data. This contrasting 4x256x16 variant traverses tiles in row-K-column order;"
+        },
+        "latest": {
+          "id": "1ebc3c277286431d",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.01619630738095238,
+          "hypothesis_as_data": "The supplied T1 candidates are all valid and have repeated aggregate means of 0.01140523 s (4x256x16), 0.01587444 s (8x128x32), and 0.02015676 s (8x64x32), but no per-size timings are available to attribute a result specifically to n=1024. "
+        },
+        "alternative": {
+          "id": "1ebc3c277286431d",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.01619630738095238,
+          "hypothesis_as_data": "The supplied T1 candidates are all valid and have repeated aggregate means of 0.01140523 s (4x256x16), 0.01587444 s (8x128x32), and 0.02015676 s (8x64x32), but no per-size timings are available to attribute a result specifically to n=1024. "
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "Register-tiled SIMD GEMM with measured packing ablation",
+        "objective": "Explore an explicit register-tiled FP32 FMA/SIMD microkernel with OpenMP ownership of disjoint output tiles. Measure direct-access and packed-panel variants using the same microkernel and comparable tiles where practical, so packing overhead and benefit are tested rather than assumed; consider packing B alone versus additional panels. Tune microkernel shape and panel layout, and include scratch allocation and packing in total runtime. Use AVX-512 or AVX2 only when compatible with the frozen GCC build and target, without changing compiler settings. Handle tails and small sizes generically, respect the threads budget (at most eight), fully overwrite output each invocation, and validate varying signed inputs against the fixed FP64 tolerance. Change only src/candidate.cpp; record failed attempts and report correctness and repeated native timings, prioritizing n=1024.",
+        "records": 20,
+        "results": {
+          "trials": 6,
+          "valid": 6,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 6,
+          "distinct_programs": 6,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "5bf16cd2c3b8448f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0033892272888888892,
+          "hypothesis_as_data": "Le catalogue contient deux programmes distincts, sans répétition : le programme 8x16 AVX-512 avec packing de B mesurait 0,003443 s à n=1024, contre 0,005633 s pour l’accès direct 8x16. Cet essai conserve le micro-noyau 8x16 et le panneau B "
+        },
+        "latest": {
+          "id": "52c15139e2464dfa",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.003459756584674329,
+          "hypothesis_as_data": "Building on selected parent 4184453b5e7a41a6, keep its 8-row AVX-512 FMA kernel family, B-only 128x128 packing, KC/NC, threshold, and OpenMP ownership, but widen NR from 16 to 32. One A broadcast can then feed two column vectors and the wid"
+        },
+        "alternative": {
+          "id": "52c15139e2464dfa",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.003459756584674329,
+          "hypothesis_as_data": "Building on selected parent 4184453b5e7a41a6, keep its 8-row AVX-512 FMA kernel family, B-only 128x128 packing, KC/NC, threshold, and OpenMP ownership, but widen NR from 16 to 32. One A broadcast can then feed two column vectors and the wid"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "Gm1",
+        "subject": "Intégration mesurée du tuilage T1 autour du noyau SIMD T2",
+        "objective": "Demander une intégration mesurée en partant de la source T2, la plus rapide. Tester si l’ordonnancement ou le tuilage de la source T1 peut compléter le noyau SIMD de T2; ne retenir que les modifications compatibles et mesurées, sans présumer d’un gain additif. Préserver la voie T2 comme référence et valider la correction ainsi que les performances avec le protocole inchangé.",
+        "records": 3,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "30462536c13c4e5d",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0034172374333333332,
+          "hypothesis_as_data": "Le noyau SIMD AVX-512 et le chemin de panneaux empaquetés de T2 sont déjà plus rapides que T1 pris seul. Pour les petites dimensions non empaquetées, le lancement de l'équipe OpenMP et le parcours parallèle collapse(2) peuvent coûter plus q"
+        },
+        "latest": {
+          "id": "30462536c13c4e5d",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0034172374333333332,
+          "hypothesis_as_data": "Le noyau SIMD AVX-512 et le chemin de panneaux empaquetés de T2 sont déjà plus rapides que T1 pris seul. Pour les petites dimensions non empaquetées, le lancement de l'équipe OpenMP et le parcours parallèle collapse(2) peuvent coûter plus q"
+        },
+        "alternative": null,
+        "text_truncated": false
+      },
+      {
+        "role": "Gm2",
+        "subject": "Intégration mesurée de T2 rapide avec le candidat combiné Gm1",
+        "objective": "En partant de la source T2 la plus rapide, mesurer si des changements utiles de tuilage ou d’ordonnancement du candidat intégré Gm1 se composent avec son noyau SIMD. Ne conserver que les changements validés par mesure et correction; comparer au meilleur T2 sans présumer d’un gain additif.",
+        "records": 3,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "fb2b011885c849d7",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.002788934231481481,
+          "hypothesis_as_data": "Le changement Gm1 (parcours direct sériel sous n=256) peut réduire le coût de lancement pour les petits cas, mais son résultat agrégé antérieur est légèrement plus lent que T2 et ne démontre pas de gain à n=1024. Pour tester une composition"
+        },
+        "latest": {
+          "id": "fb2b011885c849d7",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.002788934231481481,
+          "hypothesis_as_data": "Le changement Gm1 (parcours direct sériel sous n=256) peut réduire le coût de lancement pour les petits cas, mais son résultat agrégé antérieur est légèrement plus lent que T2 et ne démontre pas de gain à n=1024. Pour tester une composition"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 4,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "30462536c13c4e5d",
+    "fb2b011885c849d7",
+    "1ebc3c277286431d",
+    "52c15139e2464dfa",
+    "baseline-e1",
+    "30462536c13c4e5d-h01",
+    "dc71b5b85c424453",
+    "5bf16cd2c3b8448f"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "fcecec9ec9afd614455a72a5fabe42ffa3fb0e58",
+  "selected_parent_id": null
+}

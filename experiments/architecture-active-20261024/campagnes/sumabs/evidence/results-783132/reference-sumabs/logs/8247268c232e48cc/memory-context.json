@@ -1,0 +1,170 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "a1ef51a848fa6d317e2f8e784f3120aab226567e556433f8d42a38eb9d343297",
+    "tree_id": "e1:T2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "f44a435ddec44211",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "f44a435ddec44211",
+        "facts": {
+          "commit": "491cc58c78499d8b277124a2e9b168cfb4fe3e27",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00044738987286885583,
+          "score": 0.732978685992908
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Fusing absolute value into the grid-stride reduction avoids the scratch write/read and one kernel launch. A grid of ceil(n/256), capped at 1024 CTAs, avoids needless atomics for small inputs while bounding CTA-level atomics for large inputs. Whether those savings offset the required output reset and atomic contention must be measured; the controller must validate FP64 tolerance for every required size and seed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(input) into the per-thread grid-stride accumulation, eliminating the intermediate scratch array and its producer kernel.\",\"Retain an asynchronous per-call output reset in the default stream before reduction.\",\"Set CTA count to ceil(n/256), capped at 1024, and perform one output atomicAdd per CTA.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "f44a435ddec44211-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "f44a435ddec44211",
+        "facts": {
+          "commit": null,
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Fusing absolute value into the grid-stride reduction avoids the scratch write/read and one kernel launch. A grid of ceil(n/256), capped at 1024 CTAs, avoids needless atomics for small inputs while bounding CTA-level atomics for large inputs. Whether those savings offset the required output reset and atomic contention must be measured; the controller must validate FP64 tolerance for every required size and seed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(input) into the per-thread grid-stride accumulation, eliminating the intermediate scratch array and its producer kernel.\",\"Retain an asynchronous per-call output reset in the default stream before reduction.\",\"Set CTA count to ceil(n/256), capped at 1024, and perform one output atomicAdd per CTA.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0012280938784281412,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T2",
+        "subject": "Single-kernel CTA aggregation with output atomics",
+        "objective": "Evaluate a distinct single-kernel alternative: reset output in the default stream, stream input once, reduce locally per CTA, then atomicAdd one CTA result to output. Explore keeping CTA atomic count modest; do not rely on scratch initialization or omit the per-call reset. Compare total time including reset and launch overhead against hierarchical candidates, and validate every required size and the FP64 tolerance.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "f44a435ddec44211",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00044738987286885583,
+          "hypothesis_as_data": "Fusing absolute value into the grid-stride reduction avoids the scratch write/read and one kernel launch. A grid of ceil(n/256), capped at 1024 CTAs, avoids needless atomics for small inputs while bounding CTA-level atomics for large inputs"
+        },
+        "latest": {
+          "id": "f44a435ddec44211",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00044738987286885583,
+          "hypothesis_as_data": "Fusing absolute value into the grid-stride reduction avoids the scratch write/read and one kernel launch. A grid of ceil(n/256), capped at 1024 CTAs, avoids needless atomics for small inputs while bounding CTA-level atomics for large inputs"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "f44a435ddec44211",
+    "f44a435ddec44211-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "491cc58c78499d8b277124a2e9b168cfb4fe3e27",
+  "selected_parent_id": "f44a435ddec44211"
+}

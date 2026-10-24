@@ -1,0 +1,297 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "d7f38e463c3dd8d635c1439aab7f7a5104b52740bbc33434c1cdcd378c563b40",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "5742ad4218cf4186",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "5742ad4218cf4186",
+        "facts": {
+          "commit": "52eef6a95d7aa9ba09e24a6f5eabdaa5ec84234a",
+          "base_commit": "b3f3ff031f0654eb911a55758dc3dc9c89ce9332",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0014078272136510681,
+          "score": 0.842462636075128
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The previous valid OpenMP candidate used a serial cutoff of 512 options per requested worker. Lowering the cutoff to 256 options per effective worker, while limiting the requested team to min(threads, n), tests whether parallelizing medium workloads pays off without creating idle workers or exceeding the passed CPU budget. The controller must measure the cutoff's overhead and any gain; no result is assumed here.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Factored the per-option formula into an inline helper used by both serial and parallel paths.\",\"Added a static-scheduled OpenMP loop with num_threads(min(threads, n)) so the requested team does not exceed the supplied budget or the number of iterations.\",\"Used a per-effective-worker cutoff of 256 options to retain the serial path for small workloads and contrast the prior candidate's larger work-grain assumption.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "2a2949b870444487",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "2a2949b870444487",
+        "facts": {
+          "commit": "7fc09bd00438e4cee5508917ae190fd3040b66c1",
+          "base_commit": "4c7fa1e94cdb52b2c70207bbd5e739b5c03aa9e1",
+          "parent_id": "d20af62fb894467a",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0014006864760338314,
+          "score": 0.8431363493528768
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected parent’s 512-options-per-worker team cap is the best aggregate candidate so far, but measured means across OpenMP variants are close and provide no per-size crossover data. Lowering the generic grain to 64 options per worker tests whether scaling the static loop to more of the passed thread budget repays its region overhead at smaller workloads. No gain is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Reduced the generic minimum work grain from 512 to 64 options per worker so the bounded static OpenMP team can scale earlier.\",\"Retained the serial path when there is one effective worker or too little work for two grain-sized workers; the team remains bounded by the passed thread budget.\",\"Preserved the per-option computation and complete index-based output coverage.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "2aa2ab21a5d441a8",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "2aa2ab21a5d441a8",
+        "facts": {
+          "commit": "67d7ac7ebb7dd9e63e3687c11e1f38fe4b6e3d04",
+          "base_commit": "b3f3ff031f0654eb911a55758dc3dc9c89ce9332",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.001450096990316586,
+          "score": 0.8384965198594284
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The two measured OpenMP variants use per-worker cutoffs of 512 and 256 options, with similar means and no per-size timings available. Requiring at least 1024 options per effective worker tests the contrasting assumption that a coarser grain avoids parallel overhead on medium workloads while retaining static-scheduled parallelism for large workloads. The controller should compare the resulting serial/parallel boundary against the baseline and earlier variants; no gain is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Factored the unchanged Black-Scholes per-option formula into a helper shared by serial and parallel paths.\",\"Added an OpenMP outer loop with static scheduling, requesting no more than min(threads,n) workers and avoiding nested teams.\",\"Used a generic cutoff of 1024 options per effective worker to retain a serial path for small workloads and contrast earlier lower cutoffs.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "2aa2ab21a5d441a8-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "2aa2ab21a5d441a8",
+        "facts": {
+          "commit": null,
+          "base_commit": "b3f3ff031f0654eb911a55758dc3dc9c89ce9332",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The two measured OpenMP variants use per-worker cutoffs of 512 and 256 options, with similar means and no per-size timings available. Requiring at least 1024 options per effective worker tests the contrasting assumption that a coarser grain avoids parallel overhead on medium workloads while retaining static-scheduled parallelism for large workloads. The controller should compare the resulting serial/parallel boundary against the baseline and earlier variants; no gain is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Factored the unchanged Black-Scholes per-option formula into a helper shared by serial and parallel paths.\",\"Added an OpenMP outer loop with static scheduling, requesting no more than min(threads,n) workers and avoiding nested teams.\",\"Used a generic cutoff of 1024 options per effective worker to retain a serial path for small workloads and contrast earlier lower cutoffs.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "5742ad4218cf4186-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "5742ad4218cf4186",
+        "facts": {
+          "commit": null,
+          "base_commit": "b3f3ff031f0654eb911a55758dc3dc9c89ce9332",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The previous valid OpenMP candidate used a serial cutoff of 512 options per requested worker. Lowering the cutoff to 256 options per effective worker, while limiting the requested team to min(threads, n), tests whether parallelizing medium workloads pays off without creating idle workers or exceeding the passed CPU budget. The controller must measure the cutoff's overhead and any gain; no result is assumed here.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Factored the per-option formula into an inline helper used by both serial and parallel paths.\",\"Added a static-scheduled OpenMP loop with num_threads(min(threads, n)) so the requested team does not exceed the supplied budget or the number of iterations.\",\"Used a per-effective-worker cutoff of 256 options to retain the serial path for small workloads and contrast the prior candidate's larger work-grain assumption.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "5a4a1b95ee1f4182",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "5a4a1b95ee1f4182",
+        "facts": {
+          "commit": "3bf1b8961b08cf1011395a69905da74f66c2f920",
+          "base_commit": "b3f3ff031f0654eb911a55758dc3dc9c89ce9332",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0014301050030770728,
+          "score": 0.8403676764749988
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The independent option calculations can be distributed with a static OpenMP outer loop, while num_threads(threads) caps the requested team at the passed budget. A serial path for one thread and fewer than 512 options per requested thread should avoid paying parallel-region overhead on small workloads. Each loop iteration writes exactly its own result index; the controller still needs to verify correctness and measure the tradeoff.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Extracted the per-option Black-Scholes expression into an inline helper used by both execution paths.\",\"Added an OpenMP outer loop with schedule(static) and num_threads(threads), assigning each iteration a unique output element.\",\"Retained a serial path for nonpositive work, one or fewer threads, and fewer than 512 options per requested thread.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 14,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "OpenMP scaling and overhead within the threads budget",
+        "objective": "In src/candidate.cpp, compare the serial baseline with an OpenMP outer loop using the passed threads value as a hard CPU budget; start with static scheduling and retain a serial path for one thread or small n. Avoid thresholds tied to published test values. Measure available valid n/thread cases under the frozen protocol, verify complete output writes and varied-input correctness, and report overhead as well as any gain. Preserve correct variants for later combination even if they lose in isolation.",
+        "records": 13,
+        "results": {
+          "trials": 5,
+          "valid": 5,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 5,
+          "distinct_programs": 5,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "2a2949b870444487",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0014006864760338314,
+          "hypothesis_as_data": "The selected parent’s 512-options-per-worker team cap is the best aggregate candidate so far, but measured means across OpenMP variants are close and provide no per-size crossover data. Lowering the generic grain to 64 options per worker te"
+        },
+        "latest": {
+          "id": "2a2949b870444487",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0014006864760338314,
+          "hypothesis_as_data": "The selected parent’s 512-options-per-worker team cap is the best aggregate candidate so far, but measured means across OpenMP variants are close and provide no per-size crossover data. Lowering the generic grain to 64 options per worker te"
+        },
+        "alternative": {
+          "id": "d20af62fb894467a",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0014038118499942705,
+          "hypothesis_as_data": "Capping the static OpenMP team by a generic 512-options-per-worker grain may reduce parallel overhead for intermediate workloads while still using the full passed thread budget for sufficiently large work. Unlike a serial-only cutoff, this "
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "5742ad4218cf4186",
+    "2a2949b870444487",
+    "2aa2ab21a5d441a8",
+    "2aa2ab21a5d441a8-h01",
+    "5742ad4218cf4186-h01",
+    "5a4a1b95ee1f4182",
+    "d20af62fb894467a"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "52eef6a95d7aa9ba09e24a6f5eabdaa5ec84234a",
+  "selected_parent_id": "5742ad4218cf4186"
+}

@@ -1,0 +1,132 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "// -*- mode: c++ -*-\n/*\n  Copyright (c) 2010-2023, Intel Corporation\n\n  SPDX-License-Identifier: BSD-3-Clause\n*/\n/*\n  Based on Syoyo Fujita's aobench: http://code.google.com/p/aobench\n*/\n\n#ifdef _MSC_VER\n#define _CRT_SECURE_NO_WARNINGS\n#define NOMINMAX\n#pragma warning(disable : 4244)\n#pragma warning(disable : 4305)\n#endif\n\n#include <math.h>\n#include <stdlib.h>\n\n#ifdef _MSC_VER\nstatic long long drand48_x = 0x1234ABCD330E;\n\nstatic inline void srand48(int x) { drand48_x = x ^ (x << 16); }\n\nstatic inline double drand48() {\n    drand48_x = drand48_x * 0x5DEECE66D + 0xB;\n    return (drand48_x & 0xFFFFFFFFFFFF) * (1.0 / 281474976710656.0);\n}\n#endif // _MSC_VER\n\n#ifdef _MSC_VER\n__declspec(align(16))\n#endif\n    struct vec {\n    vec() { x = y = z = pad = 0.; }\n    vec(float xx, float yy, float zz) {\n        x = xx;\n        y = yy;\n        z = zz;\n        pad = 0.;\n    }\n\n    vec operator*(float f) const { return vec(x * f, y * f, z * f); }\n    vec operator+(const vec &f2) const { return vec(x + f2.x, y + f2.y, z + f2.z); }\n    vec operator-(const vec &f2) const { return vec(x - f2.x, y - f2.y, z - f2.z); }\n    vec operator*(const vec &f2) const { return vec(x * f2.x, y * f2.y, z * f2.z); }\n    float x, y, z;\n    float pad;\n}\n#ifndef _MSC_VER\n__attribute__((aligned(16)))\n#endif\n;\ninline vec operator*(float f, const vec &v) { return vec(f * v.x, f * v.y, f * v.z); }\n\n#define NAO_SAMPLES 8\n\n#ifdef M_PI\n#undef M_PI\n#endif\n#define M_PI 3.1415926535f\n\nstruct Isect {\n    float t;\n    vec p;\n    vec n;\n    int hit;\n};\n\nstruct Sphere {\n    vec center;\n    float radius;\n};\n\nstruct Plane {\n    vec p;\n    vec n;\n};\n\nstruct Ray {\n    vec org;\n    vec dir;\n};\n\nstatic inline float dot(const vec &a, const vec &b) { return a.x * b.x + a.y * b.y + a.z * b.z; }\n\nstatic inline vec vcross(const vec &v0, const vec &v1) {\n    vec ret;\n    ret.x = v0.y * v1.z - v0.z * v1.y;\n    ret.y = v0.z * v1.x - v0.x * v1.z;\n    ret.z = v0.x * v1.y - v0.y * v1.x;\n    return ret;\n}\n\nstatic inline void vnormalize(vec &v) {\n    float len2 = dot(v, v);\n    float invlen = 1.f / sqrtf(len2);\n    v = v * invlen;\n}\n\nstatic inline void ray_plane_intersect(Isect &isect, Ray &ray, Plane &plane) {\n    float d = -dot(plane.p, plane.n);\n    float v = dot(ray.dir, plane.n);\n\n    if (fabsf(v) < 1.0e-17f)\n        return;\n    else {\n        float t = -(dot(ray.org, plane.n) + d) / v;\n\n        if ((t > 0.0) && (t < isect.t)) {\n            isect.t = t;\n            isect.hit = 1;\n            isect.p = ray.org + ray.dir * t;\n            isect.n = plane.n;\n        }\n    }\n}\n\nstatic inline void ray_sphere_intersect(Isect &isect, Ray &ray, Sphere &sphere) {\n    vec rs = ray.org - sphere.center;\n\n    float B = dot(rs, ray.dir);\n    float C = dot(rs, rs) - sphere.radius * sphere.radius;\n    float D = B * B - C;\n\n    if (D > 0.) {\n        float t = -B - sqrtf(D);\n\n        if ((t > 0.0) && (t < isect.t)) {\n            isect.t = t;\n            isect.hit = 1;\n            isect.p = ray.org + t * ray.dir;\n            isect.n = isect.p - sphere.center;\n            vnormalize(isect.n);\n        }\n    }\n}\n\nstatic inline void ray_sphere_intersect_precomputed(Isect &isect, const Ray &ray, const Sphere &sphere,\n                                                     const vec &relativeOrigin, float originTerm) {\n    float B = dot(relativeOrigin, ray.dir);\n    float D = B * B - originTerm;\n\n    if (D > 0.) {\n        float t = -B - sqrtf(D);\n\n        if ((t > 0.0) && (t < isect.t)) {\n            isect.t = t;\n            isect.hit = 1;\n            isect.p = ray.org + t * ray.dir;\n            isect.n = isect.p - sphere.center;\n            vnormalize(isect.n);\n        }\n    }\n}\n\nstatic inline void orthoBasis(vec basis[3], const vec &n) {\n    basis[2] = n;\n    basis[1].x = 0.0;\n    basis[1].y = 0.0;\n    basis[1].z = 0.0;\n\n    if ((n.x < 0.6f) && (n.x > -0.6f)) {\n        basis[1].x = 1.0;\n    } else if ((n.y < 0.6f) && (n.y > -0.6f)) {\n        basis[1].y = 1.0;\n    } else if ((n.z < 0.6f) && (n.z > -0.6f)) {\n        basis[1].z = 1.0;\n    } else {\n        basis[1].x = 1.0;\n    }\n\n    basis[0] = vcross(basis[1], basis[2]);\n    vnormalize(basis[0]);\n\n    basis[1] = vcross(basis[2], basis[0]);\n    vnormalize(basis[1]);\n}\n\nstatic float ambient_occlusion(Isect &isect, Plane &plane, Sphere spheres[3]) {\n    float eps = 0.0001f;\n    vec p, n;\n    vec basis[3];\n    float occlusion = 0.0;\n\n    p = isect.p + eps * isect.n;\n\n    orthoBasis(basis, isect.n);\n\n    vec relativeOrigins[3];\n    float originTerms[3];\n    for (int snum = 0; snum < 3; ++snum) {\n        relativeOrigins[snum] = p - spheres[snum].center;\n        originTerms[snum] = dot(relativeOrigins[snum], relativeOrigins[snum]) -\n                            spheres[snum].radius * spheres[snum].radius;\n    }\n\n    static const int ntheta = NAO_SAMPLES;\n    static const int nphi = NAO_SAMPLES;\n    for (int j = 0; j < ntheta; j++) {\n        for (int i = 0; i < nphi; i++) {\n            Ray ray;\n            Isect occIsect;\n\n            float theta = sqrtf(drand48());\n            float phi = 2.0f * M_PI * drand48();\n            float x = cosf(phi) * theta;\n            float y = sinf(phi) * theta;\n            float z = sqrtf(1.0f - theta * theta);\n\n            // local . global\n            float rx = x * basis[0].x + y * basis[1].x + z * basis[2].x;\n            float ry = x * basis[0].y + y * basis[1].y + z * basis[2].y;\n            float rz = x * basis[0].z + y * basis[1].z + z * basis[2].z;\n\n            ray.org = p;\n            ray.dir.x = rx;\n            ray.dir.y = ry;\n            ray.dir.z = rz;\n\n            occIsect.t = 1.0e+17f;\n            occIsect.hit = 0;\n\n            for (int snum = 0; snum < 3; ++snum)\n                ray_sphere_intersect_precomputed(occIsect, ray, spheres[snum], relativeOrigins[snum], originTerms[snum]);\n            ray_plane_intersect(occIsect, ray, plane);\n\n            if (occIsect.hit)\n                occlusion += 1.f;\n        }\n    }\n\n    occlusion = (ntheta * nphi - occlusion) / (float)(ntheta * nphi);\n    return occlusion;\n}\n\n/* Compute the image for the scanlines from [y0,y1), for an overall image\n   of width w and height h.\n */\nstatic void ao_scanlines(int y0, int y1, int w, int h, int nsubsamples, float image[]) {\n    static Plane plane = {vec(0.0f, -0.5f, 0.0f), vec(0.f, 1.f, 0.f)};\n    static Sphere spheres[3] = {\n        {vec(-2.0f, 0.0f, -3.5f), 0.5f}, {vec(-0.5f, 0.0f, -3.0f), 0.5f}, {vec(1.0f, 0.0f, -2.2f), 0.5f}};\n\n    srand48(y0);\n\n    for (int y = y0; y < y1; ++y) {\n        for (int x = 0; x < w; ++x) {\n            int offset = 3 * (y * w + x);\n            for (int u = 0; u < nsubsamples; ++u) {\n                for (int v = 0; v < nsubsamples; ++v) {\n                    float px = (x + (u / (float)nsubsamples) - (w / 2.0f)) / (w / 2.0f);\n                    float py = -(y + (v / (float)nsubsamples) - (h / 2.0f)) / (h / 2.0f);\n\n                    // Scale NDC based on width/height ratio, supporting non-square image output\n                    px *= (float)w / (float)h;\n\n                    float ret = 0.f;\n                    Ray ray;\n                    Isect isect;\n\n                    ray.org = vec(0.f, 0.f, 0.f);\n\n                    ray.dir.x = px;\n                    ray.dir.y = py;\n                    ray.dir.z = -1.0f;\n                    vnormalize(ray.dir);\n\n                    isect.t = 1.0e+17f;\n                    isect.hit = 0;\n\n                    for (int snum = 0; snum < 3; ++snum)\n                        ray_sphere_intersect(isect, ray, spheres[snum]);\n                    ray_plane_intersect(isect, ray, plane);\n\n                    if (isect.hit)\n                        ret = ambient_occlusion(isect, plane, spheres);\n\n                    // Update image for AO for this ray\n                    image[offset + 0] += ret;\n                    image[offset + 1] += ret;\n                    image[offset + 2] += ret;\n                }\n            }\n            // Normalize image pixels by number of samples taken per pixel\n            image[offset + 0] /= nsubsamples * nsubsamples;\n            image[offset + 1] /= nsubsamples * nsubsamples;\n            image[offset + 2] /= nsubsamples * nsubsamples;\n        }\n    }\n}\n\nvoid ao_serial(int w, int h, int nsubsamples, float image[]) { ao_scanlines(0, h, w, h, nsubsamples, image); }\n\n#include <cstring>\n#include \"render_context.h\"\nextern \"C\" void run(RenderInput*c,float*image,int*ids,int threads){memset(image,0,size_t(c->width)*c->height*3*4);ao_serial(c->width,c->height,c->nsubsamples,image);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "Each ambient-occlusion hit uses the same ray origin for all 64 ambient rays, but the sphere intersection path recomputes each sphere-relative origin and its squared-distance term for every direction. Precomputing those invariant terms once per hit and using them only in ambient sphere tests should reduce repeated scalar intersection work; compiler hoisting and performance impact remain to be measured.",
+    "memory_lessons": [],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "This is one isolated, portable ambient-intersection experiment. It leaves primary-ray intersections, sampling direction generation and random consumption, all 64 ambient rays, plane tests, geometry, hit/root conditions, and scheduling unchanged. The supplied baseline is correct with mean 3.4961 seconds across three timings; there are no candidate correctness results or timings yet, so no speedup is claimed. Controller evaluation should include every official configuration, including nsubsamples=3, with repeated timings.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Precompute each sphere's ambient-ray-origin-relative vector and quadratic origin term once per ambient-occlusion hit, then use a dedicated ambient sphere-intersection helper.",
+      "Leave primary sphere tests, scalar direction generation, random draws, plane intersection, all 64 ambient samples, and scheduling unchanged."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "9903d2bf759c46a1bb852c03300f465f",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "9e583a509c077e8c68c738a1e108065168181495bb1e2b75fdff1873c680495b",
+  "session_id": "6f673bcf1f384d98a4d546901684121e",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "f069c70b6eff47b5c3e40832a8a78af5d0ae462812fb7e9878db9e731932f7ab",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 14190,
+        "output_tokens": 8303,
+        "reasoning_output_tokens": 4806
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "fec679fa77874855-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [],
+          "status": "applied",
+          "summary": "Selected an isolated ambient-only precomputation to test repeated sphere-intersection work without changing sampling or primary traversal."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "Did not inspect the runtime environment as required; the candidate uses ordinary scalar C++ and makes no ISA assumption."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No build-specific intrinsic or API is used, so documentation was not needed for this portable source transformation."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Recorded the supplied correct baseline and its three timings; candidate correctness and repeated timings must come from controller evaluation."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "9903d2bf759c46a1bb852c03300f465f",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "9e583a509c077e8c68c738a1e108065168181495bb1e2b75fdff1873c680495b",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "6f673bcf1f384d98a4d546901684121e"
+    },
+    "observed_tokens": 22493,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 22493,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

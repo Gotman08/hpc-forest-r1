@@ -1,0 +1,14 @@
+{
+  "files": [
+    {
+      "content": "#include <cstring>\ntemplate<int N> void mm(const float* A, const float* B, float* C) {\n    for (int r = 0; r < N; ++r) {\n        const float* a_row = A + r * N;\n        float* c_row = C + r * N;\n        for (int k = 0; k < N; ++k) {\n            const float a = a_row[k];\n            const float* b_row = B + k * N;\n            for (int c = 0; c < N; ++c)\n                c_row[c] += a * b_row[c];\n        }\n    }\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1, const void* input2, void* output, int n, int parameter, int threads)\n{\n    memset(output, 0, size_t(n) * n * 4);\n    if (n == 1024) mm<1024>((const float*)input1, (const float*)input2, (float*)output);\n    else if (n == 128) mm<128>((const float*)input1, (const float*)input2, (float*)output);\n    else if (n == 32) mm<32>((const float*)input1, (const float*)input2, (float*)output);\n}\n",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "A serial r-k-c rank-1 update traverses each B row and C row contiguously, potentially improving locality and compiler vectorization across c versus the baseline r-c-k loop. Keeping k in ascending order and zeroing C first preserves the accumulation order and overwrite behavior; this isolates traversal from threading or unrolling.",
+  "notes": "This is the simple serial traversal experiment only; no row-parallelism or unrolling is added. The supplied baseline n=1024 timings average 6.4059 seconds across three samples. No candidate measurements are available yet; correctness, tolerance, and repeated native timings remain for controller evaluation.",
+  "sources_kept": [],
+  "transformations": [
+    "Replace the innermost r-c-k dot-product traversal with a serial r-k-c rank-1 update, streaming contiguous B and C rows."
+  ]
+}

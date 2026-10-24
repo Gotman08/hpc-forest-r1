@@ -1,0 +1,138 @@
+/*
+  Copyright (c) 2010-2023, Intel Corporation
+
+  SPDX-License-Identifier: BSD-3-Clause
+*/
+
+static int mandel(float c_re, float c_im, int count) {
+    float z_re = c_re, z_im = c_im;
+    int i;
+    for (i = 0; i < count; ++i) {
+        if (z_re * z_re + z_im * z_im > 4.f)
+            break;
+
+        float new_re = z_re * z_re - z_im * z_im;
+        float new_im = 2.f * z_re * z_im;
+        z_re = c_re + new_re;
+        z_im = c_im + new_im;
+    }
+
+    return i;
+}
+
+static void mandel_group4(float c_re0, float c_im0,
+                          float c_re1, float c_im1,
+                          float c_re2, float c_im2,
+                          float c_re3, float c_im3,
+                          int count, int* output) {
+    float z_re0 = c_re0, z_im0 = c_im0;
+    float z_re1 = c_re1, z_im1 = c_im1;
+    float z_re2 = c_re2, z_im2 = c_im2;
+    float z_re3 = c_re3, z_im3 = c_im3;
+    int active0 = 1, active1 = 1, active2 = 1, active3 = 1;
+    int initial_result = count > 0 ? count : 0;
+    output[0] = initial_result;
+    output[1] = initial_result;
+    output[2] = initial_result;
+    output[3] = initial_result;
+
+    for (int i = 0; i < count && (active0 || active1 || active2 || active3); ++i) {
+        if (active0) {
+            if (z_re0 * z_re0 + z_im0 * z_im0 > 4.f) {
+                output[0] = i;
+                active0 = 0;
+            } else {
+                float new_re0 = z_re0 * z_re0 - z_im0 * z_im0;
+                float new_im0 = 2.f * z_re0 * z_im0;
+                z_re0 = c_re0 + new_re0;
+                z_im0 = c_im0 + new_im0;
+            }
+        }
+        if (active1) {
+            if (z_re1 * z_re1 + z_im1 * z_im1 > 4.f) {
+                output[1] = i;
+                active1 = 0;
+            } else {
+                float new_re1 = z_re1 * z_re1 - z_im1 * z_im1;
+                float new_im1 = 2.f * z_re1 * z_im1;
+                z_re1 = c_re1 + new_re1;
+                z_im1 = c_im1 + new_im1;
+            }
+        }
+        if (active2) {
+            if (z_re2 * z_re2 + z_im2 * z_im2 > 4.f) {
+                output[2] = i;
+                active2 = 0;
+            } else {
+                float new_re2 = z_re2 * z_re2 - z_im2 * z_im2;
+                float new_im2 = 2.f * z_re2 * z_im2;
+                z_re2 = c_re2 + new_re2;
+                z_im2 = c_im2 + new_im2;
+            }
+        }
+        if (active3) {
+            if (z_re3 * z_re3 + z_im3 * z_im3 > 4.f) {
+                output[3] = i;
+                active3 = 0;
+            } else {
+                float new_re3 = z_re3 * z_re3 - z_im3 * z_im3;
+                float new_im3 = 2.f * z_re3 * z_im3;
+                z_re3 = c_re3 + new_re3;
+                z_im3 = c_im3 + new_im3;
+            }
+        }
+    }
+}
+
+static void mandelbrot_row(float x0, float y0, float dx, float dy,
+                           int width, int maxIterations, int j, int output[]) {
+    float y = y0 + j * dy;
+    int i = 0;
+    for (; i < width && width - i >= 4; i += 4) {
+        float x0_group = x0 + i * dx;
+        float x1_group = x0 + (i + 1) * dx;
+        float x2_group = x0 + (i + 2) * dx;
+        float x3_group = x0 + (i + 3) * dx;
+        int index = j * width + i;
+        mandel_group4(x0_group, y, x1_group, y, x2_group, y, x3_group, y,
+                      maxIterations, output + index);
+    }
+    for (; i < width; ++i) {
+        float x = x0 + i * dx;
+        int index = j * width + i;
+        output[index] = mandel(x, y, maxIterations);
+    }
+}
+
+void mandelbrot_serial(float x0, float y0, float x1, float y1,
+                       int width, int height, int maxIterations, int output[]) {
+    float dx = (x1 - x0) / width;
+    float dy = (y1 - y0) / height;
+
+    for (int j = 0; j < height; ++j)
+        mandelbrot_row(x0, y0, dx, dy, width, maxIterations, j, output);
+}
+
+static void mandelbrot_compute(float x0, float y0, float x1, float y1,
+                               int width, int height, int maxIterations,
+                               int output[], int threads) {
+    int team_size = threads < height ? threads : height;
+    if (team_size <= 1) {
+        mandelbrot_serial(x0, y0, x1, y1, width, height, maxIterations, output);
+        return;
+    }
+
+    float dx = (x1 - x0) / width;
+    float dy = (y1 - y0) / height;
+#pragma omp parallel for schedule(dynamic, 1) num_threads(team_size)
+    for (int j = 0; j < height; ++j)
+        mandelbrot_row(x0, y0, dx, dy, width, maxIterations, j, output);
+}
+
+#include <cstdint>
+#include <cstring>
+#include <cmath>
+#include <algorithm>
+#include <omp.h>
+extern "C" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)
+{const float*a=(const float*)input1;mandelbrot_compute(a[0],a[1],a[2],a[3],n*3/2,n,parameter,(int*)output,threads);}

@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "#include <algorithm>\n\ntemplate<int N>\nstatic void mm(const float* A, const float* B, float* C, int threads) {\n    const int workers = threads > 0 ? std::min(threads, N) : 1;\n\n#pragma omp parallel for schedule(static) num_threads(workers) if(workers > 1)\n    for (int r = 0; r < N; ++r) {\n        const float* a_row = A + r * N;\n        float* c_row = C + r * N;\n\n        // Each call overwrites its output, including when C contains prior data.\n        for (int c = 0; c < N; ++c) {\n            c_row[c] = 0.0f;\n        }\n\n        for (int k = 0; k < N; ++k) {\n            const float aik = a_row[k];\n            const float* b_row = B + k * N;\n            for (int c = 0; c < N; ++c) {\n                c_row[c] += aik * b_row[c];\n            }\n        }\n    }\n}\n\nextern \"C\" void run(const void* input1, const void* input2, void* output,\n                    int n, int parameter, int threads) {\n    const float* A = static_cast<const float*>(input1);\n    const float* B = static_cast<const float*>(input2);\n    float* C = static_cast<float*>(output);\n\n    if (n == 1024) {\n        mm<1024>(A, B, C, threads);\n    } else if (n == 128) {\n        mm<128>(A, B, C, threads);\n    } else if (n == 32) {\n        mm<32>(A, B, C, threads);\n    }\n}\n",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "The serial r-k-c variant measured 0.076396257 s, while row-parallel r-k-c without explicit SIMD measured 0.009476691 s. SIMD and k-unrolling follow-ups measured 0.010415142 s and 0.009647238 s, so this candidate keeps the plain contiguous row update and tests one contrasting change: initialize each C row inside its statically assigned row iteration instead of using a separate serial memset. This may improve output first-touch locality or have no benefit; no speedup is assumed.",
+  "notes": "The candidate initializes every output element on every call, then accumulates k in ascending order. The inner c loop retains contiguous B/C traversal without an explicit SIMD directive or unrolling. The worker count is capped at min(threads, N), with a single-thread path when the caller supplies at most one thread. No new correctness or timing results are claimed; compare controller checks for all official sizes and repeated native n=1024 timings. The catalog reports seven distinct measured programs and no repeated programs; this is a separate initialization variant rather than a renamed candidate.",
+  "sources_kept": [],
+  "transformations": [
+    "Remove the separate serial memset and initialize each output row to zero inside the iteration that owns that row.",
+    "Parallelize independent rows with static OpenMP scheduling, capped at min(threads, N).",
+    "Retain ascending-k accumulation and contiguous c traversal; do not add explicit SIMD or unrolling."
+  ]
+}

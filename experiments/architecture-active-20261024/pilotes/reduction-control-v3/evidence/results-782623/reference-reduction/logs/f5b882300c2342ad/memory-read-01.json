@@ -1,0 +1,23 @@
+{
+  "request": {
+    "ids": [
+      "908efebec59a4521"
+    ],
+    "offset": 0,
+    "operation": "source",
+    "path": "src/candidate.cu",
+    "query": ""
+  },
+  "result": {
+    "schema": "hpc-forest-memory-v1",
+    "id": "908efebec59a4521",
+    "commit": "9c67996d8abe7abb07716d3d9bed043d997512b3",
+    "snapshot_digest": "21e8115abdd4c061957152714d6de1012849a48b95510b40e685b9c27b664800",
+    "offset_unit": "characters",
+    "path": "src/candidate.cu",
+    "file_sha256": "dcf6db07f32f8841fd84f65044c641443a4b1160bec81c8646da400b0bd9baf1",
+    "total_characters": 2282,
+    "text": "#include <cuda_runtime.h>\n#include <stddef.h>\n\n/*\n * Block partials are reduced modulo 2^32. This conversion preserves their\n * bit patterns in the signed-int scratch/output buffers. If the final exact\n * sum fits in int32, its final modular representation is that exact sum.\n */\n__device__ __forceinline__ int uintBitsToInt(unsigned int value)\n{\n    if (value <= 0x7fffffffu) {\n        return static_cast<int>(value);\n    }\n    return -1 - static_cast<int>(~value);\n}\n\n__device__ __forceinline__ unsigned int warpReduceSum(unsigned int value)\n{\n    for (int offset = warpSize / 2; offset > 0; offset >>= 1) {\n        value += __shfl_down_sync(0xffffffffu, value, offset);\n    }\n    return value;\n}\n\n__global__ void reduceWarpFirst(const int *g_idata, int *g_odata,\n                                unsigned int n)\n{\n    __shared__ unsigned int warp_sums[4];\n\n    const unsigned int tid = threadIdx.x;\n    const unsigned int i = blockIdx.x * blockDim.x + tid;\n    const unsigned int value =\n        (i < n) ? static_cast<unsigned int>(g_idata[i]) : 0u;\n\n    const unsigned int warp_sum = warpReduceSum(value);\n    if ((tid & 31u) == 0u) {\n        warp_sums[tid >> 5] = warp_sum;\n    }\n    __syncthreads();\n\n    if (tid < 32u) {\n        unsigned int block_sum = (tid < 4u) ? warp_sums[tid] : 0u;\n        block_sum = warpReduceSum(block_sum);\n        if (tid == 0u) {\n            g_odata[blockIdx.x] = uintBitsToInt(block_sum);\n        }\n    }\n}\n\nextern \"C\" void run(const void *x, const void *k, const void *gy,\n                    void *out, void *scratch, int n, int h, int l, int ks)\n{\n    if (n <= 0) {\n        cudaMemsetAsync(out, 0, sizeof(int));\n        return;\n    }\n\n    unsigned int count = static_cast<unsigned int>(n);\n    const int *input = static_cast<const int *>(x);\n    int *scratch_base = static_cast<int *>(scratch);\n    bool flip = false;\n\n    while (count > 1u) {\n        const unsigned int blocks = count / 128u + (count % 128u != 0u);\n        int *dest = flip\n            ? scratch_base + static_cast<size_t>(n) + 32768u\n            : scratch_base;\n\n        reduceWarpFirst<<<blocks, 128>>>(input, dest, count);\n        input = dest;\n        count = blocks;\n        flip = !flip;\n    }\n\n    cudaMemcpyAsync(out, input, sizeof(int), cudaMemcpyDeviceToDevice);\n}\n",
+    "next_offset": null
+  }
+}

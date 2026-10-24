@@ -1,0 +1,155 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\nstatic bool validate_utf8(const char *b, size_t length) {\n  const unsigned char *bytes = (const unsigned char *)b;\n  for (size_t index = 0;;) {\n    unsigned char byte1;\n\n    do { // fast ASCII Path\n      if (index >= length) {\n        return true;\n      }\n      byte1 = bytes[index++];\n    } while (byte1 < 0x80);\n    if (byte1 < 0xE0) {\n      // Two-byte form.\n      if (length - index < 1) {\n        return false;\n      }\n      const unsigned char byte2 = bytes[index++];\n      const unsigned int invalid =\n          (unsigned int)(byte1 < 0xC2) |\n          (unsigned int)((byte2 & 0xC0) != 0x80);\n      if (invalid != 0) {\n        return false;\n      }\n    } else if (byte1 < 0xF0) {\n      // Three-byte form.\n      if (length - index < 2) {\n        return false;\n      }\n      const unsigned char byte2 = bytes[index++];\n      const unsigned char byte3 = bytes[index++];\n      unsigned int invalid = (unsigned int)((byte2 & 0xC0) != 0x80);\n      invalid |= (unsigned int)((byte1 == 0xE0) & (byte2 < 0xA0));\n      invalid |= (unsigned int)((byte1 == 0xED) & (byte2 >= 0xA0));\n      invalid |= (unsigned int)((byte3 & 0xC0) != 0x80);\n      if (invalid != 0) {\n        return false;\n      }\n    } else {\n      // Four-byte form.\n      if (length - index < 3) {\n        return false;\n      }\n      const unsigned char byte2 = bytes[index++];\n      const unsigned char byte3 = bytes[index++];\n      const unsigned char byte4 = bytes[index++];\n      unsigned int invalid = (unsigned int)((byte2 & 0xC0) != 0x80);\n      invalid |= (unsigned int)(byte1 > 0xF4);\n      invalid |= (unsigned int)((byte1 == 0xF0) & (byte2 < 0x90));\n      invalid |= (unsigned int)((byte1 == 0xF4) & (byte2 > 0x8F));\n      invalid |= (unsigned int)((byte3 & 0xC0) != 0x80);\n      invalid |= (unsigned int)((byte4 & 0xC0) != 0x80);\n      if (invalid != 0) {\n        return false;\n      }\n    }\n  }\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{*(uint32_t*)output=validate_utf8((const char*)input1,n);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "The baseline and previous lead-directed candidate retain the same general scalar width dispatch, but the latter was slower. This pure-scalar variant tests whether aggregating per-sequence validity predicates with bitwise OR, rather than short-circuit OR, reduces control-flow or dependency overhead on mixed-width input. It keeps the ASCII scan and checks remaining length before every continuation-byte load. The compiler may produce equivalent code or the extra predicate work may outweigh any benefit; performance is unmeasured.",
+    "memory_lessons": [
+      {
+        "applicability": "Relevant when evaluating branch-reduced scalar UTF-8 validators on this workload.",
+        "claim": "The lead-directed scalar candidate was valid but measured slower than baseline: 56.50 µs versus 49.62 µs mean. This does not establish why it regressed.",
+        "evidence_ids": [
+          "e87168de8c614fc4",
+          "baseline-e1"
+        ],
+        "next_experiment": "Measure this isolated predicate-aggregation variant; do not attribute any outcome to branch reduction without controller measurements."
+      },
+      {
+        "applicability": "Relevant if revisiting compact-state DFA decoding.",
+        "claim": "A compact-DFA development record failed protected correctness checks; the available evidence does not identify the cause.",
+        "evidence_ids": [
+          "e87168de8c614fc4-h01"
+        ],
+        "next_experiment": "Before measuring another table-driven DFA, audit its state transitions against malformed and boundary UTF-8 cases."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Earlier variants to report: the compact-state DFA development attempt was incorrect (cause unspecified); the lead-directed scalar decoder was valid but slower than baseline (56.50 µs versus 49.62 µs mean). This predicate-aggregation candidate is unmeasured; no speedup is claimed. It is a pure-scalar experiment.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Keep the scalar ASCII-run fast path and existing width-specific decoding structure.",
+      "After each width-specific bounds check, load the required continuation bytes and combine all continuation and lead-boundary predicates using non-short-circuit bitwise OR.",
+      "Use remaining-length checks before continuation-byte reads to retain safe bounds behavior for all input lengths."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "bcc9bcc0c5e2482683353aad8c1a4fe1",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "fe818ad8941ff60edb0071fb7c52235dec0bd35d6b91a0d8850874f39ea9e4a7",
+  "session_id": "84bf5b1d844645aba6fb57b65acabefa",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "b8ef8fd1259d0236e64215a59e581b081ff449259446ec7d5bf703d9090c1beb",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4352,
+        "input_tokens": 20151,
+        "output_tokens": 7848,
+        "reasoning_output_tokens": 6419
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "ec1a08dc37a84021-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "baseline-e1",
+            "e87168de8c614fc4"
+          ],
+          "status": "applied",
+          "summary": "Proposed one isolated scalar experiment that changes validation-predicate control flow while preserving width dispatch, ASCII scanning, and bounds checks."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The proposed change uses no architecture-specific instructions, libraries, or threading changes."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No version-dependent API or hardware feature is involved; the experiment uses standard C++ integer and bitwise operations."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "e87168de8c614fc4"
+          ],
+          "status": "applied",
+          "summary": "Compared the available baseline and prior valid candidate measurements, reported the regression without inferring its cause, and left this candidate's outcome for controller evaluation."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "bcc9bcc0c5e2482683353aad8c1a4fe1",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "fe818ad8941ff60edb0071fb7c52235dec0bd35d6b91a0d8850874f39ea9e4a7",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "84bf5b1d844645aba6fb57b65acabefa"
+    },
+    "observed_tokens": 27999,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 27999,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

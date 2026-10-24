@@ -1,0 +1,280 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "b828a2be2a829df55505e70b01717402c695cfad916d8600a28eb8901e1ce3e5",
+    "tree_id": "e1:T3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "50776785629d4aa3-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "50776785629d4aa3",
+        "facts": {
+          "commit": null,
+          "base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Protected correctness checks failed",
+        "model_interpretation": {
+          "claim": "Le candidat SIMD précédent, correct mais plus lent que le baseline, classifiait les sextets vectoriellement puis recomposait les octets en scalaire. Un empaquetage vectoriel par maddubs/madd et permutation de lane pourrait réduire ce coût, à condition de vérifier chaque bloc avant toute écriture; AVX-512 est retenu seulement avec détection runtime des capacités, sinon AVX2 ou le chemin scalaire prend le relais.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Ajouter des convertisseurs par blocs AVX2 (32 caractères) et AVX-512BW/F (64 caractères), avec attributs de cible GCC locaux et détection dynamique du CPU.\",\"Classifier les plages ASCII et convertir les sextets par vecteurs, puis produire les octets par maddubs/madd et permutation intra-lane; valider tous les caractères avant d’écrire.\",\"N’effectuer que des chargements de blocs complets; conserver le chemin scalaire existant pour padding, reliquat et blocs invalides.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "6ad9a00d207b4054",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "6ad9a00d207b4054",
+        "facts": {
+          "commit": "c3bb29c5105abca3c0a35f0fb44d6a8378281f16",
+          "base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 8.90829985223015e-05,
+          "score": 0.3833406048082751
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "L’échec de h02 dès n=64 rend la combinaison SIMD de produits et de shuffle suspecte, sans en établir la cause. Cette variante conserve la classification vectorielle, mais assemble les octets par groupes de quatre sextets en scalaire; elle teste si cela évite le défaut tout en réduisant les consultations de table. Le chemin AVX-512 n’est appelé qu’après détection d’avx512f et avx512bw, sinon AVX2 est essayé puis le chemin scalaire.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Conserver une classification vectorielle ASCII vers sextets par AVX2 et AVX-512BW/F, avec attributs cible locaux et détection CPU dynamique.\",\"Remplacer le produit et le shuffle SIMD pour l’empaquetage par un assemblage scalaire borné des 3 octets de chaque groupe de 4 sextets.\",\"N’effectuer les chargements SIMD qu’à partir de blocs complets et valides; laisser padding, reliquat et blocs contenant des caractères non alphabétiques au décodeur scalaire existant.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "6ad9a00d207b4054-h03",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "6ad9a00d207b4054",
+        "facts": {
+          "commit": null,
+          "base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "L’échec de h02 dès n=64 rend la combinaison SIMD de produits et de shuffle suspecte, sans en établir la cause. Cette variante conserve la classification vectorielle, mais assemble les octets par groupes de quatre sextets en scalaire; elle teste si cela évite le défaut tout en réduisant les consultations de table. Le chemin AVX-512 n’est appelé qu’après détection d’avx512f et avx512bw, sinon AVX2 est essayé puis le chemin scalaire.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Conserver une classification vectorielle ASCII vers sextets par AVX2 et AVX-512BW/F, avec attributs cible locaux et détection CPU dynamique.\",\"Remplacer le produit et le shuffle SIMD pour l’empaquetage par un assemblage scalaire borné des 3 octets de chaque groupe de 4 sextets.\",\"N’effectuer les chargements SIMD qu’à partir de blocs complets et valides; laisser padding, reliquat et blocs contenant des caractères non alphabétiques au décodeur scalaire existant.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "50776785629d4aa3",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "50776785629d4aa3",
+        "facts": {
+          "commit": "1c6c9e9b9ef44396052493e300e4129d93972769",
+          "base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9709653370310468e-05,
+          "score": 0.6508331775377754
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le baseline est correct à 55,38 µs, tandis que le candidat SIMD antérieur correct avec assemblage scalaire a mesuré 89,08 µs; cela ne soutient pas encore un gain. Le chemin vectorisé de produit et shuffle a échoué à n=64, sans cause établie. Cette variante conserve la classification SIMD, combine les sextets avec maddubs/madd en mots de 24 bits, puis écrit les trois octets par mot en scalaire. Elle teste si cette extraction, moins coûteuse que l’assemblage scalaire des sextets et sans shuffle inter-lanes, apporte un chemin à la fois correct et plus rapide. AVX-512 est compilé avec attributs de fonction et n’est appelé qu’après détection AVX-512F/BW; AVX2 reste le repli.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Remplacer le packing SIMD avec maddubs/madd puis shuffle par le stockage des mots de 24 bits et l’extraction scalaire de leurs trois octets.\",\"Conserver la classification vectorielle AVX2 et AVX-512F/BW, avec attributs target locaux et détection CPU dynamique.\",\"Traiter uniquement les blocs complets; laisser le padding, les caractères invalides et le reliquat au décodeur scalaire, sans surlecture ni écriture hors limites.\",\"Garder les fonctions publiques d’encodage/décodage et la signature run, sans modifier les threads, options, cible ou protocole.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "50776785629d4aa3-h03",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "50776785629d4aa3",
+        "facts": {
+          "commit": null,
+          "base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le baseline est correct à 55,38 µs, tandis que le candidat SIMD antérieur correct avec assemblage scalaire a mesuré 89,08 µs; cela ne soutient pas encore un gain. Le chemin vectorisé de produit et shuffle a échoué à n=64, sans cause établie. Cette variante conserve la classification SIMD, combine les sextets avec maddubs/madd en mots de 24 bits, puis écrit les trois octets par mot en scalaire. Elle teste si cette extraction, moins coûteuse que l’assemblage scalaire des sextets et sans shuffle inter-lanes, apporte un chemin à la fois correct et plus rapide. AVX-512 est compilé avec attributs de fonction et n’est appelé qu’après détection AVX-512F/BW; AVX2 reste le repli.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Remplacer le packing SIMD avec maddubs/madd puis shuffle par le stockage des mots de 24 bits et l’extraction scalaire de leurs trois octets.\",\"Conserver la classification vectorielle AVX2 et AVX-512F/BW, avec attributs target locaux et détection CPU dynamique.\",\"Traiter uniquement les blocs complets; laisser le padding, les caractères invalides et le reliquat au décodeur scalaire, sans surlecture ni écriture hors limites.\",\"Garder les fonctions publiques d’encodage/décodage et la signature run, sans modifier les threads, options, cible ou protocole.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "6ad9a00d207b4054-h02",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "6ad9a00d207b4054",
+        "facts": {
+          "commit": null,
+          "base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Protected correctness checks failed",
+        "model_interpretation": {
+          "claim": "Pour les blocs assez grands, classifier les caractères ASCII en sextets par SIMD puis les empaqueter avec maddubs/madd et shuffle réduit le coût des recherches scalaires. Le chemin AVX-512F/BW est compilé par attribut de fonction et n'est exécuté qu'après détection CPU; AVX2 sert de repli, puis le chemin scalaire traite tout reliquat ou bloc non valide. Le coût des temporaires, de la dispatch et la taille des entrées peuvent annuler le gain; aucune accélération n'est présumée.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Ajouter des fonctions par blocs avec attributs GCC target(\\\"avx2\\\") et target(\\\"avx512f,avx512bw\\\"), sans changer les options globales.\",\"Convertir vectoriellement les plages A-Z, a-z, 0-9, + et / en sextets; vérifier la validité du bloc avant empaquetage.\",\"Empaqueter 32 caractères en 24 octets (AVX2) ou 64 caractères en 48 octets (AVX-512); choisir AVX-512 seulement si ses capacités sont détectées, puis AVX2 sinon.\",\"Laisser le décodeur scalaire gérer le reliquat paddé, les blocs plus courts et les blocs contenant des caractères non standards.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 11,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T3",
+        "subject": "Décodage SIMD par blocs, avec comparaison des ISA disponibles",
+        "objective": "Dans src/candidate.cpp, prototyper un chemin SIMD pour les blocs complets, en comparant AVX2 à une variante AVX-512 seulement si les capacités du processeur cible et la compilation sous GCC 14.2/configuration figée le permettent effectivement. Convertir les octets ASCII en sextets par classification ou permutation vectorielle, empaqueter les octets décodés, et traiter le reliquat paddé par un chemin scalaire. Ne pas modifier compilateur, options, cible ou protocole, ni supposer une extension non vérifiée. Préserver le format de sortie et le budget de threads; éviter toute surlecture ou écriture hors limites. Valider des entrées valides de longueurs variées, répéter les mesures et consigner les échecs.",
+        "records": 10,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "50776785629d4aa3",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9709653370310468e-05,
+          "hypothesis_as_data": "Le baseline est correct à 55,38 µs, tandis que le candidat SIMD antérieur correct avec assemblage scalaire a mesuré 89,08 µs; cela ne soutient pas encore un gain. Le chemin vectorisé de produit et shuffle a échoué à n=64, sans cause établie"
+        },
+        "latest": {
+          "id": "50776785629d4aa3",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9709653370310468e-05,
+          "hypothesis_as_data": "Le baseline est correct à 55,38 µs, tandis que le candidat SIMD antérieur correct avec assemblage scalaire a mesuré 89,08 µs; cela ne soutient pas encore un gain. Le chemin vectorisé de produit et shuffle a échoué à n=64, sans cause établie"
+        },
+        "alternative": {
+          "id": "6ad9a00d207b4054",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 8.90829985223015e-05,
+          "hypothesis_as_data": "L’échec de h02 dès n=64 rend la combinaison SIMD de produits et de shuffle suspecte, sans en établir la cause. Cette variante conserve la classification vectorielle, mais assemble les octets par groupes de quatre sextets en scalaire; elle t"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "50776785629d4aa3-h01",
+    "6ad9a00d207b4054",
+    "6ad9a00d207b4054-h03",
+    "50776785629d4aa3",
+    "50776785629d4aa3-h03",
+    "6ad9a00d207b4054-h02"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "c3bb29c5105abca3c0a35f0fb44d6a8378281f16",
+  "selected_parent_id": "6ad9a00d207b4054"
+}

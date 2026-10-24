@@ -1,0 +1,283 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "7af34e0eaefb7c68bd0bf0c071b2972e3188b50e8667616ff553de5a3205a8ac",
+    "tree_id": "e1:T3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "cf4d414cae9d482e",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "cf4d414cae9d482e",
+        "facts": {
+          "commit": "77c138b1d0bdc8705ddba3a3178ab878865bd85a",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.01978063138326009,
+          "score": 0.6419448173741215
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The earlier valid one-CTA-per-(h,j) variant distributes B*L across threads but still leaves each output reduction within one CTA. For sufficiently large B*L, splitting into 65,536-element tiles creates multiple CTAs per output, writes one FP32 sum per tile to supplied scratch, then reduces those partials in a final CTA. The tile-count cap bounds the partial array to at most B*H*L floats; small reductions or unsupported tile counts use the direct CTA path. More parallel work may help large reductions, while the extra launch and scratch traffic may regress complete-call timing, so the controller must compare correctness and whole-call time.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the serial weight-gradient kernel with a direct CTA-level reduction for small or fallback cases.\",\"For sufficiently large B*L, compute tiled FP32 partial sums in the supplied scratch buffer and finalize each (h,j) output in a second kernel.\",\"Cap the tile count so the partial buffer contains at most B*H*L floats; every final-kernel partial read is preceded by a write in the same call.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "cf4d414cae9d482e-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "cf4d414cae9d482e",
+        "facts": {
+          "commit": null,
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The earlier valid one-CTA-per-(h,j) variant distributes B*L across threads but still leaves each output reduction within one CTA. For sufficiently large B*L, splitting into 65,536-element tiles creates multiple CTAs per output, writes one FP32 sum per tile to supplied scratch, then reduces those partials in a final CTA. The tile-count cap bounds the partial array to at most B*H*L floats; small reductions or unsupported tile counts use the direct CTA path. More parallel work may help large reductions, while the extra launch and scratch traffic may regress complete-call timing, so the controller must compare correctness and whole-call time.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the serial weight-gradient kernel with a direct CTA-level reduction for small or fallback cases.\",\"For sufficiently large B*L, compute tiled FP32 partial sums in the supplied scratch buffer and finalize each (h,j) output in a second kernel.\",\"Cap the tile count so the partial buffer contains at most B*H*L floats; every final-kernel partial read is preceded by a write in the same call.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:cf4d414cae9d482e:0:0",
+        "kind": "lesson",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "cf4d414cae9d482e",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The one-stage CTA variant was valid and measured at 0.014375 s mean, compared with the valid baseline at 0.035464 s; neither measurement attributes time to this kernel alone.",
+          "transformations": "{}",
+          "applicability": "The prior one-stage CTA reduction is a useful measured comparator, but its complete-call timing does not isolate the weight-gradient kernel. The split variant needs its own correctness and complete-call measurements.",
+          "next_experiment": "Compare this tiled scratch reduction against the one-stage CTA result using the same complete-call harness.",
+          "evidence_ids": [
+            "9b2a7876f05a474b",
+            "baseline-e1"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      },
+      {
+        "id": "9b2a7876f05a474b",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "9b2a7876f05a474b",
+        "facts": {
+          "commit": "976f881a98d9f007e050086732c2972a834c0d75",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.014375462532043456,
+          "score": 0.7115647334137489
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A CTA per (h,j) can parallelize the weight-gradient accumulation over both batch and time, replacing the current serial B*L traversal for each output with per-thread FP32 accumulators and a shared-memory CTA reduction. The launch adapts its 2D block shape to B and L while capping the block at 256 threads. This may improve large reductions but add CTA and reduction overhead for small workloads; complete-call timing is needed to judge it.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Changed the weight-gradient kernel to assign one CTA to each (h,j), with threads distributed across B and L and a shared-memory FP32 reduction.\",\"Adapted the CTA dimensions from B and L, using at most 256 threads and no additional allocation or scratch access.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "9b2a7876f05a474b-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "9b2a7876f05a474b",
+        "facts": {
+          "commit": null,
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A CTA per (h,j) can parallelize the weight-gradient accumulation over both batch and time, replacing the current serial B*L traversal for each output with per-thread FP32 accumulators and a shared-memory CTA reduction. The launch adapts its 2D block shape to B and L while capping the block at 256 threads. This may improve large reductions but add CTA and reduction overhead for small workloads; complete-call timing is needed to judge it.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Changed the weight-gradient kernel to assign one CTA to each (h,j), with threads distributed across B and L and a shared-memory FP32 reduction.\",\"Adapted the CTA dimensions from B and L, using at most 256 threads and no additional allocation or scratch access.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03546401341756185,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 6,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T3",
+        "subject": "Compare one-stage and split weight-gradient reductions",
+        "objective": "Own the weight-gradient kernel and its use of scratch in src/candidate.cu. Compare reduction granularities rather than assuming multi-stage partial sums win: test a CTA-level reduction distributed across B*L for each (h,j), and, where useful, split B*L into tiles that write partial sums to scratch followed by a final reduction. You may also test tiling neighboring j outputs if it enables useful reuse. Use no extra allocations; every scratch read must follow a write in the current call, and all outputs must be freshly written. Preserve bounds, the contracted gradient, full FP32, and the required tolerances for all valid inputs. Judge variants by correctness and complete-call timing, since the supplied baseline timing does not attribute cost to this kernel.",
+        "records": 5,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "9b2a7876f05a474b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.014375462532043456,
+          "hypothesis_as_data": "A CTA per (h,j) can parallelize the weight-gradient accumulation over both batch and time, replacing the current serial B*L traversal for each output with per-thread FP32 accumulators and a shared-memory CTA reduction. The launch adapts its"
+        },
+        "latest": {
+          "id": "cf4d414cae9d482e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.01978063138326009,
+          "hypothesis_as_data": "The earlier valid one-CTA-per-(h,j) variant distributes B*L across threads but still leaves each output reduction within one CTA. For sufficiently large B*L, splitting into 65,536-element tiles creates multiple CTAs per output, writes one F"
+        },
+        "alternative": {
+          "id": "cf4d414cae9d482e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.01978063138326009,
+          "hypothesis_as_data": "The earlier valid one-CTA-per-(h,j) variant distributes B*L across threads but still leaves each output reduction within one CTA. For sufficiently large B*L, splitting into 65,536-element tiles creates multiple CTAs per output, writes one F"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "cf4d414cae9d482e",
+    "cf4d414cae9d482e-h01",
+    "lesson:cf4d414cae9d482e:0:0",
+    "9b2a7876f05a474b",
+    "9b2a7876f05a474b-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "976f881a98d9f007e050086732c2972a834c0d75",
+  "selected_parent_id": "9b2a7876f05a474b"
+}

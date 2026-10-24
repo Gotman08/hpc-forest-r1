@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "/*\n * Copyright (c) 2007 Bart Massey\n * [This program is licensed under the \"MIT License\"]\n * Please see the file LICENSE in the source\n * distribution of this software for license terms.\n */\n\n#include <cstdint>\nstatic inline uint32_t\npopcount_naive(uint32_t n) {\n    uint32_t c = 0;\n    while (n) {\n        c += n & 1;\n        n >>= 1;\n    }\n    return c;\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{\n    const uint32_t* a = (const uint32_t*)input1;\n    uint32_t result = 0;\n    for (int j = 0; j < parameter; j++) {\n        const uint32_t* p = a;\n        int remaining = n;\n        for (; remaining >= 2; remaining -= 2, p += 2) {\n            result += popcount_naive(*p ^ result);\n            result += popcount_naive(*(p + 1) ^ result);\n        }\n        if (remaining > 0)\n            result += popcount_naive(*p ^ result);\n    }\n    *(uint32_t*)output = result;\n}\n",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "The selected parent’s fixed-naive, index-based factor-two unroll was valid at 0.000974642 s versus the baseline’s 0.001046088 s, but that single comparison does not establish the cause. This candidate keeps the naive count and ordered paired updates fixed while replacing indexed traversal with a moving pointer and remaining-element count; it tests whether that loop control helps. A prior builtin-count paired-pointer candidate was also valid and fast, but does not isolate pointer traversal from its count change.",
+  "notes": "This keeps popcount_naive fixed and preserves sequential uint32_t updates, serial execution, and output overwrite. The prior builtin-count paired-pointer result is a promising combined measurement, not confirmation; the controller should validate and measure this complete program.",
+  "sources_kept": [],
+  "transformations": [
+    "Keep popcount_naive unchanged and process each pair of input values in the original sequential recurrence order.",
+    "Replace indexed paired traversal with a moving const uint32_t pointer and a remaining-count loop, retaining an odd-element tail.",
+    "Preserve uint32_t arithmetic and wraparound, serial execution, generic input handling, and output overwrite."
+  ]
+}

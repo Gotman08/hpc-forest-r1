@@ -1,0 +1,169 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "de2c9407d9de7199819c1dbf43ec89e9d88492f8943be90b0ad2f1782dc89249",
+    "tree_id": "e1:Gm3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "cb0abfe70fb44f68",
+        "kind": "experiment",
+        "role": "Gm2",
+        "tree_id": "e1:Gm2",
+        "mission_id": "cb0abfe70fb44f68",
+        "facts": {
+          "commit": "4654e9360674efbf4ee2e602bd114999bac0d682",
+          "base_commit": "b8f8a1752c0927bcde65cebb6a893719066d50f4",
+          "parent_id": null,
+          "source_ids": [
+            "5e8ab3c71ac54c6d",
+            "32c246a5fab64e82"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.05706520725157407,
+          "score": 0.6682578416012871
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Dans le cache local de lumière de Gm1, le calcul de la demi-direction reste répété pour chaque pixel et lumière contributive. Remplacer la normalisation composante par composante du vecteur H par un produit scalaire puis une seule mise à l’échelle peut réduire les multiplications par contribution. L’intégration avec le cache de Gm1 peut toutefois modifier le coût relatif; le T3 isolé, mesuré plus lentement que Gm1, ne prouve pas que les changements se combinent favorablement. La correction et l’effet sur le temps doivent être établis par le contrôleur.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Conserver de Gm1 la transmission du nombre de threads de run() à DispatchDynamicC, son minimum de un et la distribution OpenMP dynamique des tuiles racines par blocs de taille un.\",\"Conserver le cache local à la tuile de Gm1, reconstruit depuis les entrées courantes avec les positions, l’atténuation et les trois canaux de couleur.\",\"Dans ShadeTileC, remplacer la normalisation composante par composante de H par le calcul de son carré de longueur, son inverse de longueur et un produit scalaire normal-H mis à l’échelle; conserver powf, les couleurs et les autres opérations du BRDF.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "1f43154a52dc4fb5",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "1f43154a52dc4fb5",
+        "facts": {
+          "commit": "3743c37a1268e526eda1f08e914e622f0c246a47",
+          "base_commit": "6c7704b6d1d3a87cc229d46d5af1a0ee4e81114e",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.10413629436091539,
+          "score": 0.5246824438050779
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "For each contributing light, the current code normalizes L=d/r and then normalizes L−V. Since r>0, L−V and d−rV have the same direction; compute N·L as dot(N,d)/r and N·H as dot(N,d−rV)/|d−rV| instead. This removes component-wise normalization of both vectors while preserving the BRDF algebraically; the reordered floating-point operations require controller validation. The catalog reports three distinct valid programs (no repeats): baseline 0.11495 s, direct half-vector dot 0.10920 s, packed-light cache 0.11101 s, and their measured combination 0.10518 s. This contrasts with the cache and previous half-vector formulations by testing a scale-invariant half-vector representation, not by assuming an unmeasured gain.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"In ShadeTileC, compute NdotL from the unnormalized light displacement multiplied by the reciprocal light distance, rather than materializing normalized L.\",\"Form the half-vector direction from displacement minus Vneg times light distance, then compute NdotH from its dot product and reciprocal length; leave powf, attenuation, light colors, and all other shading operations unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "6c7704b6d1d3a87cc229d46d5af1a0ee4e81114e",
+          "base_commit": "6c7704b6d1d3a87cc229d46d5af1a0ee4e81114e",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.1149515407162521,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm3",
+        "subject": "Tester le dernier changement de shading T3 sur le meilleur candidat Gm2",
+        "objective": "Partir de Gm2, meilleur candidat mesuré à 0,05707 s, et comparer les différences de ShadeTileC du dernier candidat T3 mesuré. Intégrer sélectivement toute optimisation distincte de la mise à l’échelle du demi-vecteur et du cache local de Gm2. Mesurer et valider la combinaison selon le protocole officiel, sans présumer de gains additifs.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "cb0abfe70fb44f68",
+    "1f43154a52dc4fb5",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "4654e9360674efbf4ee2e602bd114999bac0d682",
+  "selected_parent_id": null
+}

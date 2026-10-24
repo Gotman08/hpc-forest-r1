@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "content": "/*\n * Copyright (c) 2007 Bart Massey\n * [This program is licensed under the \"MIT License\"]\n * Please see the file LICENSE in the source\n * distribution of this software for license terms.\n */\n\n#include <cstdint>\nstatic inline uint32_t\npopcount_swar(uint32_t n) {\n    n = n - ((n >> 1) & 0x55555555u);\n    n = (n & 0x33333333u) + ((n >> 2) & 0x33333333u);\n    n = (n + (n >> 4)) & 0x0f0f0f0fu;\n    return (n * 0x01010101u) >> 24;\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{const uint32_t*a=(const uint32_t*)input1;uint32_t result=0;for(int j=0;j<parameter;j++)for(int i=0;i<n;i++)result+=popcount_swar(a[i]^result);*(uint32_t*)output=result;}\n",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "The measured SWAR parent reduces byte counts with successive shifts and additions. Replacing that horizontal reduction with an unsigned multiply-and-extract may reduce its instruction chain, but multiplication latency could hurt the serial recurrence; the frozen protocol should determine which effect dominates.",
+  "notes": "The unsigned multiply is defined modulo 2^32; after the byte-count stage, each byte is at most 8 and the high product byte is the sum of all four byte counts (0–32), so the helper returns the exact count for every uint32 value. The recurrence, loop bounds, output overwrite, and thread usage are unchanged. No performance result is claimed before controller measurement.",
+  "sources_kept": [],
+  "transformations": [
+    "Changed only the SWAR population-count horizontal reduction: after the pairwise and nibble stages, multiply by 0x01010101u and extract the high byte instead of summing with shifts by 8 and 16.",
+    "Preserved the ordered recurrence, uint32_t wraparound, generic dimensions, output overwrite, and thread-budget behavior."
+  ]
+}

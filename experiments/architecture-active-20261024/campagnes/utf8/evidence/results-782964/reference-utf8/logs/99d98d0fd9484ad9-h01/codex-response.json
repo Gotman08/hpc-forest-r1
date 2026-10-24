@@ -1,0 +1,142 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n#include <string.h>\n#if defined(__SSE2__)\n#include <emmintrin.h>\n#endif\n\nstatic bool validate_utf8_scalar(const unsigned char *bytes, size_t length) {\n  size_t index = 0;\n  while (index < length) {\n    unsigned char byte1 = bytes[index++];\n    if (byte1 < 0x80) {\n      continue;\n    }\n    if (byte1 < 0xE0) {\n      // Two-byte form.\n      if (index == length) {\n        return false;\n      }\n      if (byte1 < 0xC2 || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    } else if (byte1 < 0xF0) {\n      // Three-byte form.\n      if (length - index < 2) {\n        return false;\n      }\n      unsigned char byte2 = bytes[index++];\n      if ((byte2 & 0xC0) != 0x80\n          // Overlong? 5 most significant bits must not all be zero.\n          || (byte1 == 0xE0 && byte2 < 0xA0)\n          // Check for illegal surrogate codepoints.\n          || (byte1 == 0xED && 0xA0 <= byte2)\n          // Third byte trailing-byte test.\n          || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    } else {\n      // Four-byte form.\n      if (length - index < 3) {\n        return false;\n      }\n      int byte2 = bytes[index++];\n      if ((byte2 & 0xC0) != 0x80\n          // Check that 1 <= plane <= 16.\n          || (byte1 > 0xF4 || (byte1 == 0xF0 && byte2 < 0x90) || (byte1 == 0xF4 && byte2 > 0x8F))\n          // Third byte trailing-byte test\n          || (bytes[index++] & 0xC0) != 0x80\n          // Fourth byte trailing-byte test\n          || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    }\n  }\n  return true;\n}\n\nstatic inline bool decode_utf8_one(const unsigned char *bytes, size_t length,\n                                   size_t *index) {\n  const unsigned char byte1 = bytes[(*index)++];\n  if (byte1 < 0x80) {\n    return true;\n  }\n  if (byte1 < 0xE0) {\n    if (byte1 < 0xC2 || length - *index < 1) {\n      return false;\n    }\n    return (bytes[(*index)++] & 0xC0) == 0x80;\n  }\n  if (byte1 < 0xF0) {\n    if (length - *index < 2) {\n      return false;\n    }\n    const unsigned char byte2 = bytes[(*index)++];\n    if ((byte2 & 0xC0) != 0x80\n        || (byte1 == 0xE0 && byte2 < 0xA0)\n        || (byte1 == 0xED && byte2 >= 0xA0)\n        || (bytes[(*index)++] & 0xC0) != 0x80) {\n      return false;\n    }\n    return true;\n  }\n  if (length - *index < 3) {\n    return false;\n  }\n  const unsigned char byte2 = bytes[(*index)++];\n  if ((byte2 & 0xC0) != 0x80\n      || byte1 > 0xF4\n      || (byte1 == 0xF0 && byte2 < 0x90)\n      || (byte1 == 0xF4 && byte2 > 0x8F)\n      || (bytes[(*index)++] & 0xC0) != 0x80\n      || (bytes[(*index)++] & 0xC0) != 0x80) {\n    return false;\n  }\n  return true;\n}\n\nstatic bool validate_utf8_word_suffix(const unsigned char *bytes,\n                                      size_t length, size_t index) {\n  const uint64_t high_bits = UINT64_C(0x8080808080808080);\n  while (length - index >= 8) {\n    uint64_t word;\n    memcpy(&word, bytes + index, sizeof(word));\n    if ((word & high_bits) == 0) {\n      index += 8;\n      continue;\n    }\n\n    // Decode through the mixed block boundary so a crossing code point is\n    // validated once and the next word starts at a code-point boundary.\n    const size_t block_end = index + 8;\n    do {\n      if (!decode_utf8_one(bytes, length, &index)) {\n        return false;\n      }\n    } while (index < block_end);\n  }\n\n  if (index == length) {\n    return true;\n  }\n  return validate_utf8_scalar(bytes + index, length - index);\n}\n\nstatic bool validate_utf8(const char *b, size_t length) {\n  const unsigned char *bytes = (const unsigned char *)b;\n  size_t index = 0;\n#if defined(__SSE2__)\n  while (length - index >= 16) {\n    const __m128i block =\n        _mm_loadu_si128((const __m128i *)(bytes + index));\n    const unsigned int high_bits = (unsigned int)_mm_movemask_epi8(block);\n    if (high_bits != 0U) {\n      // The word decoder validates from this known code-point boundary.\n      return validate_utf8_word_suffix(bytes, length, index);\n    }\n    index += 16;\n  }\n#endif\n  return validate_utf8_word_suffix(bytes, length, index);\n}\n\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{*(uint32_t*)output=validate_utf8((const char*)input1,n);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "The 16-byte SSE2 prefix scan can skip long initial ASCII runs, while the 8-byte word checks after the first mixed vector may skip later complete ASCII blocks that scalar suffix decoding would inspect byte by byte. The additional masks and mixed-block decoding may instead cost more on short or dense non-ASCII inputs. The combined program is unmeasured and must beat the parent's 39.978 µs mean; no additive gain is assumed.",
+    "memory_lessons": [],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Both supplied source ideas are retained in one independently measured candidate. The prior measured means are 39.978 µs for 31112 and 57.505 µs for 1bef; they motivate the test but do not predict the combined result. The Gm1 catalog has no recorded trials and zero observed source diversity. Controller correctness and performance measurements are required.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [
+      "31112ea757f04c4a",
+      "1bef6299446e4809"
+    ],
+    "transformations": [
+      "Retained the bounded 16-byte SSE2 ASCII-prefix scan and its handoff at the first vector containing a high-bit byte.",
+      "Replaced scalar suffix processing with an 8-byte high-bit mask loaded using memcpy; decode mixed blocks by complete code point through the block boundary, then validate the bounded scalar tail.",
+      "Preserved the UTF-8 validity rules, run ABI, output, and conditional SSE2 compilation."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "5ee2ada5a5184ad1b5fda65482c0f9b6",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "d137637a95d3fbf98bd4c3b49ca901be65b494a640cf68a2ad54237fe8f8621c",
+  "session_id": "84bf5b1d844645aba6fb57b65acabefa",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "3b606c4ffc275903c1f8ef05b2c7a8d101fdfaf62302a559379e3b978fd36a5d",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 0,
+        "input_tokens": 20615,
+        "output_tokens": 6948,
+        "reasoning_output_tokens": 4847
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "6d8d331c48ef4087faef771a390762682f23e3221a52204ffe15e42883791d46",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "Gm1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "99d98d0fd9484ad9-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "31112ea757f04c4a",
+            "1bef6299446e4809"
+          ],
+          "status": "applied",
+          "summary": "Combined the retained SSE2 prefix with the word-scanned suffix, preserving strict UTF-8 checks, bounded reads, and the run ABI."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [
+            "31112ea757f04c4a"
+          ],
+          "status": "applied",
+          "summary": "Kept the existing __SSE2__ guard and unaligned SSE2 load; introduced no additional ISA assumption, and the suffix also has a portable word-scan path."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No new version-specific API or ISA feature is introduced; this reuses the supplied SSE2 intrinsics and standard memcpy."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "31112ea757f04c4a",
+            "1bef6299446e4809"
+          ],
+          "status": "applied",
+          "summary": "Used prior measured means only to frame the comparison; the integration remains unmeasured and requires official correctness and timing evaluation."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "5ee2ada5a5184ad1b5fda65482c0f9b6",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "d137637a95d3fbf98bd4c3b49ca901be65b494a640cf68a2ad54237fe8f8621c",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "84bf5b1d844645aba6fb57b65acabefa"
+    },
+    "observed_tokens": 27563,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 27563,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

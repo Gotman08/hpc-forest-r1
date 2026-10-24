@@ -1,0 +1,166 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "5be6679d34e629a8f731453a2dfa8318b083af39613d0edd43ce0da0815ffb85",
+    "tree_id": "e1:Gm2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "9ac096ace3c441ba",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "9ac096ace3c441ba",
+        "facts": {
+          "commit": "b83addf604cf73f65a81a534ee2f4d2cbb0066f2",
+          "base_commit": "8c144b3264c47b324ac3723e891093bfdb9cd5f1",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.467578433333336e-07,
+          "score": 0.8908666412657109
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Earlier T1 lane-state variants were correct and measured about 0.990 µs, while the sentinel/masked-tail variant measured about 1.718 µs; the baseline measured about 4.463 µs. This candidate contrasts with a single dependent lane-state stream by interleaving two independent AVX-512 state banks and processing full vectors in pairs. It may shorten dependency chains and reduce loop overhead, but the extra state and final reduction may offset that benefit. No speedup is assumed; compare correctness and repeated timings under the frozen one-thread protocol.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Maintain two independent AVX-512 banks of signed lane minima and earliest absolute indices. Seed the first bank with vector zero and the second with vector one when available; process later complete vectors in pairs across the banks.\",\"Update each bank only on a strict signed improvement, retaining its earlier index on ties. Combine both banks by value then index; a sentinel second bank cannot beat any valid input index, including when values equal INT32_MAX.\",\"Use a scalar path for n below 16 and a scalar tuple-ordered tail after all complete vectors, preserving index zero for non-positive n and handling INT32_MIN, INT32_MAX, and equal minima.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "8d1cb2ab28e04b5a",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "8d1cb2ab28e04b5a",
+        "facts": {
+          "commit": "dc6078d0ffb2f78fcba9c71d900b17d924225c5b",
+          "base_commit": "8c144b3264c47b324ac3723e891093bfdb9cd5f1",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.304603966666666e-07,
+          "score": 0.9120378443885775
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The first-pass four-accumulator variant measured 5.26604e-7 seconds versus 5.25586e-7 for the single-accumulator two-pass version, a small difference that does not establish an effect. This experiment keeps the single vector-minimum recurrence and instead unrolls the equality search across four vectors before checking for a match. Reducing loop and mask-check frequency may help when the search prefix is long, but loading a whole group can waste work on earlier matches; random and decreasing inputs may therefore behave differently.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Compute the signed int32 minimum with one AVX-512 minimum accumulator and reduce it, including a scalar tail.\",\"Search from index zero using four unrolled AVX-512 equality comparisons per group; choose the earliest matching vector and lowest matching lane.\",\"Retain a vector remainder scan and scalar tail so incomplete groups and all valid lengths are handled.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "8c144b3264c47b324ac3723e891093bfdb9cd5f1",
+          "base_commit": "8c144b3264c47b324ac3723e891093bfdb9cd5f1",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.4632395550290205e-06,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm2",
+        "subject": "T2 avec états lane intercalés et réduction vectorielle finale de T1",
+        "objective": "Partir de T2/8d, la candidate mesurée la plus rapide, et intégrer le suivi intercalé de deux états lane de T1/9ac pour supprimer le second balayage. Tester une réduction vectorielle finale des minima et l’extraction tie-aware du plus petit indice, au lieu du repli scalaire coûteux. Préserver les queues et toute la sémantique de correction; mesurer sans supposer un gain.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "9ac096ace3c441ba",
+    "8d1cb2ab28e04b5a",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "dc6078d0ffb2f78fcba9c71d900b17d924225c5b",
+  "selected_parent_id": null
+}

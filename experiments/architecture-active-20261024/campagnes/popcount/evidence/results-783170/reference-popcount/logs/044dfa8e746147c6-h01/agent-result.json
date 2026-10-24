@@ -1,0 +1,19 @@
+{
+  "files": [
+    {
+      "content": "/*\n * Copyright (c) 2007 Bart Massey\n * [This program is licensed under the \"MIT License\"]\n * Please see the file LICENSE in the source\n * distribution of this software for license terms.\n */\n\n#include <cstdint>\nstatic inline uint32_t\npopcount_swar(uint32_t n) {\n    n = n - ((n >> 1) & 0x55555555u);\n    n = (n & 0x33333333u) + ((n >> 2) & 0x33333333u);\n    n = (n + (n >> 4)) & 0x0f0f0f0fu;\n    return (n * 0x01010101u) >> 24;\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{\n    const uint32_t* a = (const uint32_t*)input1;\n    uint32_t result = 0;\n    for (int j = 0; j < parameter; j++) {\n        int i = 0;\n        for (; i + 1 < n; i += 2) {\n            result += popcount_swar(a[i] ^ result);\n            result += popcount_swar(a[i + 1] ^ result);\n        }\n        if (i < n)\n            result += popcount_swar(a[i] ^ result);\n    }\n    *(uint32_t*)output = result;\n}",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "Unrolling the inner loop by two on T2 may reduce loop-control overhead while retaining its SWAR popcount. Each update still consumes the result of the preceding update, so the recurrence remains strictly ordered; this dependency may limit any gain. The controller must measure the combined program rather than infer an additive speedup.",
+  "notes": "T2 was measured correct at 8.17e-05 seconds; T3 was measured correct at 9.75e-04 seconds with naive popcount, so its result does not predict this combination. The combined source has not been measured or validated here; leave official correctness and performance evaluation to the controller.",
+  "sources_kept": [
+    "7de0b21fee3a4a9d",
+    "4d3f1fd43eeb41d5"
+  ],
+  "transformations": [
+    "Retained T2's SWAR popcount, including its multiply-and-extract horizontal reduction.",
+    "Unrolled the inner input loop by two and added a one-element tail, preserving the order of recurrence updates.",
+    "Kept dimensions generic, output overwrite behavior, and the existing serial/thread-budget behavior."
+  ]
+}

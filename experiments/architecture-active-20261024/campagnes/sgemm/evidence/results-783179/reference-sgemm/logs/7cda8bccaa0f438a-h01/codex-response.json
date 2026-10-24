@@ -1,0 +1,149 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <stddef.h>\n#include <cuda_runtime.h>\n\n__global__ void sgemm_microtile_2x2(int M, int N, int K, float alpha,\n                                   const float *A, const float *B, float beta,\n                                   float *C) {\n  const size_t row0 = static_cast<size_t>(blockIdx.y) * 32u +\n                      static_cast<size_t>(threadIdx.y) * 2u;\n  const size_t row1 = row0 + 1u;\n  const size_t col0 = static_cast<size_t>(blockIdx.x) * 32u +\n                      static_cast<size_t>(threadIdx.x) * 2u;\n  const size_t col1 = col0 + 1u;\n  const bool valid_row0 = row0 < static_cast<size_t>(M);\n  const bool valid_row1 = row1 < static_cast<size_t>(M);\n  const bool valid_col0 = col0 < static_cast<size_t>(N);\n  const bool valid_col1 = col1 < static_cast<size_t>(N);\n\n  float acc00 = 0.0f;\n  float acc01 = 0.0f;\n  float acc10 = 0.0f;\n  float acc11 = 0.0f;\n\n  for (int kk = 0; kk < K; ++kk) {\n    float a0 = 0.0f;\n    float a1 = 0.0f;\n    float b0 = 0.0f;\n    float b1 = 0.0f;\n    if (valid_row0) {\n      a0 = A[row0 * static_cast<size_t>(K) + static_cast<size_t>(kk)];\n    }\n    if (valid_row1) {\n      a1 = A[row1 * static_cast<size_t>(K) + static_cast<size_t>(kk)];\n    }\n    if (valid_col0) {\n      b0 = B[static_cast<size_t>(kk) * static_cast<size_t>(N) + col0];\n    }\n    if (valid_col1) {\n      b1 = B[static_cast<size_t>(kk) * static_cast<size_t>(N) + col1];\n    }\n    acc00 += a0 * b0;\n    acc01 += a0 * b1;\n    acc10 += a1 * b0;\n    acc11 += a1 * b1;\n  }\n\n  if (valid_row0 && valid_col0) {\n    const size_t index = row0 * static_cast<size_t>(N) + col0;\n    C[index] = alpha * acc00 + beta * C[index];\n  }\n  if (valid_row0 && valid_col1) {\n    const size_t index = row0 * static_cast<size_t>(N) + col1;\n    C[index] = alpha * acc01 + beta * C[index];\n  }\n  if (valid_row1 && valid_col0) {\n    const size_t index = row1 * static_cast<size_t>(N) + col0;\n    C[index] = alpha * acc10 + beta * C[index];\n  }\n  if (valid_row1 && valid_col1) {\n    const size_t index = row1 * static_cast<size_t>(N) + col1;\n    C[index] = alpha * acc11 + beta * C[index];\n  }\n}\n\nextern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n                    int n, int m, int k, float alpha, float beta) {\n  (void)scratch;\n  if (n <= 0 || m <= 0) {\n    return;\n  }\n  const unsigned int grid_x = static_cast<unsigned int>(m / 32 + (m % 32 != 0));\n  const unsigned int grid_y = static_cast<unsigned int>(n / 32 + (n % 32 != 0));\n  sgemm_microtile_2x2<<<dim3(grid_x, grid_y), dim3(16, 16)>>>(\n      n, m, k, alpha, A, B, beta, C);\n}\n",
+        "path": "src/candidate.cu"
+      }
+    ],
+    "hypothesis": "A 2x2 output microtile gives each thread four independent FP32 accumulators while reusing each loaded A value across two columns and each B value across two rows. Keeping a 32x32 CTA output tile and 256 threads makes this a mapping comparison with the measured four-row parent rather than a larger CTA-work comparison. The mixed mapping may reduce operand loads but its 16-column half-warp access pattern may hurt coalescing; correctness, repeated timing, and register/occupancy effects need measurement.",
+    "memory_lessons": [
+      {
+        "applicability": "The 2x2 mapping tests a mixed-reuse alternative to the measured four-row mapping while keeping the same CTA output footprint and thread count.",
+        "claim": "The four-row mapping was correct and measured 0.0147256 s; the one-row/four-column-stripe mapping was correct and measured 0.0375718 s, each with three timing samples. The baseline was correct at 0.2734839 s. These results show the mapping candidates differ in measured time, but do not establish the cause or provide register/occupancy data.",
+        "evidence_ids": [
+          "0332e7182e574703",
+          "4ee90c8d348e4fd5",
+          "baseline-e1"
+        ],
+        "next_experiment": "Measure this mixed 2x2 mapping against the one-output baseline and four-row parent using the same correctness and repeated-timing protocol; collect register and occupancy diagnostics if available."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "This candidate keeps the run entry point, buffers and default-stream launch, uses full-FP32 arithmetic without allocations or external math libraries, and guards output tails. Historical repeated measurements are context, not measurements of this candidate; no register or occupancy result is available yet.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace one-output-per-thread computation with a 2x2 per-thread output microtile and four independent FP32 accumulators.",
+      "Map 16x16 threads to a 32x32 output tile, reusing each loaded A value across two columns and each B value across two rows.",
+      "Guard row and column tails, use size_t element offsets, and apply alpha and beta once per valid output."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "6863c7eea5bf43ddb6eb730451d8e10f",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "ed32872c0fc8cb4897251b9f52dda1baace28863f1b7935a29d6b3951030a272",
+  "session_id": "04fe70c6f9d349daa2a45f91eaa7d412",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "a84c96fd69839bd0e0c3ce3f2b38a4bfb40c60c0323861a0e95394700db7424c",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 17863,
+        "output_tokens": 7246,
+        "reasoning_output_tokens": 5571
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a3bf11d4fa1b442f3ce3b8f9d3db6ff8be9d5741a2c919159d96937ca556300c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "7cda8bccaa0f438a-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "0332e7182e574703",
+            "4ee90c8d348e4fd5"
+          ],
+          "status": "applied",
+          "summary": "Proposed a controlled mixed 2x2 microtile mapping and left performance and occupancy effects to measurement."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Used the supplied GH200 and CUDA 12.6.3 target facts and avoided architecture-specific instructions or assumptions."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The candidate uses ordinary CUDA kernel launch and FP32 operations; no uncertain API or architecture feature requires documentation lookup."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "0332e7182e574703",
+            "4ee90c8d348e4fd5",
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Compared only the supplied correct repeated measurements and did not claim a speedup for the unmeasured candidate."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "6863c7eea5bf43ddb6eb730451d8e10f",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "ed32872c0fc8cb4897251b9f52dda1baace28863f1b7935a29d6b3951030a272",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "04fe70c6f9d349daa2a45f91eaa7d412"
+    },
+    "observed_tokens": 25109,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 25109,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

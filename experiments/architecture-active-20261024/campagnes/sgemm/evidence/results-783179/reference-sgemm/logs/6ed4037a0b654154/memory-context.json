@@ -1,0 +1,476 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "ab97c278ffa21b38a47de52087922c4d428301a22bfb9cf55d3d9a2b494afdd8",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "4e54b76761a24b78",
+        "kind": "experiment",
+        "role": "G",
+        "tree_id": "e1:G-merge-1-1",
+        "mission_id": "4e54b76761a24b78",
+        "facts": {
+          "commit": "d8c6a52518fe7b9901d995dde0e414fcc360f488",
+          "base_commit": "1e3d9e2741b611d52df198d0c53c3dfd805e53d2",
+          "parent_id": null,
+          "source_ids": [
+            "9577a3a19b3845f2",
+            "ba5ef08b89f64470"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.011980483690866668,
+          "score": 0.9580315971703256
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le parcours dense des CTA en macro-groupes 2×2 peut modifier la localité sans changer le micro-tuilage registre 2×4 ni l’arithmétique FP32. Les résultats antérieurs de cette variante étaient légèrement plus lents que le noyau de référence; aucune amélioration n’est présumée avant la mesure de ce candidat intégré.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Conserver la microtuile registre de deux lignes par quatre colonnes, les huit accumulateurs FP32 et le traitement des bords du candidat T2 retenu.\",\"Remapper les CTA depuis leur rang dense en macro-groupes row-major 2×2, en compactant les groupes incomplets des bords pour couvrir chaque tuile une seule fois.\",\"Maintenir les accès matriciels, l’ordre de calcul FP32 et l’application de alpha et beta; ne pas ajouter de staging partagé ni d’allocation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4d56b643979d4e71",
+        "kind": "experiment",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "4d56b643979d4e71",
+        "facts": {
+          "commit": "017b3068005b763de50ed878d3d3a95831f585fd",
+          "base_commit": "92d4f0a293115a617f9a5eb97a234bad36dc5760",
+          "parent_id": null,
+          "source_ids": [
+            "0332e7182e574703",
+            "3906be4089a1452f"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0219067808787,
+          "score": 0.9258379384261384
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "L’hypothèse est que le staging partagé par tranches K de 16 réduira les chargements globaux répétés de A et B par rapport à T2, tout en conservant son CTA de sortie 32×32, ses lanes contiguës en colonnes et ses quatre accumulateurs FP32 par thread. Les barrières et accès partagés peuvent toutefois annuler ce bénéfice. T2 a mesuré 0,0147256 s et T3 0,0173076 s séparément ; cela ne prédit pas la performance du composé.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Conserver le mapping de sortie T2 : CTA 32×32, bloc 32×8, quatre lignes par thread et B réutilisé par les quatre accumulateurs FP32.\",\"Ajouter un staging synchrone de largeur K=16, avec A partagé 32×16 et B partagé 16×32 ; les chargements sont coopératifs et masquent les queues M, N et K.\",\"Synchroniser avant consommation puis avant réutilisation des buffers ; appliquer alpha et beta une fois par sortie valide avec des offsets size_t.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "d53728e433cf4c9a",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "d53728e433cf4c9a",
+        "facts": {
+          "commit": "47b3529190bf0550ac04c327df2eb9e29c295cd7",
+          "base_commit": "0b642aee04f01ec01872d52566cd4ae0a170001d",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.04056833902996666,
+          "score": 0.8708229533057426
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The best reported T1 candidate is the 8x32 output tile at K-depth 16 (19.5267 ms). Increasing only its row tile to 16 while retaining 32 coalesced columns and K-depth 16 tests whether greater B-tile reuse and fewer CTAs outweigh twice as many threads per CTA and greater A staging. The 16x32, K-depth-32 candidate measured 22.8994 ms, so this is a distinct tile-shape experiment, not an assumed speedup.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replaced the supplied per-output serial kernel with a 16x32-output CTA tile and K-depth-16 synchronous shared-memory staging.\",\"Mapped threadIdx.x across 32 output columns so warp lanes access contiguous B and C columns, with one output accumulator per thread.\",\"Masked A and B loads and C stores to support matrix tails; used size_t offsets and quotient/remainder grid calculations.\",\"Preserved the run entry point, alpha/beta semantics, and scratch-buffer signature without adding allocations or external math-library calls.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "0b41ade7af28400f",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "0b41ade7af28400f",
+        "facts": {
+          "commit": "285ffccd6ca5ab674fae7eaf141750b8a0e3017c",
+          "base_commit": "92d4f0a293115a617f9a5eb97a234bad36dc5760",
+          "parent_id": "0332e7182e574703",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.06751049550376667,
+          "score": 0.8020187456937955
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured 2x4 candidate (9577a3a19b3845f2, 0.011853 s) is faster than the selected 4x1 parent (0332e7182e574703, 0.014726 s), while measured 2x2 and 4x2 mappings were slower (0.013830 s and 0.016372 s). This experiment keeps 128 threads and 1024 outputs per CTA, as in the 2x4 trial, but changes to a 1x8 microtile and a 4x256 CTA footprint. Reusing each A value across eight columns may help; the eight independent accumulators and stride-eight lane accesses to B may instead hurt register occupancy or coalescing. The baseline is a measured one-output-per-thread control with the same output count per CTA, though not the same thread count. No performance gain is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Change the per-thread output tile to one row by eight adjacent columns, maintaining eight independent FP32 accumulators and reusing each A value across eight outputs.\",\"Map a 32x4 thread block to a 4x256 CTA output tile, keeping 128 threads and 1024 outputs per CTA for comparison with the measured 2x4 mapping.\",\"Guard row and column tails and stride row tiles when the row dimension exceeds the CUDA grid-y limit.\",\"Use size_t matrix offsets and apply alpha and beta once to each valid output.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "757e76a20e0d4a2f",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "757e76a20e0d4a2f",
+        "facts": {
+          "commit": "777f878bb97f0071caf0c44a04dceaf2573baf94",
+          "base_commit": "b4babb086d60cbf0f03054a3e0d0f3ac71b7015b",
+          "parent_id": "3906be4089a1452f",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0212839717865,
+          "score": 0.9277941228245313
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The prior two-buffer asynchronous candidate was correct but slower than the synchronous control. This contrasting three-slot ring prefetches up to two future K stages while retaining the 16×16 CTA, lane-to-data mapping, scalar FP32 compute mapping, and output operation. It tests whether deeper lookahead hides more copy latency, while its extra shared memory and buffer-reuse barrier may instead worsen performance; no gain is claimed before measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Retained the 16×16 CTA, (ty,tx) cooperative A/B staging map, scalar FP32 accumulation, and alpha/beta output expression.\",\"Replaced two shared-memory stages with a three-slot ring and preloaded up to two future K stages using cp.async groups; wait_group keeps the current stage ready while allowing later groups to remain outstanding.\",\"Added a CTA synchronization before reusing a ring slot, zero-filled invalid row, column, and K-tail entries, and kept a synchronous fallback for architectures below sm_80.\",\"Preserved the run entry point, default-stream launch, input/output buffers, and absence of extra allocations.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "ba5ef08b89f64470",
+        "kind": "experiment",
+        "role": "T4",
+        "tree_id": "e1:T4",
+        "mission_id": "ba5ef08b89f64470",
+        "facts": {
+          "commit": "4c09919874037777166948680f0db6f2c47b1b6e",
+          "base_commit": "1e3d9e2741b611d52df198d0c53c3dfd805e53d2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.011962029774999999,
+          "score": 0.9580935333672381
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le regroupement précédent de quatre tuiles de lignes par tuile de colonnes était valide mais mesuré à 11,952 ms, contre 11,853 ms pour T2. Une visite par macro-groupes CTA 2×2 pourrait mieux équilibrer la réutilisation de B entre deux tuiles de lignes et celle de A entre deux tuiles de colonnes. Le calcul, la microtuile et l’ordre arithmétique restent fixes; l’effet sur les performances reste à mesurer.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Remapper les CTA à partir de leur rang linéaire dense en macro-groupes row-major de 2×2 tuiles.\",\"Compacter les macro-groupes incomplets des bords afin de ne pas lancer de CTA supplémentaire et de couvrir chaque tuile exactement une fois.\",\"Conserver le calcul, la tuile CTA 8×128, la microtuile registre 2×4 et l’arithmétique FP32 inchangés.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 48,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Coalescing control plus s",
+        "objective": "First benchmark a minimal coalesced, row-major one-output-per-thread kernel with lanes varying over columns, to isolate the cost of the supplied baseline’s lane mapping. Then explore synchronous shared-memory CTA tiles using that coalesced orientation and one output per thread, varying tile dimensions and K de",
+        "records": 13,
+        "results": {
+          "trials": 4,
+          "valid": 4,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "d86e6d6b71b5456b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.01952673530576667,
+          "hypothesis_as_data": "The catalog has two distinct valid T1 programs: the coalesced one-output-per-thread control averaged 0.0234084 s, while "
+        },
+        "latest": {
+          "id": "d53728e433cf4c9a",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.04056833902996666,
+          "hypothesis_as_data": "The best reported T1 candidate is the 8x32 output tile at K-depth 16 (19.5267 ms). Increasing only its row tile to 16 wh"
+        },
+        "alternative": {
+          "id": "d53728e433cf4c9a",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.04056833902996666,
+          "hypothesis_as_data": "The best reported T1 candidate is the 8x32 output tile at K-depth 16 (19.5267 ms). Increasing only its row tile to 16 wh"
+        },
+        "text_truncated": true
+      },
+      {
+        "role": "T2",
+        "subject": "Multi-accumulator registe",
+        "objective": "Focus on register-blocked SIMT where each thread maintains multiple independent FP32 output accumulators, testing distinct row/column microtile mappings to reuse operands and improve arithmetic intensity. Compare against a one-output-per-thread control so the result is not merely a CTA tile-size comparison with T1; measure ",
+        "records": 15,
+        "results": {
+          "trials": 6,
+          "valid": 6,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 6,
+          "distinct_programs": 6,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "9577a3a19b3845f2",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.011853031794233334,
+          "hypothesis_as_data": "With the selected 8x128 CTA output footprint held fixed at 1024 outputs, assigning each of 128 threads a 2-row by 4-colu"
+        },
+        "latest": {
+          "id": "0b41ade7af28400f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.06751049550376667,
+          "hypothesis_as_data": "The measured 2x4 candidate (9577a3a19b3845f2, 0.011853 s) is faster than the selected 4x1 parent (0332e7182e574703, 0.01"
+        },
+        "alternative": {
+          "id": "0b41ade7af28400f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.06751049550376667,
+          "hypothesis_as_data": "The measured 2x4 candidate (9577a3a19b3845f2, 0.011853 s) is faster than the selected 4x1 parent (0332e7182e574703, 0.01"
+        },
+        "text_truncated": true
+      },
+      {
+        "role": "T3",
+        "subject": "Matched synchronous/asynchrono",
+        "objective": "Explore whether asynchronous global-to-shared K-stage copies improve a tiled SIMT kernel. Establish a paired synchronous-staging control with the same CTA tile, lane mapping, and compute mapping as the asynchronous version, then compare timings and correctness to isolate the pipeline effect. Handle alignment, comple",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "3906be4089a1452f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.017307559967066666,
+          "hypothesis_as_data": "A 16×16 output tile with a 16-wide K stage should reuse each staged A and B value across multiple output products compar"
+        },
+        "latest": {
+          "id": "757e76a20e0d4a2f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0212839717865,
+          "hypothesis_as_data": "The prior two-buffer asynchronous candidate was correct but slower than the synchronous control. This contrasting three-"
+        },
+        "alternative": {
+          "id": "757e76a20e0d4a2f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0212839717865,
+          "hypothesis_as_data": "The prior two-buffer asynchronous candidate was correct but slower than the synchronous control. This contrasting three-"
+        },
+        "text_truncated": true
+      },
+      {
+        "role": "Gm1",
+        "subject": "Tuilage partagé synchrone avec microtuiles registre",
+        "objective": "Tester l’ajout du staging partagé synchrone 16×16/K=16 de T3 au noyau registre de T2, qui calcule quatre lignes par thread et réutilise B. Partir de T2, préserver ses accès coalescés et calculs FP32, puis vérifier la correction et mesurer si le staging partagé réduit le temps.",
+        "records": 3,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "4d56b643979d4e71",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0219067808787,
+          "hypothesis_as_data": "L’hypothèse est que le staging partagé par tranches K de 16 réduira les chargements globaux répétés de A et B par rapport à T2, tout en conservant son CTA de sortie 32×32, ses lanes contiguës en colonnes et ses quatre accumulateurs FP32 par"
+        },
+        "latest": {
+          "id": "4d56b643979d4e71",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0219067808787,
+          "hypothesis_as_data": "L’hypothèse est que le staging partagé par tranches K de 16 réduira les chargements globaux répétés de A et B par rapport à T2, tout en conservant son CTA de sortie 32×32, ses lanes contiguës en colonnes et ses quatre accumulateurs FP32 par"
+        },
+        "alternative": null,
+        "text_truncated": false
+      },
+      {
+        "role": "T4",
+        "subject": "Ordre de parcours CTA et localité cache",
+        "objective": "À partir du candidat T2 valide (tuile CTA 8×128, microtuile registre 2×4), explorer différents ordres de parcours des tuiles CTA ou regroupements de blocs afin d’améliorer la localité cache et la réutilisation des opérandes. Garder calcul, microtuile et arithmétique FP32 fixes pour isoler l’effet du parcours; préserver la correction et les contraintes de stockage.",
+        "records": 5,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "480a32af0dc947e2",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.011951996803266666,
+          "hypothesis_as_data": "Regrouper le parcours par quatre tuiles de lignes consécutives pour chaque tuile de colonnes peut améliorer la réutilisation de la même région de B dans le cache. Le calcul, la tuile CTA 8×128, la microtuile 2×4 et l’arithmétique restent in"
+        },
+        "latest": {
+          "id": "ba5ef08b89f64470",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.011962029774999999,
+          "hypothesis_as_data": "Le regroupement précédent de quatre tuiles de lignes par tuile de colonnes était valide mais mesuré à 11,952 ms, contre 11,853 ms pour T2. Une visite par macro-groupes CTA 2×2 pourrait mieux équilibrer la réutilisation de B entre deux tuile"
+        },
+        "alternative": {
+          "id": "ba5ef08b89f64470",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.011962029774999999,
+          "hypothesis_as_data": "Le regroupement précédent de quatre tuiles de lignes par tuile de colonnes était valide mais mesuré à 11,952 ms, contre 11,853 ms pour T2. Une visite par macro-groupes CTA 2×2 pourrait mieux équilibrer la réutilisation de B entre deux tuile"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 5,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "4e54b76761a24b78",
+    "4d56b643979d4e71",
+    "d53728e433cf4c9a",
+    "0b41ade7af28400f",
+    "757e76a20e0d4a2f",
+    "ba5ef08b89f64470",
+    "d86e6d6b71b5456b",
+    "9577a3a19b3845f2",
+    "3906be4089a1452f",
+    "480a32af0dc947e2"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "1e3d9e2741b611d52df198d0c53c3dfd805e53d2",
+  "selected_parent_id": null
+}

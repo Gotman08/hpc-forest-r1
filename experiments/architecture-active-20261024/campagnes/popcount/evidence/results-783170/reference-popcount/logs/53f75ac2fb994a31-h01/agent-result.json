@@ -1,0 +1,14 @@
+{
+  "files": [
+    {
+      "content": "/*\n * Copyright (c) 2007 Bart Massey\n * [This program is licensed under the \"MIT License\"]\n * Please see the file LICENSE in the source\n * distribution of this software for license terms.\n */\n\n#include <cstdint>\nstatic inline uint32_t\npopcount_swar(uint32_t n) {\n    n = n - ((n >> 1) & 0x55555555u);\n    n = (n & 0x33333333u) + ((n >> 2) & 0x33333333u);\n    n = (n + (n >> 4)) & 0x0f0f0f0fu;\n    n = n + (n >> 8);\n    n = n + (n >> 16);\n    return n & 0x3fu;\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{const uint32_t*a=(const uint32_t*)input1;uint32_t result=0;for(int j=0;j<parameter;j++)for(int i=0;i<n;i++)result+=popcount_swar(a[i]^result);*(uint32_t*)output=result;}\n",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "Replacing the data-dependent bit loop with fixed-width SWAR arithmetic should reduce work per population count while preserving the exact scalar count. The recurrence remains serial and ordered, with uint32_t wraparound and output overwrite unchanged. Whether this beats compiler lowering of the naive loop is unverified and must be measured.",
+  "notes": "The SWAR stages count set bits in 2-bit groups, then 4-bit groups, then bytes, and fold the total; the final mask retains the 0–32 count for every uint32_t input. This is a mathematical correctness argument, not an exhaustive execution or a performance result. The original loop nesting and unsigned accumulator are unchanged; threads remains unused as before. Baseline evidence baseline-e1 measured a mean of 0.0010460878715277777 seconds; no candidate measurement is available yet.",
+  "sources_kept": [],
+  "transformations": [
+    "Replaced the per-bit loop with fixed-width 32-bit SWAR population-count stages; left recurrence order, uint32_t accumulator semantics, dimensions, output write, and thread usage unchanged."
+  ]
+}

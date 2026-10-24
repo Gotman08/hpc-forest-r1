@@ -1,0 +1,472 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "a1ef51a848fa6d317e2f8e784f3120aab226567e556433f8d42a38eb9d343297",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "1864127ae70f4754",
+        "kind": "experiment",
+        "role": "G",
+        "tree_id": "e1:G-merge-3-1",
+        "mission_id": "1864127ae70f4754",
+        "facts": {
+          "commit": "f4672fb4288b5f6ddb6174143d976ef0a3702d8d",
+          "base_commit": "93fc08780e17409419412e454556747f6c59f670",
+          "parent_id": null,
+          "source_ids": [
+            "a0f10ae14e88474e",
+            "185071fd6df74577"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.000288373327255249,
+          "score": 0.8098387316425384
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The correct adaptive-count hybrid measured 0.450424 ms versus 0.288230 ms for a0f, but the cause is unknown. Specializing both kernels at the maximum partial count may restore compile-time stride and finalizer bounds for large inputs while retaining the adaptive count for smaller inputs. This tests whether runtime count handling contributed to the slowdown; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Keep a0f's 128-thread paired mapping, aligned float2 path, scalar fallback, fused absolute sum, and CUB block reduction.\",\"Use ceil(n/4096) partials capped at 1024, with the active count controlling pair stride and finalizer fan-in.\",\"Template the partial and finalizer kernels; dispatch the maximum-count case to compile-time 1024-specialized kernels and use the dynamic kernels for smaller counts.\",\"Assign an odd tail to its tile's CTA modulo the active partial count; zero output for n<=0.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "6198a8f322d8497c",
+        "kind": "experiment",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "6198a8f322d8497c",
+        "facts": {
+          "commit": "29697990d072e1d0debaf46327a790db16947eba",
+          "base_commit": "89e9028ac5aa2e6ef02c03881d97873fd6eacc69",
+          "parent_id": null,
+          "source_ids": [
+            "2f1c4897b2e14825",
+            "de3c9c834e5e486b"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00029978346824645997,
+          "score": 0.8037908809244843
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Combiner les quatre accumulateurs indépendants par thread de T3 avec les chunks contigus et le nombre dynamique de partiels de T1 (ceil(n/4096), borné entre 1 et 8192) peut réduire la chaîne de dépendances tout en exposant davantage de CTAs pour les grandes tailles. Le coût de ces CTAs supplémentaires et de la réduction finale peut toutefois annuler ce bénéfice : comparer le temps complet mesuré au T3 valide à 0,0002950901 s, sans supposer un gain additif.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Remplacer le nombre fixe de 1024 CTAs par la politique T1 : ceil(n/4096) partiels, bornés à [1,8192], avec un chunk contigu de ceil(n/partial_count) éléments.\",\"Appliquer dans chaque chunk le schéma de quatre accumulateurs indépendants par thread de T3, en protégeant chaque chargement de queue par une vérification de borne.\",\"Réduire les partiels actifs avec un CTA CUB finalisateur et écrire directement la sortie sans atomiques ni initialisation distincte.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "95421f9471844e38",
+        "kind": "experiment",
+        "role": "Gm2",
+        "tree_id": "e1:Gm2",
+        "mission_id": "95421f9471844e38",
+        "facts": {
+          "commit": "1d853308dfc23eb48bf3ac30a7f71802ccfede00",
+          "base_commit": "3040f1d26c466117af9a3b3c96b96e26ebf129af",
+          "parent_id": null,
+          "source_ids": [
+            "8546f4f034a64302",
+            "3a356f6c536e4d76"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.000290993595123291,
+          "score": 0.8084418440743342
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Conserver le partitionnement T1 (ceil(n/4096), plafonné à 4096 partiels) tout en remplaçant l’accumulation intra-CTA par quatre accumulateurs et un traitement du groupe final hors boucle devrait réduire les dépendances de sommation ou le contrôle dans la boucle chaude. Le coût accru en registres/instructions et le nouvel ordre d’addition peuvent annuler cet effet; le gain sur l’appel complet n’est pas présumé.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Conserver la réduction fusionnée de |x| par CTA et la politique T1 de ceil(n/4096) partiels, plafonnée à 4096, sur des chunks contigus équilibrés.\",\"Dans chaque CTA, remplacer la boucle d’accumulation simple par quatre accumulateurs indépendants: charger les groupes complets sans prédicats individuels dans la boucle chaude, puis traiter les éléments restants avec des tests de borne après la boucle.\",\"Conserver une réduction CUB par CTA et un finaliseur CUB qui réduit exactement partial_count partiels; chaque appel écrit les partiels utilisés et la sortie, avec une mise à zéro explicite pour n<=0.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "380f84670c614b7e",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "380f84670c614b7e",
+        "facts": {
+          "commit": "6cbfc7c29762bf2c26720d814fb2c79c06d8a780",
+          "base_commit": "d1ae4c6a373696439a295fbc05e27eb16b870c3c",
+          "parent_id": "f505affbf906415b",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00029064640204111734,
+          "score": 0.8086266586994626
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected parent uses an 8192-element target and caps the grid at 2048 partials (0.000294683 s). Raising only the cap to 4096 keeps the partial count unchanged for the 1,048,576-element case but doubles the count and finalizer fan-in at the largest size. This tests whether that additional large-input parallelism outweighs the extra partial writes and finalization work; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Retain the fused first-stage sum(abs(x)) with contiguous scalar loads and a 256-thread CUB block reduction.\",\"Keep the 8192-element target and raise the maximum partial count from 2048 to 4096, increasing the largest input's first-stage parallelism and finalizer fan-in.\",\"Retain one final CTA to reduce all current-call partials and overwrite output; preserve explicit zero output for non-positive n.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "1bf20829cfe547c0",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "1bf20829cfe547c0",
+        "facts": {
+          "commit": "bac329e8f22870246edc713baea6f494d1d370c5",
+          "base_commit": "c8e02e650448eda787ff90a33c22e3920fcf3877",
+          "parent_id": "8247268c232e48cc",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00040054453214009606,
+          "score": 0.7540617183403252
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured 512-CTA, four-accumulator program was faster than the visible 256-CTA and 1024-CTA alternatives, though those results do not isolate CTA count. A 384-CTA cap with the same four-way per-thread accumulation tests whether reducing CTA atomics from 512 can retain enough parallelism for large inputs. Each call still resets output before one input pass and one atomic per CTA; compare total time and validate all required sizes and FP64 tolerance.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Keep the per-call asynchronous output reset in the default stream before launching the reduction; do not depend on scratch contents.\",\"Stream input once, accumulating four grid-stride positions independently per thread before one CUB block reduction and one output atomicAdd per CTA.\",\"Choose ceil(n/256) CTAs for smaller inputs and cap the grid at 384 CTAs for larger inputs.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "09625b21746b434b",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "09625b21746b434b",
+        "facts": {
+          "commit": "49a69d21dbfce5d78beb970b4852ee0819fd5032",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0003872426668802897,
+          "score": 0.7602712153049507
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured 128-thread float2 mapping is the strongest prior T3 result (0.2882 ms), while the tested 8-accumulator mapping was slower (0.3389 ms). With the same 1024 CTAs, 256-element tile boundaries, 1024 partials, and 256-thread finalizer, assign each 128-thread CTA's lanes to the first and second tile halves using two scalar streams. This tests whether split coalesced loads can compete with contiguous float2 loads without an alignment-specific path; the controller must measure full-call time and validate all required inputs and the FP64 error bound.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse absolute-value accumulation into the partial-sum kernel, followed by the existing finalizer.\",\"Keep 1024 partial CTAs, 256 input elements per CTA tile, grid-stride tile progression, 1024 partial outputs, and the 256-thread finalizer fixed.\",\"Use 128 threads per partial CTA; each lane accumulates scalar values at offsets threadIdx.x and threadIdx.x + 128 within each tile.\",\"Guard each load against the input count so partial tiles and all tails are handled without assuming input-base vector alignment.\",\"Write every partial and overwrite the output on each call.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 59,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Hierarchical fusion: partial granularity and finalization",
+        "objective": "Build a two-stage fused sum(abs(x)) with simple contiguous scalar loads and a conventional per-CTA reduction. Explore global work partitioning: vary first-stage partial count/granularity and the finalizer’s fan-in so the large input is sufficiently parallel while finalization stays cheap. Leave vectorized loads and thread/block mapping to T3. Every consumed partial must be written in the current call, and the finalizer must overwrite output. Validate all required sizes and the stated FP64 error bound; compare full-call time.",
+        "records": 18,
+        "results": {
+          "trials": 7,
+          "valid": 7,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 7,
+          "distinct_programs": 7,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "8546f4f034a64302",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0002897824048995972,
+          "hypothesis_as_data": "The correct fused candidate with up to 8192 partials measured 0.459449 ms, while the 16384-partial variant measured 0.473368 ms. This candidate keeps approximately 4096 elements per partial until the cap, then limits the count to 4096; at t"
+        },
+        "latest": {
+          "id": "380f84670c614b7e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00029064640204111734,
+          "hypothesis_as_data": "The selected parent uses an 8192-element target and caps the grid at 2048 partials (0.000294683 s). Raising only the cap to 4096 keeps the partial count unchanged for the 1,048,576-element case but doubles the count and finalizer fan-in at "
+        },
+        "alternative": {
+          "id": "380f84670c614b7e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00029064640204111734,
+          "hypothesis_as_data": "The selected parent uses an 8192-element target and caps the grid at 2048 partials (0.000294683 s). Raising only the cap to 4096 keeps the partial count unchanged for the 1,048,576-element case but doubles the count and finalizer fan-in at "
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "Single-kernel CTA aggregation with output atomics",
+        "objective": "Evaluate a distinct single-kernel alternative: reset output in the default stream, stream input once, reduce locally per CTA, then atomicAdd one CTA result to output. Explore keeping CTA atomic count modest; do not rely on scratch initialization or omit the per-call reset. Compare total time including reset and launch overhead against hierarchical candidates, and validate every required size and the FP64 tolerance.",
+        "records": 11,
+        "results": {
+          "trials": 4,
+          "valid": 4,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "8d8b8137ccb947d5",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0003435840050379435,
+          "hypothesis_as_data": "A 512-CTA cap gives twice the CTA-level parallelism of the previously tested 256 cap while halving the atomic count of the 1024-cap candidate. Four independent per-thread accumulators may reduce long serial accumulation chains and loop over"
+        },
+        "latest": {
+          "id": "1bf20829cfe547c0",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00040054453214009606,
+          "hypothesis_as_data": "The measured 512-CTA, four-accumulator program was faster than the visible 256-CTA and 1024-CTA alternatives, though those results do not isolate CTA count. A 384-CTA cap with the same four-way per-thread accumulation tests whether reducing"
+        },
+        "alternative": {
+          "id": "1bf20829cfe547c0",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00040054453214009606,
+          "hypothesis_as_data": "The measured 512-CTA, four-accumulator program was faster than the visible 256-CTA and 1024-CTA alternatives, though those results do not isolate CTA count. A 384-CTA cap with the same four-way per-thread accumulation tests whether reducing"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T3",
+        "subject": "Within-CTA streaming and reduction mapping",
+        "objective": "Use the two-stage fused topology as a controlled starting point. Hold global input tile boundaries, partial count, and finalizer organization fixed for each comparison; explore within-CTA streaming and reduction mapping, including multiple accumulators, suitable contiguous/vector loads, and CTA dimensions or work per thread. Handle alignment and tails for every valid input. Do not retune global partitioning or finalizer fan-in, which T1 owns. Validate all required sizes and the stated FP64 error bound, and measure full-call time.",
+        "records": 16,
+        "results": {
+          "trials": 6,
+          "valid": 6,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 6,
+          "distinct_programs": 6,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "a0f10ae14e88474e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0002882303953170776,
+          "hypothesis_as_data": "Compared with the measured 256-thread, four-accumulator fused mapping, 128-thread CTAs can retain the same 256-float tile boundaries by assigning two adjacent floats to each lane. An aligned float2 path may reduce load instruction overhead,"
+        },
+        "latest": {
+          "id": "09625b21746b434b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0003872426668802897,
+          "hypothesis_as_data": "The measured 128-thread float2 mapping is the strongest prior T3 result (0.2882 ms), while the tested 8-accumulator mapping was slower (0.3389 ms). With the same 1024 CTAs, 256-element tile boundaries, 1024 partials, and 256-thread finalize"
+        },
+        "alternative": {
+          "id": "09625b21746b434b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0003872426668802897,
+          "hypothesis_as_data": "The measured 128-thread float2 mapping is the strongest prior T3 result (0.2882 ms), while the tested 8-accumulator mapping was slower (0.3389 ms). With the same 1024 CTAs, 256-element tile boundaries, 1024 partials, and 256-thread finalize"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "Gm1",
+        "subject": "Combinaison du mapping T3 et du partitionnement T1",
+        "objective": "Tester la composition du mapping à quatre accumulateurs par thread de T3 avec le partitionnement à 8192 partiels de T1. Valider tous les cas et comparer le temps complet au meilleur candidat T3; ne supposer aucun gain additif.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "6198a8f322d8497c",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00029978346824645997,
+          "hypothesis_as_data": "Combiner les quatre accumulateurs indépendants par thread de T3 avec les chunks contigus et le nombre dynamique de partiels de T1 (ceil(n/4096), borné entre 1 et 8192) peut réduire la chaîne de dépendances tout en exposant davantage de CTAs"
+        },
+        "latest": {
+          "id": "6198a8f322d8497c",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00029978346824645997,
+          "hypothesis_as_data": "Combiner les quatre accumulateurs indépendants par thread de T3 avec les chunks contigus et le nombre dynamique de partiels de T1 (ceil(n/4096), borné entre 1 et 8192) peut réduire la chaîne de dépendances tout en exposant davantage de CTAs"
+        },
+        "alternative": null,
+        "text_truncated": false
+      },
+      {
+        "role": "Gm2",
+        "subject": "Mapping T3 avec le partitionnement à 4096 partiels de T1",
+        "objective": "Partir de T1 (4096 partiels) et tester le mapping intra-CTA de T3 (quatre accumulateurs, traitement du groupe final), en conservant 4096 partiels et un finaliseur cohérent. Valider tous les cas et mesurer l’appel complet; ne présumer aucun gain de combinaison.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "95421f9471844e38",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.000290993595123291,
+          "hypothesis_as_data": "Conserver le partitionnement T1 (ceil(n/4096), plafonné à 4096 partiels) tout en remplaçant l’accumulation intra-CTA par quatre accumulateurs et un traitement du groupe final hors boucle devrait réduire les dépendances de sommation ou le co"
+        },
+        "latest": {
+          "id": "95421f9471844e38",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.000290993595123291,
+          "hypothesis_as_data": "Conserver le partitionnement T1 (ceil(n/4096), plafonné à 4096 partiels) tout en remplaçant l’accumulation intra-CTA par quatre accumulateurs et un traitement du groupe final hors boucle devrait réduire les dépendances de sommation ou le co"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 5,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "1864127ae70f4754",
+    "6198a8f322d8497c",
+    "95421f9471844e38",
+    "380f84670c614b7e",
+    "1bf20829cfe547c0",
+    "09625b21746b434b",
+    "8546f4f034a64302",
+    "8d8b8137ccb947d5",
+    "a0f10ae14e88474e"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "93fc08780e17409419412e454556747f6c59f670",
+  "selected_parent_id": null
+}

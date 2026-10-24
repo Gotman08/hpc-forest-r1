@@ -1,0 +1,152 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <cstddef>\n#include <cstring>\n#include <omp.h>\n\nconstexpr int ROW_BLOCK = 4;\n\ntemplate<int N>\nvoid update_row_block(const float* A, const float* B, float* C, int block) {\n    const int first_row = block * ROW_BLOCK;\n    const int end_row = first_row + ROW_BLOCK < N ? first_row + ROW_BLOCK : N;\n    const int row_count = end_row - first_row;\n    const float* a_rows[ROW_BLOCK];\n    float* c_rows[ROW_BLOCK];\n\n    for (int i = 0; i < row_count; ++i) {\n        const int r = first_row + i;\n        a_rows[i] = A + r * N;\n        c_rows[i] = C + r * N;\n    }\n\n    for (int k = 0; k < N; ++k) {\n        const float* b_row = B + k * N;\n        for (int i = 0; i < row_count; ++i) {\n            const float a = a_rows[i][k];\n            float* c_row = c_rows[i];\n            for (int c = 0; c < N; ++c)\n                c_row[c] += a * b_row[c];\n        }\n    }\n}\n\ntemplate<int N>\nvoid mm(const float* A, const float* B, float* C, int threads) {\n    const int block_count = (N + ROW_BLOCK - 1) / ROW_BLOCK;\n    int workers = 1;\n    if (threads > 1)\n        workers = threads < block_count ? threads : block_count;\n\n    std::memset(C, 0, std::size_t(N) * N * sizeof(float));\n    if (workers > 1) {\n        #pragma omp parallel for num_threads(workers) schedule(static)\n        for (int block = 0; block < block_count; ++block)\n            update_row_block<N>(A, B, C, block);\n    } else {\n        for (int block = 0; block < block_count; ++block)\n            update_row_block<N>(A, B, C, block);\n    }\n}\n\nextern \"C\" void run(const void* input1, const void* input2, void* output,\n                    int n, int parameter, int threads) {\n    const float* A = static_cast<const float*>(input1);\n    const float* B = static_cast<const float*>(input2);\n    float* C = static_cast<float*>(output);\n    if (n == 1024) mm<1024>(A, B, C, threads);\n    else if (n == 128) mm<128>(A, B, C, threads);\n    else if (n == 32) mm<32>(A, B, C, threads);\n}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "Le r-k-c sériel est déjà correct, mais les résultats historiques montrent qu'une parallélisation par lignes est bien plus rapide que son exécution sérielle. Cette variante regroupe quatre lignes par bloc : pour chaque k, elle réutilise la ligne B contiguë sur quatre lignes de sortie, tout en gardant c contigu et l'accumulation k croissante pour chaque élément. Le memset reste sériel comme dans le candidat row-parallel le plus rapide. Le regroupement peut améliorer la réutilisation de B, mais accroît les lignes de sortie actives; aucune amélioration n'est présumée. Le plafonnement des workers respecte threads et le nombre de blocs.",
+    "memory_lessons": [
+      {
+        "applicability": "Éviter de supposer qu'un SIMD ou un déroulage explicite améliore le r-k-c row-parallel. La présente expérience garde la boucle c simple et teste plutôt la réutilisation de B entre lignes.",
+        "claim": "Les variantes valides row-parallel r-k-c ont mesuré 0,009476691 s sans SIMD, 0,010415142 s avec SIMD et 0,009647238 s avec déroulage k plus SIMD. Des tuiles d'accumulateurs de 32 et 8 colonnes ont mesuré 0,047509228 s et 0,133784680 s. Ces résultats ne démontrent pas la cause des différences.",
+        "evidence_ids": [
+          "1db3e20bf05b4154",
+          "0768d2c1eb1e4c4d",
+          "c0545a3c59b3469c",
+          "1435dca88e00418d",
+          "247fd14649974738"
+        ],
+        "next_experiment": "Mesurer ce regroupement de quatre lignes sur tous les cas officiels et comparer les timings natifs n=1024 répétés au r-k-c row-parallel sans SIMD."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Aucune commande ni mesure n'a été exécutée. Les observations disponibles donnent 0,076396257 s pour le r-k-c sériel et 0,009476691 s pour le r-k-c row-parallel sans SIMD; les timings ne prouvent pas l'effet d'un regroupement de lignes. Cette proposition conserve le memset complet avant l'accumulation pour l'écrasement à chaque appel, et maintient l'ordre k pour chaque élément. L'évaluation doit vérifier tous les cas officiels et comparer plusieurs timings natifs n=1024; aucune conclusion de performance n'est avancée.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Regrouper les lignes de sortie par blocs de quatre; pour chaque k, utiliser la même ligne B contiguë pour mettre à jour les lignes du bloc, avec c comme boucle intérieure.",
+      "Conserver l'accumulation k croissante pour chaque C[r,c] et mettre à zéro la sortie complète avant chaque appel.",
+      "Paralléliser statiquement les blocs avec au plus min(threads, nombre_de_blocs) workers; conserver un chemin sériel lorsque threads ne dépasse pas un."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "d895b4cd05ec42f38ac1636604dbc764",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "97f438206a235ad5fb1470d846eb31d1026e51452fed33795b3483966d52e964",
+  "session_id": "ad26abe73f364c7f836f5cae823c3a43",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "3a0948386bfaea5d71b1b15bedf1ca310398ccb1e7c3777c749a912a10e0cb13",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 23619,
+        "output_tokens": 11440,
+        "reasoning_output_tokens": 9840
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "312153914191ed4adba7f5c132d54f0a335d7d445b0797c190a6ee9712c6ab2c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "d4b0f86fc38a4b42-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "5ae94f10ed894be3",
+            "1db3e20bf05b4154"
+          ],
+          "status": "applied",
+          "summary": "Propose une seule variation algorithmique, le regroupement de quatre lignes, en conservant c contigu, k croissant et un plafonnement des threads."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [
+            "1db3e20bf05b4154"
+          ],
+          "status": "applied",
+          "summary": "Réutilise les faits fournis sur les variantes OpenMP valides et conserve le budget threads de l'appelant; aucune inspection additionnelle ni modification de cible."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "Aucune propriété d'API incertaine n'est nécessaire; des variantes antérieures utilisent déjà OpenMP avec succès."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "1db3e20bf05b4154",
+            "aabb31ff42f9443c"
+          ],
+          "status": "applied",
+          "summary": "Compare les résultats historiques sans attribuer de gain à la nouvelle variante; demande une validation sur tailles officielles et des timings n=1024 répétés."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "d895b4cd05ec42f38ac1636604dbc764",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "97f438206a235ad5fb1470d846eb31d1026e51452fed33795b3483966d52e964",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "ad26abe73f364c7f836f5cae823c3a43"
+    },
+    "observed_tokens": 35059,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 35059,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

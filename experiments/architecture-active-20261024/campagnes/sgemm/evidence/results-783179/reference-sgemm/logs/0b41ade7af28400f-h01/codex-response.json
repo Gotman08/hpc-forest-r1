@@ -1,0 +1,154 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <cstddef>\n#include <cuda_runtime.h>\n\n__global__ void sgemm_register_blocked(int M, int N, int K, float alpha,\n                                       const float *A, const float *B,\n                                       float beta, float *C) {\n  const size_t row_count = static_cast<size_t>(M);\n  const size_t col_count = static_cast<size_t>(N);\n  const size_t first_row = static_cast<size_t>(blockIdx.y) * 4;\n  const size_t row_stride = static_cast<size_t>(gridDim.y) * 4;\n  const size_t first_col = static_cast<size_t>(blockIdx.x) * 256 +\n                           static_cast<size_t>(threadIdx.x) * 8;\n\n  for (size_t row_tile = first_row; row_tile < row_count;\n       row_tile += row_stride) {\n    const size_t row = row_tile + static_cast<size_t>(threadIdx.y);\n    if (row >= row_count) continue;\n\n    float acc[8] = {0.0f, 0.0f, 0.0f, 0.0f,\n                    0.0f, 0.0f, 0.0f, 0.0f};\n    for (int p = 0; p < K; ++p) {\n      const float a = A[row * static_cast<size_t>(K) +\n                        static_cast<size_t>(p)];\n#pragma unroll\n      for (int j = 0; j < 8; ++j) {\n        const size_t col = first_col + static_cast<size_t>(j);\n        if (col < col_count) {\n          acc[j] += a * B[static_cast<size_t>(p) * col_count + col];\n        }\n      }\n    }\n\n#pragma unroll\n    for (int j = 0; j < 8; ++j) {\n      const size_t col = first_col + static_cast<size_t>(j);\n      if (col < col_count) {\n        const size_t idx = row * col_count + col;\n        C[idx] = alpha * acc[j] + beta * C[idx];\n      }\n    }\n  }\n}\n\nextern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n                    int n, int m, int k, float alpha, float beta) {\n  if (n <= 0 || m <= 0) return;\n  const int blocks_x = m / 256 + (m % 256 != 0);\n  int blocks_y = n / 4 + (n % 4 != 0);\n  if (blocks_y > 65535) blocks_y = 65535;\n  sgemm_register_blocked<<<dim3(blocks_x, blocks_y), dim3(32, 4)>>>(\n      n, m, k, alpha, A, B, beta, C);\n}\n",
+        "path": "src/candidate.cu"
+      }
+    ],
+    "hypothesis": "The measured 2x4 candidate (9577a3a19b3845f2, 0.011853 s) is faster than the selected 4x1 parent (0332e7182e574703, 0.014726 s), while measured 2x2 and 4x2 mappings were slower (0.013830 s and 0.016372 s). This experiment keeps 128 threads and 1024 outputs per CTA, as in the 2x4 trial, but changes to a 1x8 microtile and a 4x256 CTA footprint. Reusing each A value across eight columns may help; the eight independent accumulators and stride-eight lane accesses to B may instead hurt register occupancy or coalescing. The baseline is a measured one-output-per-thread control with the same output count per CTA, though not the same thread count. No performance gain is assumed.",
+    "memory_lessons": [
+      {
+        "applicability": "Use a different microtile mapping while matching CTA output count and thread count to the measured 2x4 experiment; compare timing and resource data rather than inferring a cause from existing means.",
+        "claim": "The measured 2x4 mapping was faster than the 4x1 parent, 2x2, and 4x2 mappings in this catalog; these measurements alone do not establish whether operand reuse, coalescing, or register occupancy caused the differences.",
+        "evidence_ids": [
+          "9577a3a19b3845f2",
+          "0332e7182e574703",
+          "7cda8bccaa0f438a",
+          "3ec37cfeda7644a4"
+        ],
+        "next_experiment": "Measure this 1x8 mapping with repeated timing and correctness checks, and capture register/occupancy data if the controller provides it."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "The selected parent remains the provenance base; sources_kept is empty because integration_source_ids is empty. The candidate is unmeasured. The row loop-stride guard covers dimensions exceeding the CUDA grid-y limit; column and row tails are guarded, and alpha/beta are applied once per valid output. No register or occupancy measurements are available in the supplied observations.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Change the per-thread output tile to one row by eight adjacent columns, maintaining eight independent FP32 accumulators and reusing each A value across eight outputs.",
+      "Map a 32x4 thread block to a 4x256 CTA output tile, keeping 128 threads and 1024 outputs per CTA for comparison with the measured 2x4 mapping.",
+      "Guard row and column tails and stride row tiles when the row dimension exceeds the CUDA grid-y limit.",
+      "Use size_t matrix offsets and apply alpha and beta once to each valid output."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "d11122dd344c4212b0651f26335466d5",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "3c009e0760e80b1d8c47f623ad6aecc063694165fabcb3bf69da2e3688da8c14",
+  "session_id": "04fe70c6f9d349daa2a45f91eaa7d412",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "3439593ee9ffe0c633e90e8e6d68277dbcd0466f09f240837463912da2fc22c8",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 22417,
+        "output_tokens": 10536,
+        "reasoning_output_tokens": 8951
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a3bf11d4fa1b442f3ce3b8f9d3db6ff8be9d5741a2c919159d96937ca556300c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "0b41ade7af28400f-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "9577a3a19b3845f2",
+            "0332e7182e574703",
+            "7cda8bccaa0f438a",
+            "3ec37cfeda7644a4"
+          ],
+          "status": "applied",
+          "summary": "Designed a contrasting 1x8 microtile trial that holds CTA output count and thread count at the measured 2x4 mapping, while stating the possible reuse, coalescing, and register tradeoffs."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Used the supplied target/compiler context and avoided architecture-specific features or assumptions requiring further environment inspection."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The proposal uses only ordinary CUDA kernel syntax and the existing launch interface; no uncertain API, intrinsic, or hardware-specific behavior required documentation."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "9577a3a19b3845f2",
+            "0332e7182e574703",
+            "7cda8bccaa0f438a",
+            "3ec37cfeda7644a4"
+          ],
+          "status": "applied",
+          "summary": "Compared the supplied repeated means without attributing the differences to an unmeasured cause; correctness, candidate timing, and resource tradeoffs remain for controller evaluation."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "d11122dd344c4212b0651f26335466d5",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "3c009e0760e80b1d8c47f623ad6aecc063694165fabcb3bf69da2e3688da8c14",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "04fe70c6f9d349daa2a45f91eaa7d412"
+    },
+    "observed_tokens": 32953,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 32953,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

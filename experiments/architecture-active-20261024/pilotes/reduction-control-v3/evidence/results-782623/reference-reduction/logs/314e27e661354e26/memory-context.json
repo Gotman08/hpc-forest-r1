@@ -1,0 +1,248 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "60701819194467cdb9363487a220a098ef1e1f71bb3acc9d24c5e9d4a81fcf99",
+    "tree_id": "e1:T2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "e96edce9d9ec4d81",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "e96edce9d9ec4d81",
+        "facts": {
+          "commit": "94f6a7a68f9e211a5823f38553cb40958ba33a3c",
+          "base_commit": "3a63b4a20b711e7c88be0f60618c343cd8359e92",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 8.03648014863332e-06,
+          "score": 0.8519454478796789
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "For large inputs, a 2048-element tile with 128-thread CTA reductions should produce far fewer partials than the baseline's repeated shrinking stages; a single CTA can finalize those partials in one second launch. This tests whether fewer stages outweigh the single-CTA finalizer's work, without assuming a speedup. Small inputs use a one-CTA path (or a direct operation for n=0/1) to avoid paying for a two-pass hierarchy.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the iterative multi-stage shrinking reduction with a two-pass hierarchy for n > 2048: one CTA per 2048-element tile writes a 64-bit partial, then one CTA reduces the partials directly to output.\",\"Use a single 128-thread CTA for 1 < n <= 2048; produce the empty sum with a default-stream asynchronous memset and copy the sole input element directly for n == 1.\",\"Accumulate thread-local, CTA, and final sums in 64-bit integers; bound each tile's tail and read only partials written by the current invocation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "e96edce9d9ec4d81-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "e96edce9d9ec4d81",
+        "facts": {
+          "commit": null,
+          "base_commit": "3a63b4a20b711e7c88be0f60618c343cd8359e92",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "For large inputs, a 2048-element tile with 128-thread CTA reductions should produce far fewer partials than the baseline's repeated shrinking stages; a single CTA can finalize those partials in one second launch. This tests whether fewer stages outweigh the single-CTA finalizer's work, without assuming a speedup. Small inputs use a one-CTA path (or a direct operation for n=0/1) to avoid paying for a two-pass hierarchy.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the iterative multi-stage shrinking reduction with a two-pass hierarchy for n > 2048: one CTA per 2048-element tile writes a 64-bit partial, then one CTA reduces the partials directly to output.\",\"Use a single 128-thread CTA for 1 < n <= 2048; produce the empty sum with a default-stream asynchronous memset and copy the sole input element directly for n == 1.\",\"Accumulate thread-local, CTA, and final sums in 64-bit integers; bound each tile's tail and read only partials written by the current invocation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "96a97d28d7554665",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "96a97d28d7554665",
+        "facts": {
+          "commit": "b7b6bb424a0ad97807d860b1b6178eb0ba563d15",
+          "base_commit": "94f6a7a68f9e211a5823f38553cb40958ba33a3c",
+          "parent_id": "e96edce9d9ec4d81",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 7.330559889475504e-06,
+          "score": 0.8631710174075373
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Increasing the tile from 2048 to 4096 lets the single-CTA path cover inputs through 4096 and halves the partial count for larger inputs. This may reduce launch and finalization overhead, but the larger per-CTA workload and smaller first-pass grid could reduce parallel efficiency, especially for large inputs. The experiment tests that tradeoff against the valid 2048-tile parent; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Increase kTileSize from 2048 to 4096. This also extends the one-CTA path to inputs up to 4096 elements.\",\"For larger inputs, retain the two-pass hierarchy and one-CTA finalizer, reducing the first-pass partial count to ceil(n/4096).\",\"Keep the 128-thread shared-memory CTA reduction and 64-bit local, partial, and final sums; each first-pass CTA writes its bounded tile result before the finalizer reads it.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "96a97d28d7554665-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "96a97d28d7554665",
+        "facts": {
+          "commit": null,
+          "base_commit": "94f6a7a68f9e211a5823f38553cb40958ba33a3c",
+          "parent_id": "e96edce9d9ec4d81",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Increasing the tile from 2048 to 4096 lets the single-CTA path cover inputs through 4096 and halves the partial count for larger inputs. This may reduce launch and finalization overhead, but the larger per-CTA workload and smaller first-pass grid could reduce parallel efficiency, especially for large inputs. The experiment tests that tradeoff against the valid 2048-tile parent; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Increase kTileSize from 2048 to 4096. This also extends the one-CTA path to inputs up to 4096 elements.\",\"For larger inputs, retain the two-pass hierarchy and one-CTA finalizer, reducing the first-pass partial count to ceil(n/4096).\",\"Keep the 128-thread shared-memory CTA reduction and 64-bit local, partial, and final sums; each first-pass CTA writes its bounded tile result before the finalizer reads it.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "3a63b4a20b711e7c88be0f60618c343cd8359e92",
+          "base_commit": "3a63b4a20b711e7c88be0f60618c343cd8359e92",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.624405384063721e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 5,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T2",
+        "subject": "Fewer launches with a two-pass hierarchy",
+        "objective": "Using AB-MCTS, focus on the conventional multi-kernel hierarchy: vary tile/grain size and partial-count/finalization strategy to test lower-launch-count designs, including but not assuming a two-pass design wins. Avoid repeating a broad warp-reduction sweep already assigned to T1; use a straightforward correct CTA reduction unless tuning it is necessary to realize a hierarchy. Preserve exact arithmetic for all valid inputs, including safe intermediate sums, uninitialized scratch, tails, ABI, and default-stream behavior. If n=0 is valid, produce the empty sum. Report failures, correctness, and repeated full-program timings, then compare against the supplied baseline without treating one launch-count hypothesis as the result.",
+        "records": 4,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "96a97d28d7554665",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 7.330559889475504e-06,
+          "hypothesis_as_data": "Increasing the tile from 2048 to 4096 lets the single-CTA path cover inputs through 4096 and halves the partial count for larger inputs. This may reduce launch and finalization overhead, but the larger per-CTA workload and smaller first-pas"
+        },
+        "latest": {
+          "id": "96a97d28d7554665",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 7.330559889475504e-06,
+          "hypothesis_as_data": "Increasing the tile from 2048 to 4096 lets the single-CTA path cover inputs through 4096 and halves the partial count for larger inputs. This may reduce launch and finalization overhead, but the larger per-CTA workload and smaller first-pas"
+        },
+        "alternative": {
+          "id": "e96edce9d9ec4d81",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 8.03648014863332e-06,
+          "hypothesis_as_data": "For large inputs, a 2048-element tile with 128-thread CTA reductions should produce far fewer partials than the baseline's repeated shrinking stages; a single CTA can finalize those partials in one second launch. This tests whether fewer st"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "e96edce9d9ec4d81",
+    "e96edce9d9ec4d81-h01",
+    "96a97d28d7554665",
+    "96a97d28d7554665-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "3a63b4a20b711e7c88be0f60618c343cd8359e92",
+  "selected_parent_id": null
+}

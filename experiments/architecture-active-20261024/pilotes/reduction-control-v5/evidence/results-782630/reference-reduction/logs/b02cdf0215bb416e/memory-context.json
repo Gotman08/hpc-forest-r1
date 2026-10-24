@@ -1,0 +1,283 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "a2efd0fc85085b1af2069872ba2ce31fcccc76fa29eb13d3188fc4d1b8ac4c80",
+    "tree_id": "e1:T2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "lesson:4393d47f56314c9b:0:0",
+        "kind": "lesson",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "4393d47f56314c9b",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The parent warp-reduction candidate was correct on all 10 tested cases and measured 30.015 µs mean versus the baseline's 47.079 µs. Because the candidate changed the intra-block tree as a whole, those measurements do not attribute the difference to __reduce_add_sync specifically.",
+          "transformations": "{}",
+          "applicability": "This T2 experiment contrasts the int warp primitive while holding the parent's block reduction topology and call structure fixed.",
+          "next_experiment": "Compare this shuffle-only variant's correctness and repeated whole-call timings with the measured parent; attribute any timing difference cautiously to the changed primitive under the otherwise matching source.",
+          "evidence_ids": [
+            "e40efa56e8c14522",
+            "baseline-e1"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      },
+      {
+        "id": "e40efa56e8c14522",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "e40efa56e8c14522",
+        "facts": {
+          "commit": "9cae9bb1aefd9a0c8a6fea7c5d9b9072210778ae",
+          "base_commit": "5c7395905b4c8227b082fabc09efc6c6d8357c46",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0014932950337726e-05,
+          "score": 0.6106729764111127
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "With the existing 128-thread blocks and unchanged one-element-per-thread mapping, reduce0 performs seven CTA-wide barriers in its shared-memory tree. Reducing each warp with the existing sync-intrinsic helper, writing one partial per warp, then using one CTA barrier and a warp-0 reduction may reduce synchronization overhead. The tail remains zero-padded and every launched lane participates. The baseline is correct at a mean 47.08 µs; no candidate speedup or correctness is claimed before controller evaluation.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Retain the same global load mapping and zero-pad out-of-range tail elements, but keep each loaded value in a register for the warp reduction.\",\"Use the existing warpReduceSum helper with __activemask() for each warp; on the supplied SM 8.0+ target the int specialization uses __reduce_add_sync.\",\"Have lane 0 of each warp write its partial sum to shared memory; use one __syncthreads() before warp 0 reduces the partials and writes the block result.\",\"Leave run's 128-thread launch, reduction pass loop, scratch selection, and output copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "e40efa56e8c14522-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "e40efa56e8c14522",
+        "facts": {
+          "commit": null,
+          "base_commit": "5c7395905b4c8227b082fabc09efc6c6d8357c46",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "With the existing 128-thread blocks and unchanged one-element-per-thread mapping, reduce0 performs seven CTA-wide barriers in its shared-memory tree. Reducing each warp with the existing sync-intrinsic helper, writing one partial per warp, then using one CTA barrier and a warp-0 reduction may reduce synchronization overhead. The tail remains zero-padded and every launched lane participates. The baseline is correct at a mean 47.08 µs; no candidate speedup or correctness is claimed before controller evaluation.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Retain the same global load mapping and zero-pad out-of-range tail elements, but keep each loaded value in a register for the warp reduction.\",\"Use the existing warpReduceSum helper with __activemask() for each warp; on the supplied SM 8.0+ target the int specialization uses __reduce_add_sync.\",\"Have lane 0 of each warp write its partial sum to shared memory; use one __syncthreads() before warp 0 reduces the partials and writes the block result.\",\"Leave run's 128-thread launch, reduction pass loop, scratch selection, and output copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4393d47f56314c9b",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "4393d47f56314c9b",
+        "facts": {
+          "commit": "f316ff3d81582d6b2cbbf0ef04434bc08a37c001",
+          "base_commit": "9cae9bb1aefd9a0c8a6fea7c5d9b9072210778ae",
+          "parent_id": "e40efa56e8c14522",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0734506448109945e-05,
+          "score": 0.6050258660687486
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured parent uses __reduce_add_sync for int warp sums and is correct, but its whole-call timing does not isolate that intrinsic's contribution. Removing only that specialization tests the same mapping, 128-thread blocks, shared-memory inter-warp combination, launch/pass structure, and zero-padded tails using the generic five-step shuffle-down reduction instead. The shuffle version should remain correct with all lanes participating; whether it is faster than the intrinsic path is unknown and requires the controller's repeated whole-call measurements.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Remove the architecture-specific int specialization so int reductions use the existing generic __shfl_down_sync loop.\",\"Keep the zero-padded input mapping, 128-thread launch, per-warp shared-memory partials, CTA barrier, inter-warp warp-0 reduction, pass loop, scratch selection, and output copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4393d47f56314c9b-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "4393d47f56314c9b",
+        "facts": {
+          "commit": null,
+          "base_commit": "9cae9bb1aefd9a0c8a6fea7c5d9b9072210778ae",
+          "parent_id": "e40efa56e8c14522",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured parent uses __reduce_add_sync for int warp sums and is correct, but its whole-call timing does not isolate that intrinsic's contribution. Removing only that specialization tests the same mapping, 128-thread blocks, shared-memory inter-warp combination, launch/pass structure, and zero-padded tails using the generic five-step shuffle-down reduction instead. The shuffle version should remain correct with all lanes participating; whether it is faster than the intrinsic path is unknown and requires the controller's repeated whole-call measurements.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Remove the architecture-specific int specialization so int reductions use the existing generic __shfl_down_sync loop.\",\"Keep the zero-padded input mapping, 128-thread launch, per-warp shared-memory partials, CTA barrier, inter-warp warp-0 reduction, pass loop, scratch selection, and output copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "5c7395905b4c8227b082fabc09efc6c6d8357c46",
+          "base_commit": "5c7395905b4c8227b082fabc09efc6c6d8357c46",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.707946618398031e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 6,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T2",
+        "subject": "Intra-block reduction primitive and synchronization",
+        "objective": "Isolate the cost of reduce0's intra-block shared-memory tree: compare a warp-level reduction using valid CUDA sync intrinsics and a correct inter-warp combination, optionally against an allowed CUB block primitive. Hold global input mapping, block geometry, and pass structure fixed during comparisons. Ensure participating lanes use correct masks and synchronization, including tail blocks. Report correctness and repeated whole-call timings. Preserve a correct modular implementation even if it does not beat the full baseline alone, since it may combine differently with a changed hierarchy; do not claim a combination is faster without measuring it.",
+        "records": 5,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "e40efa56e8c14522",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0014932950337726e-05,
+          "hypothesis_as_data": "With the existing 128-thread blocks and unchanged one-element-per-thread mapping, reduce0 performs seven CTA-wide barriers in its shared-memory tree. Reducing each warp with the existing sync-intrinsic helper, writing one partial per warp, "
+        },
+        "latest": {
+          "id": "4393d47f56314c9b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0734506448109945e-05,
+          "hypothesis_as_data": "The measured parent uses __reduce_add_sync for int warp sums and is correct, but its whole-call timing does not isolate that intrinsic's contribution. Removing only that specialization tests the same mapping, 128-thread blocks, shared-memor"
+        },
+        "alternative": {
+          "id": "4393d47f56314c9b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0734506448109945e-05,
+          "hypothesis_as_data": "The measured parent uses __reduce_add_sync for int warp sums and is correct, but its whole-call timing does not isolate that intrinsic's contribution. Removing only that specialization tests the same mapping, 128-thread blocks, shared-memor"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "lesson:4393d47f56314c9b:0:0",
+    "e40efa56e8c14522",
+    "e40efa56e8c14522-h01",
+    "4393d47f56314c9b",
+    "4393d47f56314c9b-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "5c7395905b4c8227b082fabc09efc6c6d8357c46",
+  "selected_parent_id": null
+}

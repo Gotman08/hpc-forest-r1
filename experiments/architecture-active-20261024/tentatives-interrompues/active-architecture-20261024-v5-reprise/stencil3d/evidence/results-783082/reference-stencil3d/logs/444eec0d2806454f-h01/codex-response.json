@@ -1,0 +1,156 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "/*\n  Copyright (c) 2010-2023, Intel Corporation\n\n  SPDX-License-Identifier: BSD-3-Clause\n*/\n\n#include <cstddef>\n#include <cstring>\n\nstatic inline void stencil_row(int y, int z, int x0, int x1, int Nx, int Nxy, const float coef[4],\n                               const float vsq[], const float Ain[], float Aout[]) {\n    const int row_index = z * Nxy + y * Nx;\n    for (int x = x0; x < x1; ++x) {\n        const int index = row_index + x;\n        const float div = coef[0] * Ain[index] +\n                          coef[1] * (Ain[index + 1] + Ain[index - 1] + Ain[index + Nx] + Ain[index - Nx] +\n                                     Ain[index + Nxy] + Ain[index - Nxy]) +\n                          coef[2] * (Ain[index + 2] + Ain[index - 2] + Ain[index + 2 * Nx] +\n                                     Ain[index - 2 * Nx] + Ain[index + 2 * Nxy] + Ain[index - 2 * Nxy]) +\n                          coef[3] * (Ain[index + 3] + Ain[index - 3] + Ain[index + 3 * Nx] +\n                                     Ain[index - 3 * Nx] + Ain[index + 3 * Nxy] + Ain[index - 3 * Nxy]);\n        Aout[index] = 2 * Ain[index] - Aout[index] + vsq[index] * div;\n    }\n}\n\nstatic void stencil_step(int x0, int x1, int y0, int y1, int z0, int z1, int Nx, int Ny,\n                         const float coef[4], const float vsq[], const float Ain[], float Aout[]) {\n    const int Nxy = Nx * Ny;\n    for (int z = z0; z < z1; ++z) {\n        for (int y = y0; y < y1; ++y) {\n            stencil_row(y, z, x0, x1, Nx, Nxy, coef, vsq, Ain, Aout);\n        }\n    }\n}\n\nstatic void stencil_step_parallel(int x0, int x1, int y0, int y1, int z0, int z1, int Nx, int Ny,\n                                  int threads, const float coef[4], const float vsq[], const float Ain[],\n                                  float Aout[]) {\n    if (x1 <= x0 || y1 <= y0 || z1 <= z0) {\n        return;\n    }\n\n    const std::size_t z_count = static_cast<std::size_t>(z1 - z0);\n    const std::size_t y_count = static_cast<std::size_t>(y1 - y0);\n    const std::size_t requested = static_cast<std::size_t>(threads);\n    int worker_count = threads;\n    if (y_count <= (requested - 1) / z_count) {\n        worker_count = static_cast<int>(z_count * y_count);\n    }\n\n    const int Nxy = Nx * Ny;\n#pragma omp parallel for collapse(2) schedule(static) num_threads(worker_count)\n    for (int z = z0; z < z1; ++z) {\n        for (int y = y0; y < y1; ++y) {\n            stencil_row(y, z, x0, x1, Nx, Nxy, coef, vsq, Ain, Aout);\n        }\n    }\n}\n\nvoid loop_stencil_serial(int t0, int t1, int x0, int x1, int y0, int y1, int z0, int z1, int Nx, int Ny,\n                         int Nz, const float coef[4], const float vsq[], float Aeven[], float Aodd[]) {\n    for (int t = t0; t < t1; ++t) {\n        if ((t & 1) == 0)\n            stencil_step(x0, x1, y0, y1, z0, z1, Nx, Ny, coef, vsq, Aeven, Aodd);\n        else\n            stencil_step(x0, x1, y0, y1, z0, z1, Nx, Ny, coef, vsq, Aodd, Aeven);\n    }\n}\n\nstatic void loop_stencil_parallel_steps(int t0, int t1, int x0, int x1, int y0, int y1, int z0, int z1,\n                                        int Nx, int Ny, int threads, const float coef[4], const float vsq[],\n                                        float Aeven[], float Aodd[]) {\n    for (int t = t0; t < t1; ++t) {\n        if ((t & 1) == 0)\n            stencil_step_parallel(x0, x1, y0, y1, z0, z1, Nx, Ny, threads, coef, vsq, Aeven, Aodd);\n        else\n            stencil_step_parallel(x0, x1, y0, y1, z0, z1, Nx, Ny, threads, coef, vsq, Aodd, Aeven);\n    }\n}\n\nextern \"C\" void run(const void* input1, const void* input2, void* output, int n, int parameter, int threads) {\n    const std::size_t s = static_cast<std::size_t>(n) * n * n;\n    const float* a = static_cast<const float*>(input1);\n    float* c = static_cast<float*>(output);\n    std::memcpy(c, a, s * sizeof(float));\n    std::memset(c + s, 0, s * sizeof(float));\n    const float co[4] = {0.5f, -0.25f, 0.125f, -0.0625f};\n    const float* vsq = static_cast<const float*>(input2);\n\n    const int x0 = 4;\n    const int x1 = n - 4;\n    const int y0 = 4;\n    const int y1 = n - 4;\n    const int z0 = 4;\n    const int z1 = n - 4;\n    const std::size_t active_width = n > 8 ? static_cast<std::size_t>(n - 8) : 0;\n\n    // Keep the serial baseline for one-thread and small-work calls. For larger\n    // budgets, each timestep gets a static row-level OpenMP region.\n    if (threads > 1 && active_width >= 16) {\n        loop_stencil_parallel_steps(0, 6, x0, x1, y0, y1, z0, z1, n, n, threads, co, vsq, c, c + s);\n    } else {\n        loop_stencil_serial(0, 6, x0, x1, y0, y1, z0, z1, n, n, n, co, vsq, c, c + s);\n    }\n}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "The best persistent-team result (56b28747a297486d, 0.2292 s) is faster in aggregate than the per-timestep-region result (b67f9cc2abc34db6, 0.2376 s), while the serial baseline measured 0.4575 s. This candidate keeps a serial path for one-thread and small-work calls, and uses static row-level work sharing with a separate region per timestep only for larger thread budgets. Comparing its four-thread result with the persistent-team candidate tests whether repeated region creation offsets the parallel work; the serial one-thread path tests whether OpenMP setup is worth avoiding there. No speedup is assumed before measurement.",
+    "memory_lessons": [
+      {
+        "applicability": "Use these aggregate results to motivate a controlled comparison, not to infer which region lifetime wins at a particular thread count.",
+        "claim": "The measured serial baseline was 0.4575 s; the best persistent-team candidate was 0.2292 s, while a per-timestep-region candidate measured 0.2376 s. These aggregate means do not by themselves establish per-thread-count causality.",
+        "evidence_ids": [
+          "baseline-e1",
+          "56b28747a297486d",
+          "b67f9cc2abc34db6"
+        ],
+        "next_experiment": "Compare serial at one thread and per-timestep regions at four threads against the corresponding baseline and persistent-team results under the official settings."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Only src/candidate.cpp is changed. The serial path handles nonpositive or one-thread budgets and active widths below 16; larger calls use up to the supplied thread budget, capped by the number of z/y rows. The controller should verify complete outputs and boundaries, then measure at the official one- and four-core settings; this proposal has not been run or measured.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Factored the stencil row arithmetic into a shared inline row kernel used by serial and parallel steps.",
+      "Kept the existing six-step ping-pong computation and output initialization, using the serial implementation for one-thread budgets and small active widths.",
+      "Added static collapsed z/y row work-sharing in a separate OpenMP region per timestep for larger thread budgets, with num_threads derived from the supplied budget and capped by the number of rows."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "b7f28299ea8f48eea0f075ebcf25b054",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "2fa5a882565972c7abac4f8df6f7f3ffb4e98ddc8f363c70dc2ce180f23f2e73",
+  "session_id": "ec9eb39b44224f4c822caf101b1300ee",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "0933da2188a6752b9c273c44ae03ae5de8ab7a78f5939cc096adc34f830db70d",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 23983,
+        "output_tokens": 13518,
+        "reasoning_output_tokens": 11116
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "312153914191ed4adba7f5c132d54f0a335d7d445b0797c190a6ee9712c6ab2c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "444eec0d2806454f-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "baseline-e1",
+            "56b28747a297486d",
+            "b67f9cc2abc34db6"
+          ],
+          "status": "applied",
+          "summary": "Designed a bounded comparison of the serial cutoff and per-timestep static row work against the prior persistent-team result."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [
+            "56b28747a297486d",
+            "b67f9cc2abc34db6"
+          ],
+          "status": "applied",
+          "summary": "Reused the campaign’s valid OpenMP candidates and official thread-budget context; made no new hardware or compiler capability claims."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [
+            "56b28747a297486d",
+            "b67f9cc2abc34db6"
+          ],
+          "status": "not_needed",
+          "summary": "The change uses the same standard OpenMP work-sharing mechanism exercised by measured valid candidates; no uncertain API or hardware feature is introduced."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "56b28747a297486d",
+            "b67f9cc2abc34db6"
+          ],
+          "status": "applied",
+          "summary": "Compared only recorded aggregate measurements and left thread-specific effects and candidate performance for controller measurement."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "b7f28299ea8f48eea0f075ebcf25b054",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "2fa5a882565972c7abac4f8df6f7f3ffb4e98ddc8f363c70dc2ce180f23f2e73",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "ec9eb39b44224f4c822caf101b1300ee"
+    },
+    "observed_tokens": 37501,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 37501,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

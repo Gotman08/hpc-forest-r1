@@ -1,0 +1,1146 @@
+{
+  "version": "hpc-forest-active-v1",
+  "epoch": 1,
+  "role": null,
+  "plan_revision": 0,
+  "trees": {
+    "T1": {
+      "objective": "Own the separate forward and input-gradient kernels and their launch mapping in src/candidate.cu. Explore packing multiple short rows per CTA and other coalesced, well-utilized mappings to reduce inactive threads and CTA overhead; keep the two passes separate so this tree isolates mapping/kernel-efficiency gains from fusion. Preserve bounds-safe zero padding, full FP32, all-input correctness, complete output writes, and the fixed API. Judge candidates by correctness and full-call timing, not an assumed per-kernel benefit.",
+      "role": "T1",
+      "subject": "Improve forward and input-gradient CTA mapping without fusion",
+      "suspended": false,
+      "completed_ids": [
+        "f014e1b6f1494b52"
+      ],
+      "measured_examples": [
+        {
+          "id": "f014e1b6f1494b52",
+          "measured_outcome": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.03414717864990235,
+            "score": 0.5094584989033322,
+            "commit": "ab9192a40897ad8c85a23a6b0d8ace44f8a8b950"
+          },
+          "source_paths": [
+            "src/candidate.cu"
+          ]
+        }
+      ]
+    },
+    "T2": {
+      "objective": "Own the forward/input-gradient execution path in src/candidate.cu. Test a fused kernel that computes y and gx together, sharing coordinate/filter handling where beneficial; measure whether fewer launches and shared work outweigh increased register use or reduced occupancy. Do not modify the weight-gradient path. Preserve full FP32, zero-padding semantics, all-input correctness and tolerances, complete fresh writes to both outputs, and the fixed API. Compare complete-call timing and report measured results rather than assuming fusion helps.",
+      "role": "T2",
+      "subject": "Measure a fused forward and input-gradient kernel",
+      "suspended": false,
+      "completed_ids": [
+        "376532aa1c0a4f8f",
+        "626a9fb119ef42b2"
+      ],
+      "measured_examples": [
+        {
+          "id": "626a9fb119ef42b2",
+          "measured_outcome": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.03640788014729818,
+            "score": 0.49343368677990557,
+            "commit": "807fe5e222136ed292047047cfe039cd58082f36"
+          },
+          "source_paths": [
+            "src/candidate.cu"
+          ]
+        },
+        {
+          "id": "376532aa1c0a4f8f",
+          "measured_outcome": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.03492851384480794,
+            "score": 0.5038036677583544,
+            "commit": "2ca7ecdd848a8c7c598386260c5e6038e683966f"
+          },
+          "source_paths": [
+            "src/candidate.cu"
+          ]
+        }
+      ]
+    },
+    "T3": {
+      "objective": "Own the weight-gradient kernel and its use of scratch in src/candidate.cu. Compare reduction granularities rather than assuming multi-stage partial sums win: test a CTA-level reduction distributed across B*L for each (h,j), and, where useful, split B*L into tiles that write partial sums to scratch followed by a final reduction. You may also test tiling neighboring j outputs if it enables useful reuse. Use no extra allocations; every scratch read must follow a write in the current call, and all outputs must be freshly written. Preserve bounds, the contracted gradient, full FP32, and the required tolerances for all valid inputs. Judge variants by correctness and complete-call timing, since the supplied baseline timing does not attribute cost to this kernel.",
+      "role": "T3",
+      "subject": "Compare one-stage and split weight-gradient reductions",
+      "suspended": false,
+      "completed_ids": [
+        "9b2a7876f05a474b"
+      ],
+      "measured_examples": [
+        {
+          "id": "9b2a7876f05a474b",
+          "measured_outcome": {
+            "status": "valid",
+            "correct": true,
+            "mean_seconds": 0.014375462532043456,
+            "score": 0.7115647334137489,
+            "commit": "976f881a98d9f007e050086732c2972a834c0d75"
+          },
+          "source_paths": [
+            "src/candidate.cu"
+          ]
+        }
+      ]
+    }
+  },
+  "records": [
+    {
+      "id": "baseline-e1",
+      "kind": "baseline",
+      "outcome": {
+        "binary_sha256": "c4eecf197475b64ec014fde3273055d9857240f11761ae76436fe9b0b0b0c3d8",
+        "cache_key": "a37e85fba4a51b047964ea0d7910cc31182178dbe312c982080b5828ec0c8dc3",
+        "commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.03546401341756185,
+        "reason": "",
+        "score": 0.5,
+        "status": "valid",
+        "times": [
+          0.03546630859375,
+          0.0354411735534668,
+          0.03548455810546875
+        ],
+        "tree_hash": "d4d6e0ee36a6db26ab0f17bf23a0706baae66cab"
+      },
+      "mission": null,
+      "evaluations": [
+        {
+          "phase": "search",
+          "outcome": {
+            "binary_sha256": "c4eecf197475b64ec014fde3273055d9857240f11761ae76436fe9b0b0b0c3d8",
+            "cache_key": "a37e85fba4a51b047964ea0d7910cc31182178dbe312c982080b5828ec0c8dc3",
+            "commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+            "correct": true,
+            "logs": [
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/build.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/correctness.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/sample-0.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/sample-1.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/baseline-e1/search/attempt-001/sample-2.log"
+            ],
+            "mean_seconds": 0.03546401341756185,
+            "reason": "",
+            "score": 0.5,
+            "status": "valid",
+            "times": [
+              0.03546630859375,
+              0.0354411735534668,
+              0.03548455810546875
+            ],
+            "tree_hash": "d4d6e0ee36a6db26ab0f17bf23a0706baae66cab"
+          }
+        }
+      ],
+      "diagnostics": [
+        {
+          "path": "logs/e1/baseline-e1/search/attempt-001/build.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "preview": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/baseline-e1/search/attempt-001/correctness.log",
+          "sha256": "fa561d1ab0508e2dc6964bc5e3eabf4f88c7e6df754bef9c5e31d117137e66fb",
+          "preview": "{\"correct\": true, \"cases\": 8, \"details\": [{\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.384185791015625e-07}, {\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.086162567138672e-07}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 3.0994415283203125e-06}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 4.76837158203125e-06}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.2874603271484375e-05}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.4781951904296875e-05}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.003143310546875}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0036773681640625}]}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/baseline-e1/search/attempt-001/sample-0.log",
+          "sha256": "c713bcb231953432b4a52fc879f0119fb7b0ae018ff958448f121bb9e0d38046",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 35.46630859375, \"seconds\": 0.03546630859375, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.03546630859375}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/baseline-e1/search/attempt-001/sample-1.log",
+          "sha256": "8cad0952caf9a2043a2e708bc281844f0567a8d4e566af84e0799188cf2cf6c7",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 35.4411735534668, \"seconds\": 0.0354411735534668, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.0354411735534668}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/baseline-e1/search/attempt-001/sample-2.log",
+          "sha256": "1077891530d1a9fd391cba95a52cd9c18593c25b0387a87c93fd74f1962d412c",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 35.48455810546875, \"seconds\": 0.03548455810546875, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.03548455810546875}\n",
+          "truncated": false
+        }
+      ],
+      "source_files": {
+        "src/candidate.cu": "#include <cuda_runtime.h>\r\n\r\nextern \"C\" {\r\n\r\n__global__ void dwconv1d_fwd_naive(\r\n    const float* x,   // [B,H,L]\r\n    const float* k,   // [H,K]\r\n    float* y,         // [B,H,L]\r\n    int B, int H, int L, int K)\r\n{\r\n    int b = (int)blockIdx.z;\r\n    int h = (int)blockIdx.y;\r\n    int t = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\r\n\r\n    if (b >= B || h >= H || t >= L) return;\r\n\r\n    int half = K / 2;\r\n    int base = (b * H + h) * L;\r\n\r\n    float acc = 0.0f;\r\n    for (int j = 0; j < K; ++j) {\r\n        int xi = t + j - half;\r\n        if (xi >= 0 && xi < L) {\r\n            acc += x[base + xi] * k[h * K + j];\r\n        }\r\n    }\r\n    y[base + t] = acc;\r\n}\r\n\r\n__global__ void dwconv1d_bwd_input_naive(\r\n    const float* gy,   // [B,H,L]\r\n    const float* k,    // [H,K]\r\n    float* gx,         // [B,H,L]\r\n    int B, int H, int L, int K)\r\n{\r\n    int b = (int)blockIdx.z;\r\n    int h = (int)blockIdx.y;\r\n    int t = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\r\n\r\n    if (b >= B || h >= H || t >= L) return;\r\n\r\n    int half = K / 2;\r\n    int base = (b * H + h) * L;\r\n\r\n    float acc = 0.0f;\r\n    for (int j = 0; j < K; ++j) {\r\n        int gi = t + (j - half);\r\n        if (gi >= 0 && gi < L) {\r\n            acc += gy[base + gi] * k[h * K + (K - 1 - j)];\r\n        }\r\n    }\r\n    gx[base + t] = acc;\r\n}\r\n\r\n__global__ void dwconv1d_bwd_kernel_naive(\r\n    const float* gy, // [B,H,L]\r\n    const float* x,  // [B,H,L]\r\n    float* gk,       // [H,K]\r\n    int B, int H, int L, int K)\r\n{\r\n    int h   = (int)blockIdx.y;\r\n    int j_i = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\r\n\r\n    if (h >= H || j_i >= K) return;\r\n\r\n    int half = K / 2;\r\n    float acc = 0.0f;\r\n\r\n    for (int b = 0; b < B; ++b) {\r\n        int base = (b * H + h) * L;\r\n        for (int t = 0; t < L; ++t) {\r\n            int xi = t + j_i - half;\r\n            if (xi >= 0 && xi < L) {\r\n                acc += gy[base + t] * x[base + xi];\r\n            }\r\n        }\r\n    }\r\n\r\n    gk[h * K + j_i] = acc;\r\n}\r\n\r\n}\r\nextern \"C\" void run(const void*x,const void*k,const void*gy,void*out,void*scratch,int n,int h,int l,int ks)\r\n{size_t size=size_t(n)*h*l;float*y=(float*)out;float*gx=y+size;float*gk=gx+size;\r\ndwconv1d_fwd_naive<<<dim3((l+255)/256,h,n),256>>>((const float*)x,(const float*)k,y,n,h,l,ks);\r\ndwconv1d_bwd_input_naive<<<dim3((l+255)/256,h,n),256>>>((const float*)gy,(const float*)k,gx,n,h,l,ks);\r\ndwconv1d_bwd_kernel_naive<<<dim3((ks+255)/256,h,1),256>>>((const float*)gy,(const float*)x,gk,n,h,l,ks);}\r\n"
+      },
+      "source_digest": "68293fcb84c44f10831b8364cce29c6865638c131a60f032901610edff4978b0"
+    },
+    {
+      "id": "626a9fb119ef42b2",
+      "kind": "trial",
+      "outcome": {
+        "binary_sha256": "a5e5f4dbbdb2d3cd514504b3076cbb7278fcf2751bbbb2b4667d0b92d8c889ea",
+        "cache_key": "7f34f5b9aecac7180e01b5e5f47be36a12aab080fb3e270b0dfbf178522ce2a1",
+        "commit": "807fe5e222136ed292047047cfe039cd58082f36",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.03640788014729818,
+        "reason": "",
+        "score": 0.49343368677990557,
+        "status": "valid",
+        "times": [
+          0.03640548706054687,
+          0.036425933837890626,
+          0.03639221954345703
+        ],
+        "tree_hash": "51a8a20f3408caff1280a66adc78547e46386825"
+      },
+      "mission": {
+        "advice_ids": [],
+        "base_commit": "2ca7ecdd848a8c7c598386260c5e6038e683966f",
+        "base_source_id": null,
+        "budget_phase": "search",
+        "control_decision_id": null,
+        "delegation_parent": "R/T2",
+        "depth": 2,
+        "epoch": 1,
+        "hypothesis": "The measured same-thread fusion is correct and modestly faster than baseline (34.929 ms vs 35.464 ms, about 1.51%), but it keeps two accumulators and two input streams live per output thread. This contrasting launch-fused variant assigns separate, path-specialized block cohorts to y and gx: it retains one launch while reducing per-thread live state, at the cost of duplicated coordinate/bounds work and twice as many blocks. Test whether lower register pressure offsets that duplicated work; timing for this candidate is not yet available.",
+        "id": "626a9fb119ef42b2",
+        "import_ids": [],
+        "kind": "research",
+        "ordinal": 2,
+        "parent_id": "376532aa1c0a4f8f",
+        "role": "T2",
+        "source_commits": [],
+        "sources": [],
+        "transformations": {
+          "files": [
+            "src/candidate.cu"
+          ],
+          "retained": [
+            "Replace same-thread y/gx accumulation with two path-specialized block cohorts dispatched by one kernel launch.",
+            "Retain the zero-padding bounds checks and FP32 accumulation order independently for each output path; each cohort freshly writes its output.",
+            "Leave the weight-gradient kernel and its launch unchanged."
+          ]
+        },
+        "tree_id": "e1:T2",
+        "trial_id": "01M5PX07MD6RC463A2JBAMNSYA",
+        "worktree": "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/worktrees/626a9fb119ef42b2"
+      },
+      "evaluations": [
+        {
+          "phase": "search",
+          "outcome": {
+            "binary_sha256": "a5e5f4dbbdb2d3cd514504b3076cbb7278fcf2751bbbb2b4667d0b92d8c889ea",
+            "cache_key": "7f34f5b9aecac7180e01b5e5f47be36a12aab080fb3e270b0dfbf178522ce2a1",
+            "commit": "807fe5e222136ed292047047cfe039cd58082f36",
+            "correct": true,
+            "logs": [
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/build.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/correctness.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/sample-0.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/sample-1.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2/search/attempt-001/sample-2.log"
+            ],
+            "mean_seconds": 0.03640788014729818,
+            "reason": "",
+            "score": 0.49343368677990557,
+            "status": "valid",
+            "times": [
+              0.03640548706054687,
+              0.036425933837890626,
+              0.03639221954345703
+            ],
+            "tree_hash": "51a8a20f3408caff1280a66adc78547e46386825"
+          }
+        }
+      ],
+      "diagnostics": [
+        {
+          "path": "logs/e1/626a9fb119ef42b2/search/attempt-001/build.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "preview": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/626a9fb119ef42b2/search/attempt-001/correctness.log",
+          "sha256": "fa561d1ab0508e2dc6964bc5e3eabf4f88c7e6df754bef9c5e31d117137e66fb",
+          "preview": "{\"correct\": true, \"cases\": 8, \"details\": [{\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.384185791015625e-07}, {\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.086162567138672e-07}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 3.0994415283203125e-06}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 4.76837158203125e-06}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.2874603271484375e-05}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.4781951904296875e-05}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.003143310546875}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0036773681640625}]}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/626a9fb119ef42b2/search/attempt-001/sample-0.log",
+          "sha256": "df822014c01f6458f475025ede4e73f24bf6b94a6d11efe0228507dfc72f5704",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 36.405487060546875, \"seconds\": 0.03640548706054687, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.03640548706054687}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/626a9fb119ef42b2/search/attempt-001/sample-1.log",
+          "sha256": "cd13d900179829489773f5ea63e9ccdb8f7a2b5630db93836dae63c3f24db457",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 36.425933837890625, \"seconds\": 0.036425933837890626, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.036425933837890626}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/626a9fb119ef42b2/search/attempt-001/sample-2.log",
+          "sha256": "d9f1e550aeeb3169fbad2587ccda30fbd25fecc71d9374d753c02315fca0dd50",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 36.39221954345703, \"seconds\": 0.03639221954345703, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.03639221954345703}\n",
+          "truncated": false
+        }
+      ],
+      "source_files": {
+        "src/candidate.cu": "#include <cuda_runtime.h>\n\nextern \"C\" {\n\n__global__ void dwconv1d_fwd_bwd_input_fused(\n    const float* x,   // [B,H,L]\n    const float* k,   // [H,K]\n    const float* gy,  // [B,H,L]\n    float* y,         // [B,H,L]\n    float* gx,        // [B,H,L]\n    int B, int H, int L, int K)\n{\n    const int b = (int)blockIdx.z;\n    const int h = (int)blockIdx.y;\n    const unsigned int tiles = ((unsigned int)L + 255u) / 256u;\n    const unsigned int path = (unsigned int)blockIdx.x / tiles;\n    const unsigned int tile = (unsigned int)blockIdx.x - path * tiles;\n    const unsigned int t_u = tile * blockDim.x + threadIdx.x;\n\n    if (b >= B || h >= H || t_u >= (unsigned int)L) return;\n\n    const int t = (int)t_u;\n    const int half = K / 2;\n    const size_t base = ((size_t)b * (size_t)H + (size_t)h) * (size_t)L;\n    const float* filter = k + (size_t)h * (size_t)K;\n\n    // Keep the two output paths in one launch, but use separate block cohorts\n    // so each thread needs only one accumulator and one input stream.\n    if (path == 0u) {\n        float acc = 0.0f;\n        for (int j = 0; j < K; ++j) {\n            const int xi = t + j - half;\n            if (xi >= 0 && xi < L) {\n                acc += x[base + (size_t)xi] * filter[j];\n            }\n        }\n        y[base + (size_t)t] = acc;\n    } else {\n        float acc = 0.0f;\n        for (int j = 0; j < K; ++j) {\n            const int xi = t + j - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + (size_t)xi] * filter[K - 1 - j];\n            }\n        }\n        gx[base + (size_t)t] = acc;\n    }\n}\n\n__global__ void dwconv1d_bwd_kernel_naive(\n    const float* gy, // [B,H,L]\n    const float* x,  // [B,H,L]\n    float* gk,       // [H,K]\n    int B, int H, int L, int K)\n{\n    int h   = (int)blockIdx.y;\n    int j_i = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (h >= H || j_i >= K) return;\n\n    int half = K / 2;\n    float acc = 0.0f;\n\n    for (int b = 0; b < B; ++b) {\n        int base = (b * H + h) * L;\n        for (int t = 0; t < L; ++t) {\n            int xi = t + j_i - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + t] * x[base + xi];\n            }\n        }\n    }\n\n    gk[h * K + j_i] = acc;\n}\n\n}\n\nextern \"C\" void run(const void* x, const void* k, const void* gy, void* out,\n                    void* scratch, int n, int h, int l, int ks)\n{\n    size_t size = size_t(n) * h * l;\n    float* y = (float*)out;\n    float* gx = y + size;\n    float* gk = gx + size;\n    const unsigned int tiles = ((unsigned int)l + 255u) / 256u;\n\n    dwconv1d_fwd_bwd_input_fused<<<dim3(2u * tiles, h, n), 256>>>(\n        (const float*)x, (const float*)k, (const float*)gy, y, gx,\n        n, h, l, ks);\n    dwconv1d_bwd_kernel_naive<<<dim3((ks + 255) / 256, h, 1), 256>>>(\n        (const float*)gy, (const float*)x, gk, n, h, l, ks);\n}\n"
+      },
+      "source_digest": "cdfcfc3071adec4286d0b72322babc13e16229758d44e610de3b9e1b2ce39866"
+    },
+    {
+      "id": "626a9fb119ef42b2-h01",
+      "kind": "development",
+      "outcome": {
+        "status": "development_valid",
+        "commit": "929b0b05f491cdda529fb570dc8e89417f7d9c04",
+        "tree_hash": "51a8a20f3408caff1280a66adc78547e46386825",
+        "binary_sha256": "3227c04a4b2da9da0c34bc2743fcb650bedfefc9e5039176751eb7381335b497",
+        "correct": true,
+        "times": [],
+        "reason": "",
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2-h01/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/626a9fb119ef42b2-h01/search/attempt-001/correctness.log"
+        ],
+        "cache_key": "7f34f5b9aecac7180e01b5e5f47be36a12aab080fb3e270b0dfbf178522ce2a1"
+      },
+      "mission": {
+        "trial_id": "626a9fb119ef42b2",
+        "attempt": 1
+      },
+      "evaluations": [],
+      "diagnostics": [
+        {
+          "path": "logs/e1/626a9fb119ef42b2-h01/search/attempt-001/build.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "preview": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/626a9fb119ef42b2-h01/search/attempt-001/correctness.log",
+          "sha256": "fa561d1ab0508e2dc6964bc5e3eabf4f88c7e6df754bef9c5e31d117137e66fb",
+          "preview": "{\"correct\": true, \"cases\": 8, \"details\": [{\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.384185791015625e-07}, {\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.086162567138672e-07}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 3.0994415283203125e-06}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 4.76837158203125e-06}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.2874603271484375e-05}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.4781951904296875e-05}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.003143310546875}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0036773681640625}]}\n",
+          "truncated": false
+        }
+      ],
+      "source_files": {
+        "src/candidate.cu": "#include <cuda_runtime.h>\n\nextern \"C\" {\n\n__global__ void dwconv1d_fwd_bwd_input_fused(\n    const float* x,   // [B,H,L]\n    const float* k,   // [H,K]\n    const float* gy,  // [B,H,L]\n    float* y,         // [B,H,L]\n    float* gx,        // [B,H,L]\n    int B, int H, int L, int K)\n{\n    const int b = (int)blockIdx.z;\n    const int h = (int)blockIdx.y;\n    const unsigned int tiles = ((unsigned int)L + 255u) / 256u;\n    const unsigned int path = (unsigned int)blockIdx.x / tiles;\n    const unsigned int tile = (unsigned int)blockIdx.x - path * tiles;\n    const unsigned int t_u = tile * blockDim.x + threadIdx.x;\n\n    if (b >= B || h >= H || t_u >= (unsigned int)L) return;\n\n    const int t = (int)t_u;\n    const int half = K / 2;\n    const size_t base = ((size_t)b * (size_t)H + (size_t)h) * (size_t)L;\n    const float* filter = k + (size_t)h * (size_t)K;\n\n    // Keep the two output paths in one launch, but use separate block cohorts\n    // so each thread needs only one accumulator and one input stream.\n    if (path == 0u) {\n        float acc = 0.0f;\n        for (int j = 0; j < K; ++j) {\n            const int xi = t + j - half;\n            if (xi >= 0 && xi < L) {\n                acc += x[base + (size_t)xi] * filter[j];\n            }\n        }\n        y[base + (size_t)t] = acc;\n    } else {\n        float acc = 0.0f;\n        for (int j = 0; j < K; ++j) {\n            const int xi = t + j - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + (size_t)xi] * filter[K - 1 - j];\n            }\n        }\n        gx[base + (size_t)t] = acc;\n    }\n}\n\n__global__ void dwconv1d_bwd_kernel_naive(\n    const float* gy, // [B,H,L]\n    const float* x,  // [B,H,L]\n    float* gk,       // [H,K]\n    int B, int H, int L, int K)\n{\n    int h   = (int)blockIdx.y;\n    int j_i = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (h >= H || j_i >= K) return;\n\n    int half = K / 2;\n    float acc = 0.0f;\n\n    for (int b = 0; b < B; ++b) {\n        int base = (b * H + h) * L;\n        for (int t = 0; t < L; ++t) {\n            int xi = t + j_i - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + t] * x[base + xi];\n            }\n        }\n    }\n\n    gk[h * K + j_i] = acc;\n}\n\n}\n\nextern \"C\" void run(const void* x, const void* k, const void* gy, void* out,\n                    void* scratch, int n, int h, int l, int ks)\n{\n    size_t size = size_t(n) * h * l;\n    float* y = (float*)out;\n    float* gx = y + size;\n    float* gk = gx + size;\n    const unsigned int tiles = ((unsigned int)l + 255u) / 256u;\n\n    dwconv1d_fwd_bwd_input_fused<<<dim3(2u * tiles, h, n), 256>>>(\n        (const float*)x, (const float*)k, (const float*)gy, y, gx,\n        n, h, l, ks);\n    dwconv1d_bwd_kernel_naive<<<dim3((ks + 255) / 256, h, 1), 256>>>(\n        (const float*)gy, (const float*)x, gk, n, h, l, ks);\n}\n"
+      },
+      "source_digest": "cdfcfc3071adec4286d0b72322babc13e16229758d44e610de3b9e1b2ce39866",
+      "source_provenance": {
+        "path": "logs/626a9fb119ef42b2/harness-source-01.json",
+        "sha256": "e0d8062c010db2cc871c0db17d0f0e979f04a6ad4f58028664a3eaa289da1f52"
+      },
+      "model_interpretation": {
+        "hypothesis": "The measured same-thread fusion is correct and modestly faster than baseline (34.929 ms vs 35.464 ms, about 1.51%), but it keeps two accumulators and two input streams live per output thread. This contrasting launch-fused variant assigns separate, path-specialized block cohorts to y and gx: it retains one launch while reducing per-thread live state, at the cost of duplicated coordinate/bounds work and twice as many blocks. Test whether lower register pressure offsets that duplicated work; timing for this candidate is not yet available.",
+        "transformations": {
+          "retained": [
+            "Replace same-thread y/gx accumulation with two path-specialized block cohorts dispatched by one kernel launch.",
+            "Retain the zero-padding bounds checks and FP32 accumulation order independently for each output path; each cohort freshly writes its output.",
+            "Leave the weight-gradient kernel and its launch unchanged."
+          ],
+          "files": [
+            "src/candidate.cu"
+          ]
+        }
+      }
+    },
+    {
+      "id": "9b2a7876f05a474b",
+      "kind": "trial",
+      "outcome": {
+        "binary_sha256": "0277914243274a27b5ced127ea2e2de267924cfa14aae008277337a5741f5f35",
+        "cache_key": "97ea63657a3143ccd79812e11c49f806646d19caed3bd2568820def4e8a0d6d5",
+        "commit": "976f881a98d9f007e050086732c2972a834c0d75",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.014375462532043456,
+        "reason": "",
+        "score": 0.7115647334137489,
+        "status": "valid",
+        "times": [
+          0.014369359970092773,
+          0.014374859809875488,
+          0.01438216781616211
+        ],
+        "tree_hash": "ff3d6adc37cdb407411b54eb7775d56192e17897"
+      },
+      "mission": {
+        "advice_ids": [],
+        "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+        "base_source_id": null,
+        "budget_phase": "search",
+        "control_decision_id": null,
+        "delegation_parent": "R/T3",
+        "depth": 1,
+        "epoch": 1,
+        "hypothesis": "A CTA per (h,j) can parallelize the weight-gradient accumulation over both batch and time, replacing the current serial B*L traversal for each output with per-thread FP32 accumulators and a shared-memory CTA reduction. The launch adapts its 2D block shape to B and L while capping the block at 256 threads. This may improve large reductions but add CTA and reduction overhead for small workloads; complete-call timing is needed to judge it.",
+        "id": "9b2a7876f05a474b",
+        "import_ids": [],
+        "kind": "research",
+        "ordinal": 1,
+        "parent_id": null,
+        "role": "T3",
+        "source_commits": [],
+        "sources": [],
+        "transformations": {
+          "files": [
+            "src/candidate.cu"
+          ],
+          "retained": [
+            "Changed the weight-gradient kernel to assign one CTA to each (h,j), with threads distributed across B and L and a shared-memory FP32 reduction.",
+            "Adapted the CTA dimensions from B and L, using at most 256 threads and no additional allocation or scratch access."
+          ]
+        },
+        "tree_id": "e1:T3",
+        "trial_id": "01M5PWXS17NBD08HA97BRCBXBN",
+        "worktree": "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/worktrees/9b2a7876f05a474b"
+      },
+      "evaluations": [
+        {
+          "phase": "search",
+          "outcome": {
+            "binary_sha256": "0277914243274a27b5ced127ea2e2de267924cfa14aae008277337a5741f5f35",
+            "cache_key": "97ea63657a3143ccd79812e11c49f806646d19caed3bd2568820def4e8a0d6d5",
+            "commit": "976f881a98d9f007e050086732c2972a834c0d75",
+            "correct": true,
+            "logs": [
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/build.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/correctness.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/sample-0.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/sample-1.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b/search/attempt-001/sample-2.log"
+            ],
+            "mean_seconds": 0.014375462532043456,
+            "reason": "",
+            "score": 0.7115647334137489,
+            "status": "valid",
+            "times": [
+              0.014369359970092773,
+              0.014374859809875488,
+              0.01438216781616211
+            ],
+            "tree_hash": "ff3d6adc37cdb407411b54eb7775d56192e17897"
+          }
+        }
+      ],
+      "diagnostics": [
+        {
+          "path": "logs/e1/9b2a7876f05a474b/search/attempt-001/build.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "preview": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/9b2a7876f05a474b/search/attempt-001/correctness.log",
+          "sha256": "45f5b06561554f9b28f726058640d05662bff51f2643bbf38b56e65075c394e9",
+          "preview": "{\"correct\": true, \"cases\": 8, \"details\": [{\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.1920928955078125e-07}, {\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 8.940696716308594e-08}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 4.76837158203125e-07}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 3.5762786865234375e-07}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 9.5367431640625e-07}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 9.5367431640625e-07}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00014495849609375}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00012028217315673828}]}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/9b2a7876f05a474b/search/attempt-001/sample-0.log",
+          "sha256": "0769ef20f6836bf0188f4829700bf3a837e7a85604346fb829f7178c3a61ca7b",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.000125885009765625, \"latency_ms\": 14.369359970092773, \"seconds\": 0.014369359970092773, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.014369359970092773}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/9b2a7876f05a474b/search/attempt-001/sample-1.log",
+          "sha256": "61408bb22488eabd50ae77acdc82833583b51472e437b3a31bf8361ea2e71f26",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.000125885009765625, \"latency_ms\": 14.374859809875488, \"seconds\": 0.014374859809875488, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.014374859809875488}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/9b2a7876f05a474b/search/attempt-001/sample-2.log",
+          "sha256": "61f0916935333cfc68b2df93dc2bf39728f398e827386672d37923445528632b",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.000125885009765625, \"latency_ms\": 14.38216781616211, \"seconds\": 0.01438216781616211, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.01438216781616211}\n",
+          "truncated": false
+        }
+      ],
+      "source_files": {
+        "src/candidate.cu": "#include <cuda_runtime.h>\n\nextern \"C\" {\n\n__global__ void dwconv1d_fwd_naive(\n    const float* x,   // [B,H,L]\n    const float* k,   // [H,K]\n    float* y,         // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y;\n    int t = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n\n    float acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int xi = t + j - half;\n        if (xi >= 0 && xi < L) {\n            acc += x[base + xi] * k[h * K + j];\n        }\n    }\n    y[base + t] = acc;\n}\n\n__global__ void dwconv1d_bwd_input_naive(\n    const float* gy,   // [B,H,L]\n    const float* k,    // [H,K]\n    float* gx,         // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y;\n    int t = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n\n    float acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int gi = t + (j - half);\n        if (gi >= 0 && gi < L) {\n            acc += gy[base + gi] * k[h * K + (K - 1 - j)];\n        }\n    }\n    gx[base + t] = acc;\n}\n\n__global__ void dwconv1d_bwd_kernel_cta(\n    const float* gy, // [B,H,L]\n    const float* x,  // [B,H,L]\n    float* gk,       // [H,K]\n    int B, int H, int L, int K)\n{\n    int h = (int)blockIdx.y;\n    int j = (int)blockIdx.x;\n    if (h >= H || j >= K) return;\n\n    int tx = (int)threadIdx.x;\n    int ty = (int)threadIdx.y;\n    int tid = ty * (int)blockDim.x + tx;\n    int thread_count = (int)blockDim.x * (int)blockDim.y;\n    int half = K / 2;\n\n    float acc = 0.0f;\n    for (int b = ty; b < B; b += (int)blockDim.y) {\n        int base = (b * H + h) * L;\n        for (int t = tx; t < L; t += (int)blockDim.x) {\n            int xi = t + j - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + t] * x[base + xi];\n            }\n        }\n    }\n\n    __shared__ float partial[256];\n    partial[tid] = acc;\n    __syncthreads();\n\n    int active = thread_count;\n    while (active > 1) {\n        int next = (active + 1) / 2;\n        if (tid < active - next) {\n            partial[tid] += partial[tid + next];\n        }\n        __syncthreads();\n        active = next;\n    }\n\n    if (tid == 0) {\n        gk[h * K + j] = partial[0];\n    }\n}\n\n}\n\nextern \"C\" void run(const void* x, const void* k, const void* gy, void* out,\n                    void* scratch, int n, int h, int l, int ks)\n{\n    size_t size = size_t(n) * h * l;\n    float* y = (float*)out;\n    float* gx = y + size;\n    float* gk = gx + size;\n\n    int block_x = l < 32 ? l : 32;\n    int max_block_y = 256 / block_x;\n    int block_y = n < max_block_y ? n : max_block_y;\n\n    dwconv1d_fwd_naive<<<dim3((l + 255) / 256, h, n), 256>>>(\n        (const float*)x, (const float*)k, y, n, h, l, ks);\n    dwconv1d_bwd_input_naive<<<dim3((l + 255) / 256, h, n), 256>>>(\n        (const float*)gy, (const float*)k, gx, n, h, l, ks);\n    dwconv1d_bwd_kernel_cta<<<dim3(ks, h, 1), dim3(block_x, block_y, 1)>>>(\n        (const float*)gy, (const float*)x, gk, n, h, l, ks);\n}\n"
+      },
+      "source_digest": "18bbaefaf75d765f1ca584c21fccba6d5d1128e02428afa551f0574130fd80f6"
+    },
+    {
+      "id": "9b2a7876f05a474b-h01",
+      "kind": "development",
+      "outcome": {
+        "status": "development_valid",
+        "commit": "ee6a635e4734a301fcfd521392676000bbe12bb0",
+        "tree_hash": "ff3d6adc37cdb407411b54eb7775d56192e17897",
+        "binary_sha256": "13843ffdae5f43f43d5a11b9ccc7a1313a0c3565bf971a7c69a716f7b57ac91c",
+        "correct": true,
+        "times": [],
+        "reason": "",
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b-h01/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/9b2a7876f05a474b-h01/search/attempt-001/correctness.log"
+        ],
+        "cache_key": "97ea63657a3143ccd79812e11c49f806646d19caed3bd2568820def4e8a0d6d5"
+      },
+      "mission": {
+        "trial_id": "9b2a7876f05a474b",
+        "attempt": 1
+      },
+      "evaluations": [],
+      "diagnostics": [
+        {
+          "path": "logs/e1/9b2a7876f05a474b-h01/search/attempt-001/build.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "preview": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/9b2a7876f05a474b-h01/search/attempt-001/correctness.log",
+          "sha256": "45f5b06561554f9b28f726058640d05662bff51f2643bbf38b56e65075c394e9",
+          "preview": "{\"correct\": true, \"cases\": 8, \"details\": [{\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.1920928955078125e-07}, {\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 8.940696716308594e-08}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 4.76837158203125e-07}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 3.5762786865234375e-07}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 9.5367431640625e-07}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 9.5367431640625e-07}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00014495849609375}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00012028217315673828}]}\n",
+          "truncated": false
+        }
+      ],
+      "source_files": {
+        "src/candidate.cu": "#include <cuda_runtime.h>\n\nextern \"C\" {\n\n__global__ void dwconv1d_fwd_naive(\n    const float* x,   // [B,H,L]\n    const float* k,   // [H,K]\n    float* y,         // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y;\n    int t = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n\n    float acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int xi = t + j - half;\n        if (xi >= 0 && xi < L) {\n            acc += x[base + xi] * k[h * K + j];\n        }\n    }\n    y[base + t] = acc;\n}\n\n__global__ void dwconv1d_bwd_input_naive(\n    const float* gy,   // [B,H,L]\n    const float* k,    // [H,K]\n    float* gx,         // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y;\n    int t = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n\n    float acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int gi = t + (j - half);\n        if (gi >= 0 && gi < L) {\n            acc += gy[base + gi] * k[h * K + (K - 1 - j)];\n        }\n    }\n    gx[base + t] = acc;\n}\n\n__global__ void dwconv1d_bwd_kernel_cta(\n    const float* gy, // [B,H,L]\n    const float* x,  // [B,H,L]\n    float* gk,       // [H,K]\n    int B, int H, int L, int K)\n{\n    int h = (int)blockIdx.y;\n    int j = (int)blockIdx.x;\n    if (h >= H || j >= K) return;\n\n    int tx = (int)threadIdx.x;\n    int ty = (int)threadIdx.y;\n    int tid = ty * (int)blockDim.x + tx;\n    int thread_count = (int)blockDim.x * (int)blockDim.y;\n    int half = K / 2;\n\n    float acc = 0.0f;\n    for (int b = ty; b < B; b += (int)blockDim.y) {\n        int base = (b * H + h) * L;\n        for (int t = tx; t < L; t += (int)blockDim.x) {\n            int xi = t + j - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + t] * x[base + xi];\n            }\n        }\n    }\n\n    __shared__ float partial[256];\n    partial[tid] = acc;\n    __syncthreads();\n\n    int active = thread_count;\n    while (active > 1) {\n        int next = (active + 1) / 2;\n        if (tid < active - next) {\n            partial[tid] += partial[tid + next];\n        }\n        __syncthreads();\n        active = next;\n    }\n\n    if (tid == 0) {\n        gk[h * K + j] = partial[0];\n    }\n}\n\n}\n\nextern \"C\" void run(const void* x, const void* k, const void* gy, void* out,\n                    void* scratch, int n, int h, int l, int ks)\n{\n    size_t size = size_t(n) * h * l;\n    float* y = (float*)out;\n    float* gx = y + size;\n    float* gk = gx + size;\n\n    int block_x = l < 32 ? l : 32;\n    int max_block_y = 256 / block_x;\n    int block_y = n < max_block_y ? n : max_block_y;\n\n    dwconv1d_fwd_naive<<<dim3((l + 255) / 256, h, n), 256>>>(\n        (const float*)x, (const float*)k, y, n, h, l, ks);\n    dwconv1d_bwd_input_naive<<<dim3((l + 255) / 256, h, n), 256>>>(\n        (const float*)gy, (const float*)k, gx, n, h, l, ks);\n    dwconv1d_bwd_kernel_cta<<<dim3(ks, h, 1), dim3(block_x, block_y, 1)>>>(\n        (const float*)gy, (const float*)x, gk, n, h, l, ks);\n}\n"
+      },
+      "source_digest": "18bbaefaf75d765f1ca584c21fccba6d5d1128e02428afa551f0574130fd80f6",
+      "source_provenance": {
+        "path": "logs/9b2a7876f05a474b/harness-source-01.json",
+        "sha256": "9c16b0c0841cff28b2e41adf0d415b752b8f3803e818dd775a07f17e86e79f58"
+      },
+      "model_interpretation": {
+        "hypothesis": "A CTA per (h,j) can parallelize the weight-gradient accumulation over both batch and time, replacing the current serial B*L traversal for each output with per-thread FP32 accumulators and a shared-memory CTA reduction. The launch adapts its 2D block shape to B and L while capping the block at 256 threads. This may improve large reductions but add CTA and reduction overhead for small workloads; complete-call timing is needed to judge it.",
+        "transformations": {
+          "retained": [
+            "Changed the weight-gradient kernel to assign one CTA to each (h,j), with threads distributed across B and L and a shared-memory FP32 reduction.",
+            "Adapted the CTA dimensions from B and L, using at most 256 threads and no additional allocation or scratch access."
+          ],
+          "files": [
+            "src/candidate.cu"
+          ]
+        }
+      }
+    },
+    {
+      "id": "376532aa1c0a4f8f",
+      "kind": "trial",
+      "outcome": {
+        "binary_sha256": "2a05f6f3332107c372f9c0cae9724e0a6ef4178262d06e58d841b5881d4eae39",
+        "cache_key": "4b9f07d821619acf36cdf8264c7fae536fdf688bfd192b70d5e206165463fa61",
+        "commit": "2ca7ecdd848a8c7c598386260c5e6038e683966f",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.03492851384480794,
+        "reason": "",
+        "score": 0.5038036677583544,
+        "status": "valid",
+        "times": [
+          0.034918407440185546,
+          0.034956497192382814,
+          0.03491063690185547
+        ],
+        "tree_hash": "a595c6ddb85b6924ce2ba234c907313664e22c95"
+      },
+      "mission": {
+        "advice_ids": [],
+        "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+        "base_source_id": null,
+        "budget_phase": "search",
+        "control_decision_id": null,
+        "delegation_parent": "R/T2",
+        "depth": 1,
+        "epoch": 1,
+        "hypothesis": "Fusing the forward and input-gradient work into one launch should save launch overhead and reuse output coordinates, input bounds checks, and filter-base setup. The shared loop adds a second accumulator and loads for both paths, so register pressure or reduced occupancy may offset those savings; complete-call timing is needed to determine the result.",
+        "id": "376532aa1c0a4f8f",
+        "import_ids": [],
+        "kind": "research",
+        "ordinal": 1,
+        "parent_id": null,
+        "role": "T2",
+        "source_commits": [],
+        "sources": [],
+        "transformations": {
+          "files": [
+            "src/candidate.cu"
+          ],
+          "retained": [
+            "Replace separate forward and input-gradient launches with one fused kernel.",
+            "Share output-coordinate calculation, filter-base setup, and zero-padding bounds checks while preserving each accumulation order and fresh writes to both outputs.",
+            "Keep the weight-gradient kernel and launch unchanged."
+          ]
+        },
+        "tree_id": "e1:T2",
+        "trial_id": "01M5PWXS0A8M4RZ5Z7CV94E7KV",
+        "worktree": "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/worktrees/376532aa1c0a4f8f"
+      },
+      "evaluations": [
+        {
+          "phase": "search",
+          "outcome": {
+            "binary_sha256": "2a05f6f3332107c372f9c0cae9724e0a6ef4178262d06e58d841b5881d4eae39",
+            "cache_key": "4b9f07d821619acf36cdf8264c7fae536fdf688bfd192b70d5e206165463fa61",
+            "commit": "2ca7ecdd848a8c7c598386260c5e6038e683966f",
+            "correct": true,
+            "logs": [
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/build.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/correctness.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/sample-0.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/sample-1.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f/search/attempt-001/sample-2.log"
+            ],
+            "mean_seconds": 0.03492851384480794,
+            "reason": "",
+            "score": 0.5038036677583544,
+            "status": "valid",
+            "times": [
+              0.034918407440185546,
+              0.034956497192382814,
+              0.03491063690185547
+            ],
+            "tree_hash": "a595c6ddb85b6924ce2ba234c907313664e22c95"
+          }
+        }
+      ],
+      "diagnostics": [
+        {
+          "path": "logs/e1/376532aa1c0a4f8f/search/attempt-001/build.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "preview": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/376532aa1c0a4f8f/search/attempt-001/correctness.log",
+          "sha256": "fa561d1ab0508e2dc6964bc5e3eabf4f88c7e6df754bef9c5e31d117137e66fb",
+          "preview": "{\"correct\": true, \"cases\": 8, \"details\": [{\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.384185791015625e-07}, {\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.086162567138672e-07}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 3.0994415283203125e-06}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 4.76837158203125e-06}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.2874603271484375e-05}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.4781951904296875e-05}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.003143310546875}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0036773681640625}]}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/376532aa1c0a4f8f/search/attempt-001/sample-0.log",
+          "sha256": "ec1713d6c2262d5d54962e15642ccc45afda40e83a25e1bed477d2c4d71f011a",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 34.91840744018555, \"seconds\": 0.034918407440185546, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.034918407440185546}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/376532aa1c0a4f8f/search/attempt-001/sample-1.log",
+          "sha256": "4f85de10f281cc86e0aa719eb17713bcfd776c2c549432fe045a1b8cbd0e5049",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 34.95649719238281, \"seconds\": 0.034956497192382814, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.034956497192382814}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/376532aa1c0a4f8f/search/attempt-001/sample-2.log",
+          "sha256": "c05339b12f4b11ec0bff4d4068c75bd2554f60dfb11b765f79daa485fe9134fa",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 34.91063690185547, \"seconds\": 0.03491063690185547, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.03491063690185547}\n",
+          "truncated": false
+        }
+      ],
+      "source_files": {
+        "src/candidate.cu": "#include <cuda_runtime.h>\n\nextern \"C\" {\n\n__global__ void dwconv1d_fwd_bwd_input_fused(\n    const float* x,   // [B,H,L]\n    const float* k,   // [H,K]\n    const float* gy,  // [B,H,L]\n    float* y,         // [B,H,L]\n    float* gx,        // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y;\n    int t = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n    const float* filter = k + h * K;\n\n    float y_acc = 0.0f;\n    float gx_acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int xi = t + j - half;\n        if (xi >= 0 && xi < L) {\n            y_acc += x[base + xi] * filter[j];\n            gx_acc += gy[base + xi] * filter[K - 1 - j];\n        }\n    }\n\n    y[base + t] = y_acc;\n    gx[base + t] = gx_acc;\n}\n\n__global__ void dwconv1d_bwd_kernel_naive(\n    const float* gy, // [B,H,L]\n    const float* x,  // [B,H,L]\n    float* gk,       // [H,K]\n    int B, int H, int L, int K)\n{\n    int h   = (int)blockIdx.y;\n    int j_i = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (h >= H || j_i >= K) return;\n\n    int half = K / 2;\n    float acc = 0.0f;\n\n    for (int b = 0; b < B; ++b) {\n        int base = (b * H + h) * L;\n        for (int t = 0; t < L; ++t) {\n            int xi = t + j_i - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + t] * x[base + xi];\n            }\n        }\n    }\n\n    gk[h * K + j_i] = acc;\n}\n\n}\nextern \"C\" void run(const void*x,const void*k,const void*gy,void*out,void*scratch,int n,int h,int l,int ks)\n{size_t size=size_t(n)*h*l;float*y=(float*)out;float*gx=y+size;float*gk=gx+size;\ndwconv1d_fwd_bwd_input_fused<<<dim3((l+255)/256,h,n),256>>>((const float*)x,(const float*)k,(const float*)gy,y,gx,n,h,l,ks);\ndwconv1d_bwd_kernel_naive<<<dim3((ks+255)/256,h,1),256>>>((const float*)gy,(const float*)x,gk,n,h,l,ks);}\n"
+      },
+      "source_digest": "25f811a0ef59fee18e0592837aaa5f90373e966f5967a3f524b14f3830633c04"
+    },
+    {
+      "id": "376532aa1c0a4f8f-h01",
+      "kind": "development",
+      "outcome": {
+        "status": "development_valid",
+        "commit": "ebd58b7b69047a23f2d94a1cd216b7fc09a79cff",
+        "tree_hash": "a595c6ddb85b6924ce2ba234c907313664e22c95",
+        "binary_sha256": "dfbbc85355ae35aa714383f524e1dd7d0998f94550d82957db941bfda38b7b3b",
+        "correct": true,
+        "times": [],
+        "reason": "",
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f-h01/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/376532aa1c0a4f8f-h01/search/attempt-001/correctness.log"
+        ],
+        "cache_key": "4b9f07d821619acf36cdf8264c7fae536fdf688bfd192b70d5e206165463fa61"
+      },
+      "mission": {
+        "trial_id": "376532aa1c0a4f8f",
+        "attempt": 1
+      },
+      "evaluations": [],
+      "diagnostics": [
+        {
+          "path": "logs/e1/376532aa1c0a4f8f-h01/search/attempt-001/build.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "preview": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/376532aa1c0a4f8f-h01/search/attempt-001/correctness.log",
+          "sha256": "fa561d1ab0508e2dc6964bc5e3eabf4f88c7e6df754bef9c5e31d117137e66fb",
+          "preview": "{\"correct\": true, \"cases\": 8, \"details\": [{\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.384185791015625e-07}, {\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.086162567138672e-07}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 3.0994415283203125e-06}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 4.76837158203125e-06}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.2874603271484375e-05}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.4781951904296875e-05}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.003143310546875}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0036773681640625}]}\n",
+          "truncated": false
+        }
+      ],
+      "source_files": {
+        "src/candidate.cu": "#include <cuda_runtime.h>\n\nextern \"C\" {\n\n__global__ void dwconv1d_fwd_bwd_input_fused(\n    const float* x,   // [B,H,L]\n    const float* k,   // [H,K]\n    const float* gy,  // [B,H,L]\n    float* y,         // [B,H,L]\n    float* gx,        // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y;\n    int t = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n    const float* filter = k + h * K;\n\n    float y_acc = 0.0f;\n    float gx_acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int xi = t + j - half;\n        if (xi >= 0 && xi < L) {\n            y_acc += x[base + xi] * filter[j];\n            gx_acc += gy[base + xi] * filter[K - 1 - j];\n        }\n    }\n\n    y[base + t] = y_acc;\n    gx[base + t] = gx_acc;\n}\n\n__global__ void dwconv1d_bwd_kernel_naive(\n    const float* gy, // [B,H,L]\n    const float* x,  // [B,H,L]\n    float* gk,       // [H,K]\n    int B, int H, int L, int K)\n{\n    int h   = (int)blockIdx.y;\n    int j_i = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (h >= H || j_i >= K) return;\n\n    int half = K / 2;\n    float acc = 0.0f;\n\n    for (int b = 0; b < B; ++b) {\n        int base = (b * H + h) * L;\n        for (int t = 0; t < L; ++t) {\n            int xi = t + j_i - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + t] * x[base + xi];\n            }\n        }\n    }\n\n    gk[h * K + j_i] = acc;\n}\n\n}\nextern \"C\" void run(const void*x,const void*k,const void*gy,void*out,void*scratch,int n,int h,int l,int ks)\n{size_t size=size_t(n)*h*l;float*y=(float*)out;float*gx=y+size;float*gk=gx+size;\ndwconv1d_fwd_bwd_input_fused<<<dim3((l+255)/256,h,n),256>>>((const float*)x,(const float*)k,(const float*)gy,y,gx,n,h,l,ks);\ndwconv1d_bwd_kernel_naive<<<dim3((ks+255)/256,h,1),256>>>((const float*)gy,(const float*)x,gk,n,h,l,ks);}\n"
+      },
+      "source_digest": "25f811a0ef59fee18e0592837aaa5f90373e966f5967a3f524b14f3830633c04",
+      "source_provenance": {
+        "path": "logs/376532aa1c0a4f8f/harness-source-01.json",
+        "sha256": "83985c76ba30859c8d7eaff564513b1f394cde1fb9ab81ed07be2be28dde9e7c"
+      },
+      "model_interpretation": {
+        "hypothesis": "Fusing the forward and input-gradient work into one launch should save launch overhead and reuse output coordinates, input bounds checks, and filter-base setup. The shared loop adds a second accumulator and loads for both paths, so register pressure or reduced occupancy may offset those savings; complete-call timing is needed to determine the result.",
+        "transformations": {
+          "retained": [
+            "Replace separate forward and input-gradient launches with one fused kernel.",
+            "Share output-coordinate calculation, filter-base setup, and zero-padding bounds checks while preserving each accumulation order and fresh writes to both outputs.",
+            "Keep the weight-gradient kernel and launch unchanged."
+          ],
+          "files": [
+            "src/candidate.cu"
+          ]
+        }
+      }
+    },
+    {
+      "id": "f014e1b6f1494b52",
+      "kind": "trial",
+      "outcome": {
+        "binary_sha256": "2e9355d20a7b3d175cf1fdaed87bd047634b329f00033f3a4a3517ada36e40ca",
+        "cache_key": "cc88147a913b9225cb704d3190c62396d74cbaaa8f9194cb68610a2f381e1915",
+        "commit": "ab9192a40897ad8c85a23a6b0d8ace44f8a8b950",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.03414717864990235,
+        "reason": "",
+        "score": 0.5094584989033322,
+        "status": "valid",
+        "times": [
+          0.03415595626831055,
+          0.03416878509521484,
+          0.034116794586181644
+        ],
+        "tree_hash": "ada8cccc7b173990bc91c7d2de2b4411f609bdcd"
+      },
+      "mission": {
+        "advice_ids": [],
+        "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+        "base_source_id": null,
+        "budget_phase": "search",
+        "control_decision_id": null,
+        "delegation_parent": "R/T1",
+        "depth": 1,
+        "epoch": 1,
+        "hypothesis": "Packing short H rows into each CTA should reduce CTA overhead and inactive threads in the separate forward and input-gradient passes. The mapping uses row_width=min(L,256) and packs floor(256/row_width) rows per CTA; for L=48, this assigns five rows to a 240-thread CTA instead of launching one 256-thread CTA per row. Rows of length at least 256 retain the existing one-row, 256-thread mapping. The baseline is correct at 35.464 ms mean for the full call, but it does not isolate these kernels; any benefit remains unmeasured.",
+        "id": "f014e1b6f1494b52",
+        "import_ids": [],
+        "kind": "research",
+        "ordinal": 1,
+        "parent_id": null,
+        "role": "T1",
+        "source_commits": [],
+        "sources": [],
+        "transformations": {
+          "files": [
+            "src/candidate.cu"
+          ],
+          "retained": [
+            "Map each forward and input-gradient CTA across multiple H rows when L is below 256: block.x is L and block.y is floor(256/L), with a bounds guard for incomplete H groups.",
+            "Keep 256-wide x tiles and one row per CTA for L >= 256, preserving the existing per-row output mapping for longer rows.",
+            "Retain the separate FP32 forward and input-gradient passes, their bounds-safe zero padding and complete writes; leave the weight-gradient kernel unchanged."
+          ]
+        },
+        "tree_id": "e1:T1",
+        "trial_id": "01M5PWXRZ9XN9JES77VFEN7Q8E",
+        "worktree": "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/worktrees/f014e1b6f1494b52"
+      },
+      "evaluations": [
+        {
+          "phase": "search",
+          "outcome": {
+            "binary_sha256": "2e9355d20a7b3d175cf1fdaed87bd047634b329f00033f3a4a3517ada36e40ca",
+            "cache_key": "cc88147a913b9225cb704d3190c62396d74cbaaa8f9194cb68610a2f381e1915",
+            "commit": "ab9192a40897ad8c85a23a6b0d8ace44f8a8b950",
+            "correct": true,
+            "logs": [
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/build.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/correctness.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/sample-0.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/sample-1.log",
+              "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52/search/attempt-001/sample-2.log"
+            ],
+            "mean_seconds": 0.03414717864990235,
+            "reason": "",
+            "score": 0.5094584989033322,
+            "status": "valid",
+            "times": [
+              0.03415595626831055,
+              0.03416878509521484,
+              0.034116794586181644
+            ],
+            "tree_hash": "ada8cccc7b173990bc91c7d2de2b4411f609bdcd"
+          }
+        }
+      ],
+      "diagnostics": [
+        {
+          "path": "logs/e1/f014e1b6f1494b52/search/attempt-001/build.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "preview": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/f014e1b6f1494b52/search/attempt-001/correctness.log",
+          "sha256": "fa561d1ab0508e2dc6964bc5e3eabf4f88c7e6df754bef9c5e31d117137e66fb",
+          "preview": "{\"correct\": true, \"cases\": 8, \"details\": [{\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.384185791015625e-07}, {\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.086162567138672e-07}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 3.0994415283203125e-06}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 4.76837158203125e-06}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.2874603271484375e-05}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.4781951904296875e-05}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.003143310546875}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0036773681640625}]}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/f014e1b6f1494b52/search/attempt-001/sample-0.log",
+          "sha256": "2007f52d75bbb71766aa480e67faaf52f60eafb59250eb2a6067c6b3263da715",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 34.15595626831055, \"seconds\": 0.03415595626831055, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.03415595626831055}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/f014e1b6f1494b52/search/attempt-001/sample-1.log",
+          "sha256": "5c6262013cfa79006366934b4cbc6e57c4d66e74595625d3b884bde9460e09d1",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 34.168785095214844, \"seconds\": 0.03416878509521484, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.03416878509521484}\n",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/f014e1b6f1494b52/search/attempt-001/sample-2.log",
+          "sha256": "c8fb5a5e977a6f2d4efe6968f2903dffca0112c00833faed304b4dda6ca4d8d8",
+          "preview": "{\"correct\": true, \"cases\": 1, \"details\": [{\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 124, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.00342559814453125, \"latency_ms\": 34.11679458618164, \"seconds\": 0.034116794586181644, \"repetitions\": 8, \"warmups\": 3, \"metric\": \"cuda_event_seconds\"}], \"metric\": \"protected_kernel_seconds\", \"seconds\": 0.034116794586181644}\n",
+          "truncated": false
+        }
+      ],
+      "source_files": {
+        "src/candidate.cu": "#include <cuda_runtime.h>\n\nextern \"C\" {\n\n__global__ void dwconv1d_fwd_naive(\n    const float* x,   // [B,H,L]\n    const float* k,   // [H,K]\n    float* y,         // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y * (int)blockDim.y + (int)threadIdx.y;\n    int t = (int)blockIdx.x * 256 + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n\n    float acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int xi = t + j - half;\n        if (xi >= 0 && xi < L) {\n            acc += x[base + xi] * k[h * K + j];\n        }\n    }\n    y[base + t] = acc;\n}\n\n__global__ void dwconv1d_bwd_input_naive(\n    const float* gy,   // [B,H,L]\n    const float* k,    // [H,K]\n    float* gx,         // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y * (int)blockDim.y + (int)threadIdx.y;\n    int t = (int)blockIdx.x * 256 + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n\n    float acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int gi = t + (j - half);\n        if (gi >= 0 && gi < L) {\n            acc += gy[base + gi] * k[h * K + (K - 1 - j)];\n        }\n    }\n    gx[base + t] = acc;\n}\n\n__global__ void dwconv1d_bwd_kernel_naive(\n    const float* gy, // [B,H,L]\n    const float* x,  // [B,H,L]\n    float* gk,       // [H,K]\n    int B, int H, int L, int K)\n{\n    int h   = (int)blockIdx.y;\n    int j_i = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (h >= H || j_i >= K) return;\n\n    int half = K / 2;\n    float acc = 0.0f;\n\n    for (int b = 0; b < B; ++b) {\n        int base = (b * H + h) * L;\n        for (int t = 0; t < L; ++t) {\n            int xi = t + j_i - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + t] * x[base + xi];\n            }\n        }\n    }\n\n    gk[h * K + j_i] = acc;\n}\n\n}\nextern \"C\" void run(const void*x,const void*k,const void*gy,void*out,void*scratch,int n,int h,int l,int ks)\n{\n    size_t size = size_t(n) * h * l;\n    float* y = (float*)out;\n    float* gx = y + size;\n    float* gk = gx + size;\n\n    int row_width = (l > 0 && l < 256) ? l : 256;\n    int rows_per_block = 256 / row_width;\n    int x_blocks = l / 256 + ((l % 256) != 0);\n    int h_blocks = h / rows_per_block + ((h % rows_per_block) != 0);\n    dim3 block((unsigned)row_width, (unsigned)rows_per_block, 1);\n    dim3 grid((unsigned)x_blocks, (unsigned)h_blocks, (unsigned)n);\n\n    dwconv1d_fwd_naive<<<grid, block>>>((const float*)x, (const float*)k, y, n, h, l, ks);\n    dwconv1d_bwd_input_naive<<<grid, block>>>((const float*)gy, (const float*)k, gx, n, h, l, ks);\n    dwconv1d_bwd_kernel_naive<<<dim3((ks + 255) / 256, h, 1), 256>>>((const float*)gy, (const float*)x, gk, n, h, l, ks);\n}\n"
+      },
+      "source_digest": "7b34bc920415adf7396220b2d97ae408e29529627d76d963da56e5906b3dcb55"
+    },
+    {
+      "id": "f014e1b6f1494b52-h01",
+      "kind": "development",
+      "outcome": {
+        "status": "development_valid",
+        "commit": "708e3da05f2b0e6efe3bc4696fe8677df7b2c4ff",
+        "tree_hash": "ada8cccc7b173990bc91c7d2de2b4411f609bdcd",
+        "binary_sha256": "bdab99f39724636fc59cdb321cefe806dde854c5cdaa94b1c30c1b6739c9169c",
+        "correct": true,
+        "times": [],
+        "reason": "",
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52-h01/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-s4convd-6b99437772564b7a82f2d12e9caabd14/results-782962/reference-s4convd/logs/e1/f014e1b6f1494b52-h01/search/attempt-001/correctness.log"
+        ],
+        "cache_key": "cc88147a913b9225cb704d3190c62396d74cbaaa8f9194cb68610a2f381e1915"
+      },
+      "mission": {
+        "trial_id": "f014e1b6f1494b52",
+        "attempt": 1
+      },
+      "evaluations": [],
+      "diagnostics": [
+        {
+          "path": "logs/e1/f014e1b6f1494b52-h01/search/attempt-001/build.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "preview": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/f014e1b6f1494b52-h01/search/attempt-001/correctness.log",
+          "sha256": "fa561d1ab0508e2dc6964bc5e3eabf4f88c7e6df754bef9c5e31d117137e66fb",
+          "preview": "{\"correct\": true, \"cases\": 8, \"details\": [{\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.384185791015625e-07}, {\"case_id\": \"s4convd\", \"n\": 1, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 2.086162567138672e-07}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 3.0994415283203125e-06}, {\"case_id\": \"s4convd\", \"n\": 17, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 4.76837158203125e-06}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.2874603271484375e-05}, {\"case_id\": \"s4convd\", \"n\": 64, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 1.4781951904296875e-05}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.003143310546875}, {\"case_id\": \"s4convd\", \"n\": 16384, \"h\": 128, \"l\": 48, \"k\": 47, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0036773681640625}]}\n",
+          "truncated": false
+        }
+      ],
+      "source_files": {
+        "src/candidate.cu": "#include <cuda_runtime.h>\n\nextern \"C\" {\n\n__global__ void dwconv1d_fwd_naive(\n    const float* x,   // [B,H,L]\n    const float* k,   // [H,K]\n    float* y,         // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y * (int)blockDim.y + (int)threadIdx.y;\n    int t = (int)blockIdx.x * 256 + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n\n    float acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int xi = t + j - half;\n        if (xi >= 0 && xi < L) {\n            acc += x[base + xi] * k[h * K + j];\n        }\n    }\n    y[base + t] = acc;\n}\n\n__global__ void dwconv1d_bwd_input_naive(\n    const float* gy,   // [B,H,L]\n    const float* k,    // [H,K]\n    float* gx,         // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y * (int)blockDim.y + (int)threadIdx.y;\n    int t = (int)blockIdx.x * 256 + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n\n    float acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int gi = t + (j - half);\n        if (gi >= 0 && gi < L) {\n            acc += gy[base + gi] * k[h * K + (K - 1 - j)];\n        }\n    }\n    gx[base + t] = acc;\n}\n\n__global__ void dwconv1d_bwd_kernel_naive(\n    const float* gy, // [B,H,L]\n    const float* x,  // [B,H,L]\n    float* gk,       // [H,K]\n    int B, int H, int L, int K)\n{\n    int h   = (int)blockIdx.y;\n    int j_i = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (h >= H || j_i >= K) return;\n\n    int half = K / 2;\n    float acc = 0.0f;\n\n    for (int b = 0; b < B; ++b) {\n        int base = (b * H + h) * L;\n        for (int t = 0; t < L; ++t) {\n            int xi = t + j_i - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + t] * x[base + xi];\n            }\n        }\n    }\n\n    gk[h * K + j_i] = acc;\n}\n\n}\nextern \"C\" void run(const void*x,const void*k,const void*gy,void*out,void*scratch,int n,int h,int l,int ks)\n{\n    size_t size = size_t(n) * h * l;\n    float* y = (float*)out;\n    float* gx = y + size;\n    float* gk = gx + size;\n\n    int row_width = (l > 0 && l < 256) ? l : 256;\n    int rows_per_block = 256 / row_width;\n    int x_blocks = l / 256 + ((l % 256) != 0);\n    int h_blocks = h / rows_per_block + ((h % rows_per_block) != 0);\n    dim3 block((unsigned)row_width, (unsigned)rows_per_block, 1);\n    dim3 grid((unsigned)x_blocks, (unsigned)h_blocks, (unsigned)n);\n\n    dwconv1d_fwd_naive<<<grid, block>>>((const float*)x, (const float*)k, y, n, h, l, ks);\n    dwconv1d_bwd_input_naive<<<grid, block>>>((const float*)gy, (const float*)k, gx, n, h, l, ks);\n    dwconv1d_bwd_kernel_naive<<<dim3((ks + 255) / 256, h, 1), 256>>>((const float*)gy, (const float*)x, gk, n, h, l, ks);\n}\n"
+      },
+      "source_digest": "7b34bc920415adf7396220b2d97ae408e29529627d76d963da56e5906b3dcb55",
+      "source_provenance": {
+        "path": "logs/f014e1b6f1494b52/harness-source-01.json",
+        "sha256": "b13cc34e1510d585a1d9aee88eb7a3f73416a5c870998b1a32a00d1f7fde79c5"
+      },
+      "model_interpretation": {
+        "hypothesis": "Packing short H rows into each CTA should reduce CTA overhead and inactive threads in the separate forward and input-gradient passes. The mapping uses row_width=min(L,256) and packs floor(256/row_width) rows per CTA; for L=48, this assigns five rows to a 240-thread CTA instead of launching one 256-thread CTA per row. Rows of length at least 256 retain the existing one-row, 256-thread mapping. The baseline is correct at 35.464 ms mean for the full call, but it does not isolate these kernels; any benefit remains unmeasured.",
+        "transformations": {
+          "retained": [
+            "Map each forward and input-gradient CTA across multiple H rows when L is below 256: block.x is L and block.y is floor(256/L), with a bounds guard for incomplete H groups.",
+            "Keep 256-wide x tiles and one row per CTA for L >= 256, preserving the existing per-row output mapping for longer rows.",
+            "Retain the separate FP32 forward and input-gradient passes, their bounds-safe zero padding and complete writes; leave the weight-gradient kernel unchanged."
+          ],
+          "files": [
+            "src/candidate.cu"
+          ]
+        }
+      }
+    }
+  ],
+  "warnings": [],
+  "reports_as_interpretations": {
+    "T3": {
+      "coverage": {
+        "reads": [
+          {
+            "evidence_id": "9b2a7876f05a474b",
+            "next_offset": null,
+            "offset": 0,
+            "operation": "evidence",
+            "path": ""
+          }
+        ],
+        "total_records": 3,
+        "visible_ids": [
+          "9b2a7876f05a474b",
+          "9b2a7876f05a474b-h01",
+          "baseline-e1"
+        ]
+      },
+      "last_job": "active-analyst-9191bfd1df0a4b8fbc2d31af7dfd9362",
+      "report": {
+        "action": "report",
+        "hypotheses": [
+          {
+            "claim": "Un essai en deux étapes — 8 tuiles de B×L par (h,j), puis une réduction finale — pourrait réduire le travail par CTA, mais le trafic scratch et le lancement supplémentaire peuvent annuler ce gain.",
+            "evidence_ids": [
+              "9b2a7876f05a474b"
+            ],
+            "proposed_test": "Écrire les 8 sommes partielles dans une zone scratch vérifiée comme disponible et écrite à chaque appel, puis comparer le temps complet et la correction à l’essai actuel.",
+            "stop_condition": "Arrêter si la correction échoue ou si la confirmation du temps complet n’est pas inférieure à 0,01437546 s, moyenne de l’essai actuel."
+          }
+        ],
+        "observations": [
+          {
+            "claim": "L’essai T3 est valide et correct : moyenne mesurée de 0,01437546 s, score 0,71156; les trois mesures visibles vont de 0,014369 à 0,014382 s. Les 8 cas de correction signalent aussi des gardes intactes et des entrées inchangées.",
+            "evidence_ids": [
+              "9b2a7876f05a474b"
+            ]
+          },
+          {
+            "claim": "Le baseline est valide et correct, avec une moyenne mesurée de 0,03546401 s et un score de 0,5. L’essai T3 a donc un temps mesuré inférieur, sans que cela attribue le coût au seul gradient des poids.",
+            "evidence_ids": [
+              "baseline-e1",
+              "9b2a7876f05a474b"
+            ]
+          },
+          {
+            "claim": "L’élément de développement est déclaré correct, mais ne fournit ni temps ni score mesurés.",
+            "evidence_ids": [
+              "9b2a7876f05a474b-h01"
+            ]
+          }
+        ],
+        "read": {
+          "evidence_id": "",
+          "offset": 0,
+          "operation": "none",
+          "path": ""
+        },
+        "uncertainties": [
+          "Aucune mesure d’une réduction en plusieurs étapes n’est visible; son intérêt reste une hypothèse.",
+          "Les résultats visibles ne constituent pas une confirmation indépendante finale."
+        ]
+      },
+      "report_id": "active-analyst-9191bfd1df0a4b8fbc2d31af7dfd9362",
+      "status": "complete",
+      "watermark": [
+        "9b2a7876f05a474b"
+      ]
+    }
+  },
+  "contract": {
+    "protocol_id": "7af34e0eaefb7c68bd0bf0c071b2972e3188b50e8667616ff553de5a3205a8ac",
+    "protocol": {
+      "benchmark": [
+        "{python}",
+        "{trusted}/protocol.py",
+        "benchmark",
+        "{binary}",
+        "{phase}"
+      ],
+      "build": [
+        "{python}",
+        "{trusted}/protocol.py",
+        "build",
+        "{worktree}",
+        "{build}"
+      ],
+      "build_timeout_seconds": 180,
+      "check": [
+        "{python}",
+        "{trusted}/protocol.py",
+        "check",
+        "{binary}",
+        "{phase}"
+      ],
+      "confirmation_repetitions": 5,
+      "environment": {
+        "FOREST_GPU_TARGET": "NVIDIA GH200 CUDA 12.6.3",
+        "OMP_DYNAMIC": "FALSE",
+        "OMP_NUM_THREADS": "1",
+        "OMP_PROC_BIND": "TRUE",
+        "OPENBLAS_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "repetitions": 3,
+      "timeout_seconds": 600,
+      "warmups": 0
+    },
+    "hardware": {
+      "compiler": {
+        "flavor": "gcc-compatible",
+        "path": "/usr/bin/gcc",
+        "sha256": "f7e1e7952e6aa5f31a79366a8dcdd751a150ed65e949429d527e933b5e7cc028"
+      },
+      "controller_implementation": "7e809b3d71cbbe6b3aaa6044c8663ddb70e88383c7f7029777c38232b4ee61c3",
+      "cpus": 288,
+      "dependencies": {
+        "numpy": "2.5.4",
+        "scipy": "1.18.1",
+        "treequest": "0.3.2"
+      },
+      "environment": {
+        "FOREST_GPU_TARGET": "NVIDIA GH200 CUDA 12.6.3",
+        "OMP_DYNAMIC": "FALSE",
+        "OMP_NUM_THREADS": "1",
+        "OMP_PROC_BIND": "TRUE",
+        "OPENBLAS_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "hostname": "romeo-a046",
+      "machine": "aarch64",
+      "processor": "aarch64",
+      "python": "3.12.5 (main, Mar 13 2025, 11:06:50) [GCC 11.4.1 20231218 (Red Hat 11.4.1-3)]",
+      "python_executable": "/scratch_p/nimarano/hpc-forest-localmodels-20261015-r1/venv-r3/bin/python",
+      "system": "Linux-5.14.0-570.141.1.el9_6.aarch64+64k-aarch64-with-glibc2.34",
+      "target": "romeo-reference-782962"
+    },
+    "compiler": {
+      "flavor": "gcc-compatible",
+      "path": "/usr/bin/gcc",
+      "sha256": "f7e1e7952e6aa5f31a79366a8dcdd751a150ed65e949429d527e933b5e7cc028"
+    },
+    "statement": "Optimize on one NVIDIA GH200 with CUDA 12.6.3. Use the actual AB-MCTS research trees and persistent Mother memory/integration policy.\nCompute depthwise same-length convolution forward and both gradients. input1=x[B,H,L], input2=k[H,K], input3=gy[B,H,L], row major FP32. API n=B,h=H,l=L,ks=K. Performance B=16384,H=128,L=48,K=47. Output is contiguous [y.flatten(),gx.flatten(),gk.flatten()] of 2*B*H*L+H*K floats. scratch has 2*B*H*L+65536 floats. y[b,h,t]=sum_j x[b,h,t+j-K/2]*k[h,j] with zero padding, gx and gk are exact derivatives contracted with gy. Compare all outputs against independent FP64 conv1d/autograd; y,gx atol2e-5 and gk atol.005, all rtol2e-4. Calls must produce fresh outputs without accumulation between calls. All three kernels and resets are timed together. Full FP32, no TF32/FP16/BF16.\nEdit only src/candidate.cu. Preserve extern C void run(const void*x,const void*k,const void*gy,void*out,void*scratch,int n,int h,int l,int ks). All pointers are device memory owned by the host. Use the default CUDA stream. Do not read beyond buffers. Scratch is not guaranteed initialized. No external optimized library calls; ordinary CUDA primitives and CUB block primitives are allowed.\nNo cached answers, filesystem or environment inspection, timing inspection, phase detection, or external tools. Every call must compute on the current input. Immutable reference implementations and correctness checks are withheld from source. Choose useful topics independently, record failures, complete memory integration and independently confirm final G. No additional allocations or devices.\n",
+    "model": "gpt-6-luna",
+    "reasoning_effort": "max"
+  },
+  "budget": {
+    "observed_at": 1792843911.994306,
+    "target_deadline": 1792850705.720125,
+    "remaining_seconds": 6793.725818872452,
+    "reserve_seconds": 729.0703895593349,
+    "mother_seconds": 61.82307171821594,
+    "final_g_seconds": 149.7682645585155,
+    "integration_steps": 2,
+    "integration_seconds": 419.536529117031,
+    "integration_estimate_source": "memory-guided-typical-selection+code+evaluation",
+    "selection_seconds": 120,
+    "selection_call_seconds": 30,
+    "selection_calls_per_round": 2,
+    "integration_step_limit": 16,
+    "selection_call_limit": 4,
+    "code_call_limit": 6,
+    "research_estimate_source": "generation_and_exclusive_evaluation",
+    "estimation_policy": "independent_phase_medians",
+    "confirmation_seconds": 150.71978253043685,
+    "archive_seconds": 5.0,
+    "safety_factor": 1.25,
+    "next_work_seconds": 298.5739958371414,
+    "pending_roles": [],
+    "inflight_roles": [
+      "T3",
+      "T2",
+      "T1"
+    ],
+    "predicted_drain_seconds": 238.85919666971313,
+    "sample_counts": {
+      "baseline": 1,
+      "evaluation_benchmark:T1": 1,
+      "evaluation_benchmark:T2": 2,
+      "evaluation_benchmark:T3": 1,
+      "evaluation_benchmark:baseline": 1,
+      "evaluation_build:T1": 1,
+      "evaluation_build:T2": 2,
+      "evaluation_build:T3": 1,
+      "evaluation_build:baseline": 1,
+      "evaluation_check:T1": 1,
+      "evaluation_check:T2": 2,
+      "evaluation_check:T3": 1,
+      "evaluation_check:baseline": 1,
+      "evaluation_lock_wait:T1": 1,
+      "evaluation_lock_wait:T2": 2,
+      "evaluation_lock_wait:T3": 1,
+      "evaluation_lock_wait:baseline": 1,
+      "evaluation_work:T1": 1,
+      "evaluation_work:T2": 2,
+      "evaluation_work:T3": 1,
+      "evaluation_work:baseline": 1,
+      "generation:@analyst:T3": 2,
+      "generation:T1": 1,
+      "generation:T2": 2,
+      "generation:T3": 1,
+      "mission:T1": 1,
+      "mission:T2": 2,
+      "mission:T3": 1,
+      "mother": 1,
+      "mother_review": 1
+    },
+    "search_admission_deadline": 1792849976.6497355,
+    "can_admit": true
+  },
+  "inflight": [
+    {
+      "kind": "research",
+      "mission_id": "cf4d414cae9d482e",
+      "phase": "generation",
+      "role": "T3",
+      "started_at": 1792843796.4999344
+    },
+    {
+      "kind": "research",
+      "mission_id": "cc2c83db63bc4022",
+      "phase": "generation",
+      "role": "T2",
+      "started_at": 1792843880.5951731
+    },
+    {
+      "kind": "research",
+      "mission_id": "71b7793a2dab4e28",
+      "phase": "generation",
+      "role": "T1",
+      "started_at": 1792843911.9393177
+    }
+  ],
+  "snapshot_id": "858bd9f624b5b20fd875c3b3ece1d400e74eede83386d43d6ad8d1f2a343eee8"
+}

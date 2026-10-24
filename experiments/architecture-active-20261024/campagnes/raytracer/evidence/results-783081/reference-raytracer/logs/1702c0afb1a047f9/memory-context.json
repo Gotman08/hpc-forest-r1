@@ -1,0 +1,166 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "a3d438667c8924e2817aa7d4125ce9ba4d8a72b0fde9577159c099d3d40524ec",
+    "tree_id": "e1:Gm1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "a0bac7283c364e1e",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "a0bac7283c364e1e",
+        "facts": {
+          "commit": "c702fb68cb4b820f131a883be57c8cf1ce92dd52",
+          "base_commit": "4609459cbcfca906a36a0cd896d3aca440431788",
+          "parent_id": "527b4a53220f4786",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.217993567175069,
+          "score": 0.5173720524268861
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Pour les axes où l’inverse de direction est fini, choisir directement les bornes near/far via dirIsNeg devrait remplacer le test de permutation et sa branche par le calcul direct des intervalles. Conserver le calcul initial avec permutation pour les inverses non finis préserve notamment le comportement des directions nulles. Le gain reste à mesurer.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Ajouter un helper scalaire par axe qui choisit directement les bornes near/far à partir de dirIsNeg lorsque invDir est fini.\",\"Pour invDir non fini, reprendre les multiplications, la permutation conditionnelle et les mises à jour min/max du test précédent, afin de préserver le comportement des directions nulles et des NaN.\",\"Garder l’ordre des axes, les rejets stricts t0 > t1 et le test final inclusif t0 <= t1; ne pas modifier le parcours BVH, son dépilement, les triangles ni leur ordre.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "e3511f70efc242a6",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "e3511f70efc242a6",
+        "facts": {
+          "commit": "939ad196acb71459485994d9e674f9639cad0ad7",
+          "base_commit": "fc11a6518c6309cf9a6df733273fb13731cc8278",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.04729164862216277,
+          "score": 0.8316894077104313
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The serial path should avoid OpenMP team startup when threads<=1. For small effective teams (up to 4), static row assignment should keep scheduling overhead low; for larger teams such as 40, dynamic one-row chunks may better balance variation in per-ray BVH work. Rows give each pixel exactly one writer, while the ray calculation and both output writes stay unchanged. The controller must measure the tradeoff; no candidate speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Retain the existing serial rendering path for threads<=1 (and when the effective team is one).\",\"Add OpenMP row parallelism with num_threads capped by both threads and image height; each worker writes its assigned rows and both output arrays.\",\"Use static row scheduling for effective teams of up to 4 and dynamic one-row scheduling for larger teams to test the scheduling-overhead/load-balance tradeoff.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "fc11a6518c6309cf9a6df733273fb13731cc8278",
+          "base_commit": "fc11a6518c6309cf9a6df733273fb13731cc8278",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.23368679711225787,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm1",
+        "subject": "Intégration mesurée du parallélisme OpenMP et de l’optimisation BVH",
+        "objective": "Mesurer la combinaison du rendu parallèle OpenMP de T1 et de l’optimisation scalaire BVH de T2, en partant de la source T1 la plus rapide. Valider tous les cas officiels et comparer au T1 seul sur les mêmes mesures à 1, 4 et 40 threads; ne présumer aucun gain additif.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "a0bac7283c364e1e",
+    "e3511f70efc242a6",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "939ad196acb71459485994d9e674f9639cad0ad7",
+  "selected_parent_id": null
+}

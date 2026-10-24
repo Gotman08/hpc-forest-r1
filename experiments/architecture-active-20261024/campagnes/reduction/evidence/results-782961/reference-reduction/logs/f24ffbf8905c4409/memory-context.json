@@ -1,0 +1,170 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "867a3d0b118f14e9f1a238105361b4618c1df0c80a82551602702f1ff71d5d0b",
+    "tree_id": "e1:T3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "f9b237d912eb46da",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "f9b237d912eb46da",
+        "facts": {
+          "commit": "ac74f2ea846f13fb22100b4a8562279929a1390b",
+          "base_commit": "b24602f5af40d7501681193ba190461e3d15e3c5",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 7.723520000775655e-06,
+          "score": 0.8580107183423814
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "For large n, a separate output-zeroing launch followed by one grid-stride reduction launch should reduce launch and scratch-stage overhead versus the existing hierarchy. The tradeoff is one contended int32 atomic per CTA; using 256-thread CTAs, a target of 2048 elements per CTA, and a 1024-CTA cap tests whether this keeps input parallelism high enough without excessive aggregation contention. This remains an unmeasured hypothesis.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"For n >= 1<<20, launch an ordered output-zeroing kernel before the reduction kernel on the default stream.\",\"Use 256-thread CTAs to grid-stride over the input, combine each CTA's values with warp reductions, and perform exactly one int32 atomicAdd per CTA; choose ceil(n/2048) CTAs capped at 1024.\",\"Retain the existing hierarchical reduction for smaller positive inputs and explicitly zero the output for n <= 0; the large-input atomic path does not use scratch.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "f9b237d912eb46da-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "f9b237d912eb46da",
+        "facts": {
+          "commit": null,
+          "base_commit": "b24602f5af40d7501681193ba190461e3d15e3c5",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "For large n, a separate output-zeroing launch followed by one grid-stride reduction launch should reduce launch and scratch-stage overhead versus the existing hierarchy. The tradeoff is one contended int32 atomic per CTA; using 256-thread CTAs, a target of 2048 elements per CTA, and a 1024-CTA cap tests whether this keeps input parallelism high enough without excessive aggregation contention. This remains an unmeasured hypothesis.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"For n >= 1<<20, launch an ordered output-zeroing kernel before the reduction kernel on the default stream.\",\"Use 256-thread CTAs to grid-stride over the input, combine each CTA's values with warp reductions, and perform exactly one int32 atomicAdd per CTA; choose ceil(n/2048) CTAs capped at 1024.\",\"Retain the existing hierarchical reduction for smaller positive inputs and explicitly zero the output for n <= 0; the large-input atomic path does not use scratch.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "b24602f5af40d7501681193ba190461e3d15e3c5",
+          "base_commit": "b24602f5af40d7501681193ba190461e3d15e3c5",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.6671571731567384e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T3",
+        "subject": "Large-input atomic final aggregation",
+        "objective": "In src/candidate.cu, evaluate a large-input alternative with an ordered output-zeroing kernel followed by a multi-CTA grid-stride reduction; each CTA reduces its own values and performs one int32 atomicAdd to out. Tune CTA count/work per CTA to balance input throughput against contention. Do not rely on initialized scratch or unsafe inter-block initialization. Preserve exact results, bounds, ABI, default-stream ordering, and a correct fallback for other legal sizes; compare all checks and repeated timings against the baseline and hierarchical approach.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "f9b237d912eb46da",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 7.723520000775655e-06,
+          "hypothesis_as_data": "For large n, a separate output-zeroing launch followed by one grid-stride reduction launch should reduce launch and scratch-stage overhead versus the existing hierarchy. The tradeoff is one contended int32 atomic per CTA; using 256-thread C"
+        },
+        "latest": {
+          "id": "f9b237d912eb46da",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 7.723520000775655e-06,
+          "hypothesis_as_data": "For large n, a separate output-zeroing launch followed by one grid-stride reduction launch should reduce launch and scratch-stage overhead versus the existing hierarchy. The tradeoff is one contended int32 atomic per CTA; using 256-thread C"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "f9b237d912eb46da",
+    "f9b237d912eb46da-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "b24602f5af40d7501681193ba190461e3d15e3c5",
+  "selected_parent_id": null
+}

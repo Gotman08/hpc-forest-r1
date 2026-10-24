@@ -1,0 +1,285 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "b1f492fee3bc3e965d63e920e7a7023034e05b0049e448b6ac2e77c25a8ae58a",
+    "tree_id": "e1:T3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "8c33a522161445f3",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "8c33a522161445f3",
+        "facts": {
+          "commit": "16215e917c28cedd9225619ebc2a2b8b077713f5",
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.035285957722222226,
+          "score": 0.9945217850016042
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "With the 32x64x64 blocking and scalar 4x4 register microkernel held constant, parallelizing whole row bands rather than a flattened row/column tile loop may reduce tile-index arithmetic and scheduling work. At n=1024, static flattened scheduling already gives contiguous groups, so any gain may be small; limiting workers by row-band count may also reduce parallelism on smaller sizes. The candidate remains unmeasured.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace size-specific matrix-multiply branches with a generic n path and bounds-safe edge handling.\",\"Use 32x64 output blocks and 64-element reduction blocks with a scalar 4x4 output microkernel.\",\"Assign each 32-row band, including all its column blocks, to one static OpenMP loop iteration; cap workers by both the caller thread count and row-band count, with serial execution when OpenMP is unavailable or one worker is requested.\",\"Initialize accumulators to zero on the first reduction block and store all output elements on every call, without a separate C initialization pass.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "8c33a522161445f3-h02",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "8c33a522161445f3",
+        "facts": {
+          "commit": null,
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "With the 32x64x64 blocking and scalar 4x4 register microkernel held constant, parallelizing whole row bands rather than a flattened row/column tile loop may reduce tile-index arithmetic and scheduling work. At n=1024, static flattened scheduling already gives contiguous groups, so any gain may be small; limiting workers by row-band count may also reduce parallelism on smaller sizes. The candidate remains unmeasured.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace size-specific matrix-multiply branches with a generic n path and bounds-safe edge handling.\",\"Use 32x64 output blocks and 64-element reduction blocks with a scalar 4x4 output microkernel.\",\"Assign each 32-row band, including all its column blocks, to one static OpenMP loop iteration; cap workers by both the caller thread count and row-band count, with serial execution when OpenMP is unavailable or one worker is requested.\",\"Initialize accumulators to zero on the first reduction block and store all output elements on every call, without a separate C initialization pass.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "61eb5ec58ef64c81-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "61eb5ec58ef64c81",
+        "facts": {
+          "commit": null,
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "build_failed",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Build failed or exceeded candidate timeout",
+        "model_interpretation": {
+          "claim": "The prior scalar 32x64x64 blocked kernel with a 4x4 microkernel was correct and measured 0.283056 s mean, versus 6.405855 s for baseline. This candidate retains that blocking and first-reduction-block overwrite strategy, adding only static OpenMP ownership of disjoint output tiles, capped by both the caller's thread budget and tile count. Tile-level parallelism may improve n=1024 when multiple workers are available; scheduling overhead or restricted affinity may instead regress, especially for small sizes.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace the scalar output-at-a-time traversal with 32x64 output tiles and 64-element reduction blocks.\",\"Use sixteen scalar accumulators in a contiguous-B 4x4 microkernel for complete microtiles, with a bounds-safe fringe path.\",\"Assign independent output tiles to a static OpenMP loop; cap requested workers by the thread argument and tile count, and fall back to serial execution when OpenMP is not enabled.\",\"Initialize each output from zero on the first reduction block, then load and accumulate subsequent blocks, fully overwriting C without a separate zeroing pass.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "b9c0c82445bf421c",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "b9c0c82445bf421c",
+        "facts": {
+          "commit": "4ff12c75ea6fc3aae85639cb44b35ad550126749",
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.028950487333333337,
+          "score": 0.9955009541227322
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured flattened-tile 4x4 blocked kernel is currently the strongest T3 result at 0.033899 s mean; the row-band variant measured 0.035286 s and packing measured 0.072814 s. This experiment changes only the full microtile width from 4 to 8 while retaining 32x64 output blocks, 64-element K panels, static flattened tile ownership, first-panel overwrite, and the scalar fringe path. Reusing each loaded A value across eight output columns may help, but the 32 accumulators may increase register pressure. No speedup is claimed before measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace the full 4x4 scalar output microkernel with an explicit 4x8 microkernel, reusing four A values across eight contiguous B/output columns.\",\"Retain 32x64 output blocking, 64-element reduction panels, static flattened OpenMP tile ownership, and worker capping by the caller's thread budget.\",\"Initialize accumulators from zero on the first reduction panel and from C on later panels, preserving complete output overwrite without a separate initialization pass.\",\"Keep a bounds-safe scalar path for incomplete row or column microtiles; add no packing, scratch allocation, or explicit SIMD.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "b9c0c82445bf421c-h02",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "b9c0c82445bf421c",
+        "facts": {
+          "commit": null,
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured flattened-tile 4x4 blocked kernel is currently the strongest T3 result at 0.033899 s mean; the row-band variant measured 0.035286 s and packing measured 0.072814 s. This experiment changes only the full microtile width from 4 to 8 while retaining 32x64 output blocks, 64-element K panels, static flattened tile ownership, first-panel overwrite, and the scalar fringe path. Reusing each loaded A value across eight output columns may help, but the 32 accumulators may increase register pressure. No speedup is claimed before measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace the full 4x4 scalar output microkernel with an explicit 4x8 microkernel, reusing four A values across eight contiguous B/output columns.\",\"Retain 32x64 output blocking, 64-element reduction panels, static flattened OpenMP tile ownership, and worker capping by the caller's thread budget.\",\"Initialize accumulators from zero on the first reduction panel and from C on later panels, preserving complete output overwrite without a separate initialization pass.\",\"Keep a bounds-safe scalar path for incomplete row or column microtiles; add no packing, scratch allocation, or explicit SIMD.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:8c33a522161445f3:1:0",
+        "kind": "lesson",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "8c33a522161445f3",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The serial blocked 4x4 variant measured 0.283056 s mean, the packed variant 0.072814 s, and the parallel-tile variant 0.033899 s. All three were reported valid; their timings are observations, not proof of the mechanism behind each result.",
+          "transformations": "{}",
+          "applicability": "Use the measured flattened-tile parallel candidate as the direct comparator; these prior results do not establish a benefit from row-band ownership.",
+          "next_experiment": "Compare this row-band variant on all official sizes and collect repeated native n=1024 timings against the flattened-tile candidate.",
+          "evidence_ids": [
+            "3188509585b74570",
+            "8713098594f44de9",
+            "61eb5ec58ef64c81"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 20,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T3",
+        "subject": "Blocked GEMM, packing, and register microkernels",
+        "objective": "Use a blocked GEMM with a register-oriented output microkernel as the primary approach. Measure simple blocking separately from optional packing, explicit SIMD, and parallel tile ownership so gains and regressions can be attributed; include packing and scratch allocation in timed cost. Where useful, compare C initialization by zeroing once against safely overwriting on the first reduction block. Use only compiler/ISA mechanisms supported by the frozen target, respect the caller’s thread budget, and preserve the fixed FP32 tolerance and complete overwrite on every call. Validate all official sizes, compare repeated native n=1024 timings, and record unsuccessful variants.",
+        "records": 18,
+        "results": {
+          "trials": 6,
+          "valid": 6,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 6,
+          "distinct_programs": 6,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "b9c0c82445bf421c",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.028950487333333337,
+          "hypothesis_as_data": "The measured flattened-tile 4x4 blocked kernel is currently the strongest T3 result at 0.033899 s mean; the row-band variant measured 0.035286 s and packing measured 0.072814 s. This experiment changes only the full microtile width from 4 t"
+        },
+        "latest": {
+          "id": "b9c0c82445bf421c",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.028950487333333337,
+          "hypothesis_as_data": "The measured flattened-tile 4x4 blocked kernel is currently the strongest T3 result at 0.033899 s mean; the row-band variant measured 0.035286 s and packing measured 0.072814 s. This experiment changes only the full microtile width from 4 t"
+        },
+        "alternative": {
+          "id": "0ee100f456844d32",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03575701494444444,
+          "hypothesis_as_data": "The failed prior attempt passes n=32 but fails at n=128, consistent with reloading C on later reduction panels even though the partial register sums were never stored. This candidate retains each 4x4 microkernel's accumulators across all K "
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "8c33a522161445f3",
+    "8c33a522161445f3-h02",
+    "61eb5ec58ef64c81-h01",
+    "b9c0c82445bf421c",
+    "b9c0c82445bf421c-h02",
+    "lesson:8c33a522161445f3:1:0",
+    "0ee100f456844d32"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+  "selected_parent_id": null
+}

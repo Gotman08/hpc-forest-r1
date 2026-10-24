@@ -1,0 +1,159 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "import torch\nimport triton.language as tl\n\n\n@triton.jit\ndef _streaming_softmax_kernel(\n    X,\n    Y,\n    N: tl.constexpr,\n    SX0: tl.constexpr,\n    SX1: tl.constexpr,\n    SY0: tl.constexpr,\n    SY1: tl.constexpr,\n    BLOCK: tl.constexpr,\n    ACC_TYPE: tl.constexpr,\n):\n    row = tl.program_id(0)\n    cols = tl.arange(0, BLOCK)\n    running_max = tl.full((), -float(\"inf\"), ACC_TYPE)\n    running_sum = tl.full((), 0.0, ACC_TYPE)\n\n    for base in range(0, N, BLOCK):\n        offsets = base + cols\n        mask = offsets < N\n        values = tl.load(\n            X + row * SX0 + offsets * SX1,\n            mask=mask,\n            other=-float(\"inf\"),\n        ).to(ACC_TYPE)\n        tile_max = tl.max(values, axis=0)\n        new_max = tl.maximum(running_max, tile_max)\n        tile_sum = tl.sum(tl.exp(values - new_max), axis=0)\n        running_sum = running_sum * tl.exp(running_max - new_max) + tile_sum\n        running_max = new_max\n\n    for base in range(0, N, BLOCK):\n        offsets = base + cols\n        mask = offsets < N\n        values = tl.load(\n            X + row * SX0 + offsets * SX1,\n            mask=mask,\n            other=-float(\"inf\"),\n        ).to(ACC_TYPE)\n        output = tl.exp(values - running_max) / running_sum\n        tl.store(Y + row * SY0 + offsets * SY1, output, mask=mask)\n\n\ndef run(x):\n    rows, cols = x.shape\n    ret = torch.empty_like(x)\n    acc_type = tl.float64 if x.dtype == torch.float64 else tl.float32\n    block = 1024 if cols <= 1024 else 2048\n    _streaming_softmax_kernel[(rows,)](\n        x,\n        ret,\n        cols,\n        x.stride(0),\n        x.stride(1),\n        ret.stride(0),\n        ret.stride(1),\n        block,\n        acc_type,\n        num_warps=4,\n    )\n    return ret\n",
+        "path": "src/candidate.py"
+      }
+    ],
+    "hypothesis": "Across prior valid streaming experiments, the measured means fell from 106.05 µs at tile 128 to 69.73 µs at 256, 59.73 µs at 512, and 57.54 µs at 1024. Testing a 2048-element tile only for widths above 1024 may further reduce per-row loop overhead while retaining the smaller tile for short rows; the larger tile could still increase resource pressure and regress wide-row performance. Official measurement must decide.",
+    "memory_lessons": [
+      {
+        "applicability": "These results apply to the measured campaign and do not guarantee that larger tiles will remain faster.",
+        "claim": "The valid streaming candidates measured 106.05 µs at tile 128, 69.73 µs at 256, 59.73 µs at 512, and 57.54 µs at 1024; the improvement diminished between 512 and 1024, so further tile growth has an uncertain tradeoff.",
+        "evidence_ids": [
+          "dffb0dea1f304972",
+          "22383847f36e4e69",
+          "66b06aaca4904b57",
+          "75a8bbda3db643d5"
+        ],
+        "next_experiment": "Measure the 2048 tile on widths above 1024; if it does not improve the official metric, keep the measured 1024 variant and test a contrasting mapping."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "The catalog reports four distinct valid streaming programs and no repeated programs. This candidate retains the stable running-maximum/rescaled-sum passes, masking, and stride handling, and uses a width-based tile policy rather than specializing to listed benchmark widths. No new performance result is claimed; retain only if official measurements justify it.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replaced the eager PyTorch softmax operations with one Triton CTA per row that maintains a numerically stable running maximum and rescaled sum across tiles.",
+      "Reread input tiles to produce normalized output, preserving masked tail handling and input/output strides.",
+      "Selected a 1024-element tile for widths up to 1024 and a 2048-element tile for wider inputs to test reduced loop overhead without increasing tile size for short rows.",
+      "Retained float64 accumulation for float64 inputs and float32 accumulation otherwise."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "27564a1100794a41b37a5271bc58b955",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "42013cab2a8dbe7592fb1c46634fdeb9cda2e7062e16486691d68c5c4830f6ea",
+  "session_id": "4404c2b6a13c42989f9c7c7e042d7509",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "edd8d6d4283cd265609975dd9b701e4d988f48db98b21b045812a06cbe079e66",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 19466,
+        "output_tokens": 5387,
+        "reasoning_output_tokens": 3991
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "619063e5341f46b5-h02",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "dffb0dea1f304972",
+            "22383847f36e4e69",
+            "66b06aaca4904b57",
+            "75a8bbda3db643d5"
+          ],
+          "status": "applied",
+          "summary": "Compared the measured tile-size results and proposed one width-based 2048-tile test with the resource-pressure tradeoff explicit."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [
+            "dffb0dea1f304972",
+            "22383847f36e4e69",
+            "66b06aaca4904b57",
+            "75a8bbda3db643d5"
+          ],
+          "status": "not_needed",
+          "summary": "No device-specific feature is introduced; prior valid streaming measurements provide compatibility evidence for the existing Triton approach, so no additional environment inspection was needed."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The candidate uses the same established Triton operations as prior valid variants and introduces no uncertain API or hardware-specific instruction."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "dffb0dea1f304972",
+            "22383847f36e4e69",
+            "66b06aaca4904b57",
+            "75a8bbda3db643d5"
+          ],
+          "status": "applied",
+          "summary": "Compared prior measured means and catalog diversity; this proposal has no new measurement, so no speedup is asserted and the controller must evaluate it."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "27564a1100794a41b37a5271bc58b955",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "42013cab2a8dbe7592fb1c46634fdeb9cda2e7062e16486691d68c5c4830f6ea",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "4404c2b6a13c42989f9c7c7e042d7509"
+    },
+    "observed_tokens": 24853,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 24853,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

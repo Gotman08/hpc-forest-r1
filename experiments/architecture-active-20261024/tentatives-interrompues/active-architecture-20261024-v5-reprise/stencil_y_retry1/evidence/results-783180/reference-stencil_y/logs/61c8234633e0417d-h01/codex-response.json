@@ -1,0 +1,154 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <cuda_runtime.h>\n/* Copyright (c) 1993-2015, NVIDIA CORPORATION. All rights reserved.\n *\n * Redistribution and use in source and binary forms, with or without\n * modification, are permitted provided that the following conditions\n * are met:\n *  * Redistributions of source code must retain the above copyright\n *    notice, this list of conditions and the following disclaimer.\n *  * Redistributions in binary form must reproduce the above copyright\n *    notice, this list of conditions and the following disclaimer in the\n *    documentation and/or other materials provided with the distribution.\n *  * Neither the name of NVIDIA CORPORATION nor the names of its\n *    contributors may be used to endorse or promote products derived\n *    from this software without specific prior written permission.\n *\n * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY\n * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\n * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR\n * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR\n * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,\n * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,\n * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR\n * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY\n * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING\n * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS\n * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n */\n\n#include <stdio.h>\n#include <assert.h>\n\n// Convenience function for checking CUDA runtime API results\n// can be wrapped around any runtime API call. No-op in release builds.\ninline\ncudaError_t checkCuda(cudaError_t result)\n{\n#if defined(DEBUG) || defined(_DEBUG)\n  if (result != cudaSuccess) {\n    fprintf(stderr, \"CUDA Runtime Error: %s\\n\", cudaGetErrorString(result));\n    assert(result == cudaSuccess);\n  }\n#endif\n  return result;\n}\n\nfloat fx = 1.0f, fy = 1.0f, fz = 1.0f;\nconst int mx = 64, my = 64, mz = 64;\n  \n// shared memory tiles will be m*-by-*Pencils\n// sPencils is used when each thread calculates the derivative at one point\n// lPencils is used for coalescing in y and z where each thread has to \n//     calculate the derivative at mutiple points\nconst int sPencils = 4;  // small # pencils\nconst int lPencils = 32; // large # pencils\n  \ndim3 grid[3][2], block[3][2];\n\n// stencil coefficients\n__constant__ float c_ax, c_bx, c_cx, c_dx;\n__constant__ float c_ay, c_by, c_cy, c_dy;\n__constant__ float c_az, c_bz, c_cz, c_dz;\n \n// host routine to set constant data\nvoid setDerivativeParameters()\n{\n  // check to make sure dimensions are integral multiples of sPencils\n  if ((mx % sPencils != 0) || (my %sPencils != 0) || (mz % sPencils != 0)) {\n    printf(\"'mx', 'my', and 'mz' must be integral multiples of sPencils\\n\");\n    exit(1);\n  }\n  \n  if ((mx % lPencils != 0) || (my % lPencils != 0)) {\n    printf(\"'mx' and 'my' must be multiples of lPencils\\n\");\n    exit(1);\n  }\n\n  // stencil weights (for unit length problem)\n  float dsinv = mx-1.f;\n  \n  float ax =  4.f / 5.f   * dsinv;\n  float bx = -1.f / 5.f   * dsinv;\n  float cx =  4.f / 105.f * dsinv;\n  float dx = -1.f / 280.f * dsinv;\n  checkCuda( cudaMemcpyToSymbol(c_ax, &ax, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_bx, &bx, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_cx, &cx, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_dx, &dx, sizeof(float), 0, cudaMemcpyHostToDevice) );\n\n  dsinv = my-1.f;\n  \n  float ay =  4.f / 5.f   * dsinv;\n  float by = -1.f / 5.f   * dsinv;\n  float cy =  4.f / 105.f * dsinv;\n  float dy = -1.f / 280.f * dsinv;\n  checkCuda( cudaMemcpyToSymbol(c_ay, &ay, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_by, &by, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_cy, &cy, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_dy, &dy, sizeof(float), 0, cudaMemcpyHostToDevice) );\n\n  dsinv = mz-1.f;\n  \n  float az =  4.f / 5.f   * dsinv;\n  float bz = -1.f / 5.f   * dsinv;\n  float cz =  4.f / 105.f * dsinv;\n  float dz = -1.f / 280.f * dsinv;\n  checkCuda( cudaMemcpyToSymbol(c_az, &az, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_bz, &bz, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_cz, &cz, sizeof(float), 0, cudaMemcpyHostToDevice) );\n  checkCuda( cudaMemcpyToSymbol(c_dz, &dz, sizeof(float), 0, cudaMemcpyHostToDevice) );\n\n  // Execution configurations for small and large pencil tiles\n\n  grid[0][0]  = dim3(my / sPencils, mz, 1);\n  block[0][0] = dim3(mx, sPencils, 1);\n\n  grid[0][1]  = dim3(my / lPencils, mz, 1);\n  block[0][1] = dim3(mx, sPencils, 1);\n\n  grid[1][0]  = dim3(mx / sPencils, mz, 1);\n  block[1][0] = dim3(sPencils, my, 1);\n\n  grid[1][1]  = dim3(mx / lPencils, mz, 1);\n  // we want to use the same number of threads as above,\n  // so when we use lPencils instead of sPencils in one\n  // dimension, we multiply the other by sPencils/lPencils\n  block[1][1] = dim3(lPencils, my * sPencils / lPencils, 1);\n\n  grid[2][0]  = dim3(mx / sPencils, my, 1);\n  block[2][0] = dim3(sPencils, mz, 1);\n\n  grid[2][1]  = dim3(mx / lPencils, my, 1);\n  block[2][1] = dim3(lPencils, mz * sPencils / lPencils, 1);\n}\n\n// Tile 8 output rows with the four-row stencil halo on both sides.\n// Each warp covers contiguous X coordinates; each thread computes two Y rows.\nenum { yTileX = 32, yTileY = 8, yThreadsY = 4, yTileRows = yTileY + 8 };\n\n__global__ void derivative_y_tiled(const float *f, float *df)\n{\n  __shared__ float s_f[yTileRows][yTileX];\n\n  const int tx = threadIdx.x;\n  const int ty = threadIdx.y;\n  const int i = blockIdx.x * yTileX + tx;\n  const int k = blockIdx.z;\n  const int yBase = blockIdx.y * yTileY;\n\n  // Cooperatively initialize every shared row, including both halos.\n  // The endpoint planes remain distinct: only q < 0 or q > 63 is wrapped.\n  #pragma unroll\n  for (int part = 0; part < yTileRows / yThreadsY; ++part) {\n    const int tileY = ty + part * yThreadsY;\n    int q = yBase + tileY - 4;\n    if (q < 0) q += my - 1;\n    else if (q > my - 1) q -= my - 1;\n    s_f[tileY][tx] = f[k * mx * my + q * mx + i];\n  }\n\n  __syncthreads();\n\n  #pragma unroll\n  for (int output = 0; output < yTileY / yThreadsY; ++output) {\n    const int j = yBase + ty + output * yThreadsY;\n    const int sj = ty + 4 + output * yThreadsY;\n    const int globalIdx = k * mx * my + j * mx + i;\n\n    df[globalIdx] =\n      ( c_ay * ( s_f[sj+1][tx] - s_f[sj-1][tx] )\n      + c_by * ( s_f[sj+2][tx] - s_f[sj-2][tx] )\n      + c_cy * ( s_f[sj+3][tx] - s_f[sj-3][tx] )\n      + c_dy * ( s_f[sj+4][tx] - s_f[sj-4][tx] ) );\n  }\n}\n\n// Y derivative using a 32-wide X tile and 8 output rows.\n// Each block cooperatively loads 16 rows (including halos) into shared memory.\n#include <cuda_runtime.h>\nextern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n{ static bool initialized=false; if(!initialized){setDerivativeParameters();initialized=true;} derivative_y_tiled<<<dim3(mx / yTileX, my / yTileY, mz), dim3(yTileX, yThreadsY, 1)>>>((const float*)A,C); }\n",
+        "path": "src/candidate.cu"
+      }
+    ],
+    "hypothesis": "A 32x4 CTA with an 8-row output tile keeps two outputs per thread but halves the CTA size relative to the selected 16x8 parent, at the cost of twice as many Y blocks and more halo loads per output. The catalog has four distinct valid programs: 16x4 measured 2.816 µs, the selected 16x8 parent 3.223 µs, 8x8 measured 3.359 µs, and 32x8 measured 3.335 µs. Those small, variable samples do not establish a cause; this new 8x4 configuration tests whether smaller CTAs and reduced tile work per block offset the extra loading and scheduling.",
+    "memory_lessons": [
+      {
+        "applicability": "Use as context when choosing a new tile/launch contrast; the measurements do not establish causality.",
+        "claim": "The measured 16x4 variant was faster on average than the 16x8 parent and the 8x8 and 32x8 variants, but the samples are limited and variable. A new launch configuration should test a distinct scheduling assumption rather than repeat those shapes.",
+        "evidence_ids": [
+          "a1ca8f42c2264a7a",
+          "d2156ce3e167481b",
+          "a03bacb770fb487b",
+          "4c550212d0714c15"
+        ],
+        "next_experiment": "Measure this 8x4 configuration with the official protocol after oracle validation, then compare repeated timings against the baseline and selected parent."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Proposes one source-only launch/tile experiment; no local build, oracle validation, or timing was performed. The controller should validate signed varying inputs with independent endpoint values and collect the official repeated full-run timings.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Change the Y output tile from 16 rows to 8 while retaining 32 contiguous X lanes.",
+      "Use 4 Y threads per CTA, so each thread loads four of the 16 shared rows and computes two output rows; every tile row, including halos, is initialized before synchronization.",
+      "Launch a 32x4 CTA over two X tiles, eight Y tiles, and all 64 z planes; retain the exact stencil expression and q<0 / q>63 period-63 mapping."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "0a284292b98d4030b781bb189cda6696",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "859ec91b33766621daa5da57d1d6375d4c57db1a2a5f57f5a3b5ef3b0ddf3b16",
+  "session_id": "88b17084a3a347fd952663a8e59aa214",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "023de79acc5186867424a002e2b92e85252ab797d67eb67584a47da41cb791da",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 21081,
+        "output_tokens": 7869,
+        "reasoning_output_tokens": 4579
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a3bf11d4fa1b442f3ce3b8f9d3db6ff8be9d5741a2c919159d96937ca556300c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "61c8234633e0417d-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "a1ca8f42c2264a7a",
+            "d2156ce3e167481b",
+            "a03bacb770fb487b",
+            "4c550212d0714c15"
+          ],
+          "status": "applied",
+          "summary": "Selected a new 8x4 tile/CTA contrast based on the measured variants and stated an uncertain scheduling-versus-halo-load hypothesis."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Relied on the supplied GH200/CUDA target context; this candidate uses the existing CUDA kernel mechanisms and does not require another environment fact."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No uncertain API, instruction, or compiler property is introduced; the experiment adjusts the existing kernel tile and launch dimensions."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "d2156ce3e167481b",
+            "a1ca8f42c2264a7a",
+            "a03bacb770fb487b",
+            "4c550212d0714c15"
+          ],
+          "status": "applied",
+          "summary": "Compared the supplied baseline and valid candidate means while treating three-sample variability as inconclusive; official correctness and repeated timings remain for the controller."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "0a284292b98d4030b781bb189cda6696",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "859ec91b33766621daa5da57d1d6375d4c57db1a2a5f57f5a3b5ef3b0ddf3b16",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "88b17084a3a347fd952663a8e59aa214"
+    },
+    "observed_tokens": 28950,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 28950,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

@@ -1,0 +1,155 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <algorithm>\n#include <cstddef>\n#include <cstring>\n#include <vector>\n#include <omp.h>\n\n#if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))\n#include <immintrin.h>\n#define HAVE_TARGETED_AVX512 1\n\n__attribute__((target(\"avx512f,fma\")))\nstatic void kernel_8x16_avx512(const float* a, int lda,\n                               const float* b, int bstride,\n                               float* c, int ldc,\n                               int kc, int cols, bool accumulate)\n{\n    const __mmask16 mask = static_cast<__mmask16>((1u << cols) - 1u);\n    __m512 x0 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 0 * ldc) : _mm512_setzero_ps();\n    __m512 x1 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 1 * ldc) : _mm512_setzero_ps();\n    __m512 x2 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 2 * ldc) : _mm512_setzero_ps();\n    __m512 x3 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 3 * ldc) : _mm512_setzero_ps();\n    __m512 x4 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 4 * ldc) : _mm512_setzero_ps();\n    __m512 x5 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 5 * ldc) : _mm512_setzero_ps();\n    __m512 x6 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 6 * ldc) : _mm512_setzero_ps();\n    __m512 x7 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 7 * ldc) : _mm512_setzero_ps();\n\n    for (int k = 0; k < kc; ++k) {\n        const __m512 bv = _mm512_maskz_loadu_ps(mask, b + static_cast<std::size_t>(k) * bstride);\n        x0 = _mm512_fmadd_ps(_mm512_set1_ps(a[k]), bv, x0);\n        x1 = _mm512_fmadd_ps(_mm512_set1_ps(a[lda + k]), bv, x1);\n        x2 = _mm512_fmadd_ps(_mm512_set1_ps(a[2 * lda + k]), bv, x2);\n        x3 = _mm512_fmadd_ps(_mm512_set1_ps(a[3 * lda + k]), bv, x3);\n        x4 = _mm512_fmadd_ps(_mm512_set1_ps(a[4 * lda + k]), bv, x4);\n        x5 = _mm512_fmadd_ps(_mm512_set1_ps(a[5 * lda + k]), bv, x5);\n        x6 = _mm512_fmadd_ps(_mm512_set1_ps(a[6 * lda + k]), bv, x6);\n        x7 = _mm512_fmadd_ps(_mm512_set1_ps(a[7 * lda + k]), bv, x7);\n    }\n\n    _mm512_mask_storeu_ps(c + 0 * ldc, mask, x0);\n    _mm512_mask_storeu_ps(c + 1 * ldc, mask, x1);\n    _mm512_mask_storeu_ps(c + 2 * ldc, mask, x2);\n    _mm512_mask_storeu_ps(c + 3 * ldc, mask, x3);\n    _mm512_mask_storeu_ps(c + 4 * ldc, mask, x4);\n    _mm512_mask_storeu_ps(c + 5 * ldc, mask, x5);\n    _mm512_mask_storeu_ps(c + 6 * ldc, mask, x6);\n    _mm512_mask_storeu_ps(c + 7 * ldc, mask, x7);\n}\n\nstatic bool avx512_is_available()\n{\n    __builtin_cpu_init();\n    return __builtin_cpu_supports(\"avx512f\") && __builtin_cpu_supports(\"fma\");\n}\n#endif\n\nstatic void kernel_scalar(const float* a, int lda,\n                          const float* b, int bstride,\n                          float* c, int ldc,\n                          int kc, int rows, int cols, bool accumulate)\n{\n    float sums[8][16];\n    for (int r = 0; r < rows; ++r) {\n        for (int x = 0; x < cols; ++x) {\n            sums[r][x] = accumulate ? c[static_cast<std::size_t>(r) * ldc + x] : 0.0f;\n        }\n    }\n\n    for (int k = 0; k < kc; ++k) {\n        const float* brow = b + static_cast<std::size_t>(k) * bstride;\n        for (int r = 0; r < rows; ++r) {\n            const float av = a[static_cast<std::size_t>(r) * lda + k];\n            for (int x = 0; x < cols; ++x) {\n                sums[r][x] += av * brow[x];\n            }\n        }\n    }\n\n    for (int r = 0; r < rows; ++r) {\n        for (int x = 0; x < cols; ++x) {\n            c[static_cast<std::size_t>(r) * ldc + x] = sums[r][x];\n        }\n    }\n}\n\nstatic void compute_tile(const float* a, int lda,\n                         const float* b, int bstride,\n                         float* c, int ldc,\n                         int kc, int rows, int cols, bool accumulate,\n                         bool use_avx512)\n{\n#if defined(HAVE_TARGETED_AVX512)\n    if (use_avx512 && rows == 8) {\n        kernel_8x16_avx512(a, lda, b, bstride, c, ldc, kc, cols, accumulate);\n        return;\n    }\n#else\n    (void)use_avx512;\n#endif\n    kernel_scalar(a, lda, b, bstride, c, ldc, kc, rows, cols, accumulate);\n}\n\nextern \"C\" void run(const void* input1, const void* input2, void* output,\n                    int n, int parameter, int threads)\n{\n    (void)parameter;\n    if (n <= 0) {\n        return;\n    }\n\n    const float* a = static_cast<const float*>(input1);\n    const float* b = static_cast<const float*>(input2);\n    float* c = static_cast<float*>(output);\n    const int nt = std::max(1, std::min(threads, 8));\n    bool use_avx512 = false;\n#if defined(HAVE_TARGETED_AVX512)\n    use_avx512 = avx512_is_available();\n#endif\n\n    constexpr int MR = 8;\n    constexpr int NR = 16;\n    constexpr int KC = 128;\n    constexpr int NC = 256;\n    constexpr int DIRECT_ACCESS_LIMIT = 256;\n\n    if (n < DIRECT_ACCESS_LIMIT) {\n        #pragma omp parallel for collapse(2) schedule(static) num_threads(nt)\n        for (int ib = 0; ib < n; ib += MR) {\n            for (int j = 0; j < n; j += NR) {\n                const int rows = std::min(MR, n - ib);\n                const int cols = std::min(NR, n - j);\n                compute_tile(a + static_cast<std::size_t>(ib) * n, n,\n                             b + j, n,\n                             c + static_cast<std::size_t>(ib) * n + j, n,\n                             n, rows, cols, false, use_avx512);\n            }\n        }\n        return;\n    }\n\n    // B-only panels retain the microkernel's contiguous column vectors.\n    // The per-call scratch allocation and copies are part of run's cost.\n    std::vector<float> packed(static_cast<std::size_t>(KC) * NC);\n    #pragma omp parallel num_threads(nt) shared(packed)\n    {\n        for (int jc = 0; jc < n; jc += NC) {\n            const int nc = std::min(NC, n - jc);\n            for (int pc = 0; pc < n; pc += KC) {\n                const int kc = std::min(KC, n - pc);\n                #pragma omp single\n                {\n                    for (int k = 0; k < kc; ++k) {\n                        std::memcpy(packed.data() + static_cast<std::size_t>(k) * nc,\n                                    b + static_cast<std::size_t>(pc + k) * n + jc,\n                                    static_cast<std::size_t>(nc) * sizeof(float));\n                    }\n                }\n                #pragma omp for schedule(static)\n                for (int ib = 0; ib < n; ib += MR) {\n                    const int rows = std::min(MR, n - ib);\n                    for (int j = 0; j < nc; j += NR) {\n                        const int cols = std::min(NR, nc - j);\n                        compute_tile(a + static_cast<std::size_t>(ib) * n + pc, n,\n                                     packed.data() + j, nc,\n                                     c + static_cast<std::size_t>(ib) * n + jc + j, n,\n                                     kc, rows, cols, pc != 0, use_avx512);\n                    }\n                }\n            }\n        }\n    }\n}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "With the selected parent's 8x16 AVX-512 kernel and KC=128 unchanged, widening only the B-panel column extent from NC=128 to 256 should halve the number of column-panel iterations at n=1024 and reuse each A tile over twice as many output columns. That may reduce synchronization and improve A reuse, while the doubled scratch-panel size may offset those gains. The direct-access cutoff remains 256 to isolate panel width.",
+    "memory_lessons": [
+      {
+        "applicability": "For this GEMM variant, use matched microkernels and input sizes when judging B packing; prior evidence favored B-packed 8x16 over direct 8x16, while the small measured difference from adding A packing is not conclusive.",
+        "claim": "The supplied records report 0.005633 s for direct 8x16, 0.003443 s for B-packed 8x16, and 0.003389 s with an additional A panel; the latest direct 16x16 program measured 0.005219 s. All four catalog programs were distinct and valid, but these observations do not establish that a wider panel will help.",
+        "evidence_ids": [
+          "132b8ca4ab774f70",
+          "4184453b5e7a41a6",
+          "5bf16cd2c3b8448f",
+          "327ada26fd134727"
+        ],
+        "next_experiment": "Measure this B-only NC=256 variant against the selected B-only NC=128 parent with the same correctness cases and repeated n=1024 timings."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "The catalog contains four distinct valid programs and no repeated programs. The closest matched comparison reports 0.005633 s for direct 8x16 versus 0.003443 s for B-packed 8x16; adding an A panel measured 0.003389 s, a small difference that should not be assumed meaningful. The selected parent is the B-only NC=128 program. This candidate changes its B column-panel width while retaining KC, the microkernel, packing layout, thread cap, and direct-path cutoff. No correctness result or timing is available yet for this candidate; the controller must validate it and report repeated native timings. No failed attempt is present in the supplied records.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Increase the packed B column panel from NC=128 to NC=256 while retaining KC=128 and the existing K-major contiguous-column panel layout.",
+      "Keep the 8x16 AVX-512 FMA microkernel, its runtime feature check and scalar fallback, and the 256-element direct-access cutoff unchanged.",
+      "Retain disjoint OpenMP output-tile ownership with at most eight threads, generic row/column/K tails, per-call scratch allocation, and full output overwrite on each invocation."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "6ac4b73cf07842a69fde6bd101d0958d",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "0594f9cd02d6f9d7980779ff9ef8daabd62e5a98ff737a4e0fb56fcad8961c8e",
+  "session_id": "d02fc9631732486bb3394c1f89d10ba0",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "31e3274ad55f9da8417670f0d081871f3fef36ee62b3e09a050e22b10eee580a",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 26152,
+        "output_tokens": 7936,
+        "reasoning_output_tokens": 4785
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a3bf11d4fa1b442f3ce3b8f9d3db6ff8be9d5741a2c919159d96937ca556300c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "14a797a5cb2d4db1-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "4184453b5e7a41a6",
+            "132b8ca4ab774f70",
+            "5bf16cd2c3b8448f",
+            "327ada26fd134727"
+          ],
+          "status": "applied",
+          "summary": "Compared the distinct measured programs and chose a single panel-width change against the selected B-only parent; left performance as a hypothesis for controller measurement."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [
+            "4184453b5e7a41a6"
+          ],
+          "status": "applied",
+          "summary": "Retained the parent's runtime-gated AVX-512 implementation and thread cap; this experiment changes only packing panel width, so no new ISA or compiler capability was assumed."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No new ISA, compiler flag, or API decision is introduced; the candidate reuses the selected parent's guarded AVX-512 kernel."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "4184453b5e7a41a6",
+            "132b8ca4ab774f70",
+            "5bf16cd2c3b8448f",
+            "327ada26fd134727"
+          ],
+          "status": "applied",
+          "summary": "Reported prior measured means and their limitations without claiming a result for this unmeasured candidate."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "6ac4b73cf07842a69fde6bd101d0958d",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "0594f9cd02d6f9d7980779ff9ef8daabd62e5a98ff737a4e0fb56fcad8961c8e",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "d02fc9631732486bb3394c1f89d10ba0"
+    },
+    "observed_tokens": 34088,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 34088,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

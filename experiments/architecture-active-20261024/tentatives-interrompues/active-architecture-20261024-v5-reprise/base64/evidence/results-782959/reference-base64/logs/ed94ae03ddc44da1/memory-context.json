@@ -1,0 +1,283 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "b828a2be2a829df55505e70b01717402c695cfad916d8600a28eb8901e1ce3e5",
+    "tree_id": "e1:T2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "163e6223249f4ef4",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "163e6223249f4ef4",
+        "facts": {
+          "commit": "476155c2bd2388a3496243a6a06b5d253d1341dd",
+          "base_commit": "737953eed3b16bc16b71ba515f2bc988a099bc94",
+          "parent_id": "9db5bff585e34596",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0006251196151635022,
+          "score": 0.0813781723751329
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le parent SWAR est correct mais nettement plus lent que le baseline mesuré; ses comparaisons séparées des classes majuscules et minuscules et ses multiples seuils peuvent annuler le bénéfice du traitement par lanes. Cette variante regroupe lettres et minuscules avec une détection commune sur les bits ASCII, mappe chaque classe par arithmétique sans table, et conserve les blocs chargés exactement ainsi que la fin scalaire. Elle teste si moins de seuils améliore le coût, sans présumer du résultat.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Remplacer les masques distincts des lettres majuscules et minuscules par une détection ASCII commune sur les bits de poids fort et l'intervalle des cinq bits faibles; calculer ensuite l'offset minuscule en lanes 16 bits.\",\"Détecter les chiffres par deux seuils et les caractères + ou / par égalité masquée; produire les sextets par arithmétique SWAR sans table, puis conserver l'empaquetage existant.\",\"Garder le chargement memcpy limité à huit caractères complets et réserver les groupes finaux, y compris ceux avec padding, au chemin scalaire existant.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "163e6223249f4ef4-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "163e6223249f4ef4",
+        "facts": {
+          "commit": null,
+          "base_commit": "737953eed3b16bc16b71ba515f2bc988a099bc94",
+          "parent_id": "9db5bff585e34596",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le parent SWAR est correct mais nettement plus lent que le baseline mesuré; ses comparaisons séparées des classes majuscules et minuscules et ses multiples seuils peuvent annuler le bénéfice du traitement par lanes. Cette variante regroupe lettres et minuscules avec une détection commune sur les bits ASCII, mappe chaque classe par arithmétique sans table, et conserve les blocs chargés exactement ainsi que la fin scalaire. Elle teste si moins de seuils améliore le coût, sans présumer du résultat.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Remplacer les masques distincts des lettres majuscules et minuscules par une détection ASCII commune sur les bits de poids fort et l'intervalle des cinq bits faibles; calculer ensuite l'offset minuscule en lanes 16 bits.\",\"Détecter les chiffres par deux seuils et les caractères + ou / par égalité masquée; produire les sextets par arithmétique SWAR sans table, puis conserver l'empaquetage existant.\",\"Garder le chargement memcpy limité à huit caractères complets et réserver les groupes finaux, y compris ceux avec padding, au chemin scalaire existant.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "9db5bff585e34596-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "9db5bff585e34596",
+        "facts": {
+          "commit": null,
+          "base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "build_failed",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Build failed or exceeded candidate timeout",
+        "model_interpretation": {
+          "claim": "Le décodage SWAR par classes ASCII dans des lanes 16 bits peut réduire les recherches dépendantes de table sur les longues entrées, mais les comparaisons et masques supplémentaires peuvent aussi coûter plus cher. Le chemin rapide traite seulement des blocs complets non paddés; le traitement scalaire valide le reste sans lecture large hors limites. Le candidat doit être mesuré avant de conclure.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Remplacer la conversion table par caractère dans le chemin complet par des comparaisons de classes ASCII et une sélection de sextets par lanes 16 bits empaquetées dans uint64_t.\",\"Convertir deux quatuors chargés exactement sur huit octets en six octets de sortie, seulement dans le préfixe avant un éventuel quatuor final paddé; traiter le suffixe avec validation scalaire.\",\"Conserver les signatures publiques de décodage, encodage et run, le résultat de longueur ou UINT64_MAX et l'absence de parallélisme supplémentaire.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "9db5bff585e34596",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "9db5bff585e34596",
+        "facts": {
+          "commit": "737953eed3b16bc16b71ba515f2bc988a099bc94",
+          "base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0003170242707532053,
+          "score": 0.1487039206389817
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le décodeur SWAR fourni classe simultanément les quatre octets d’un groupe avec des opérations sur mots, puis deux groupes par chargement de 8 octets; il pourrait réduire les recherches dépendantes et les branches par rapport au baseline. Le premier essai n’a pas compilé car la garde de préprocesseur était incomplète; fermer cette garde permettra de mesurer cette variante, sans prétendre à un gain avant les résultats du contrôleur.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Fermer la garde SCALAR_B64 avec un #endif final pour rendre compilable l’implémentation SWAR existante.\",\"Conserver la conversion par classes ASCII dans des lanes SWAR de quatre caractères, le traitement de deux groupes complets par chargement de 8 octets et le décodage scalaire du groupe final/paddé.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "9db5bff585e34596-h02",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "9db5bff585e34596",
+        "facts": {
+          "commit": null,
+          "base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le décodeur SWAR fourni classe simultanément les quatre octets d’un groupe avec des opérations sur mots, puis deux groupes par chargement de 8 octets; il pourrait réduire les recherches dépendantes et les branches par rapport au baseline. Le premier essai n’a pas compilé car la garde de préprocesseur était incomplète; fermer cette garde permettra de mesurer cette variante, sans prétendre à un gain avant les résultats du contrôleur.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Fermer la garde SCALAR_B64 avec un #endif final pour rendre compilable l’implémentation SWAR existante.\",\"Conserver la conversion par classes ASCII dans des lanes SWAR de quatre caractères, le traitement de deux groupes complets par chargement de 8 octets et le décodage scalaire du groupe final/paddé.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:163e6223249f4ef4:0:0",
+        "kind": "lesson",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "163e6223249f4ef4",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le candidat SWAR parent est valide sur les dix cas mesurés, mais sa moyenne répétée de 317,02 µs est environ 5,7 fois celle du baseline valide à 55,38 µs. Ces résultats établissent une régression pour ce programme mesuré, pas la cause de cette régression ni le résultat de la variante proposée.",
+          "transformations": "{}",
+          "applicability": "Pour ce décodeur et ce compilateur, comparer le coût réel du SWAR à la conversion scalaire plutôt que de supposer que le traitement en lanes est plus rapide.",
+          "next_experiment": "Mesurer cette variante de détection compacte avec le même protocole répété et la comparer au parent et au baseline.",
+          "evidence_ids": [
+            "9db5bff585e34596",
+            "baseline-e1"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 7,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T2",
+        "subject": "Conversion scalaire SWAR sans table",
+        "objective": "Dans src/candidate.cpp, tester une conversion scalaire SWAR qui évite les recherches de table par caractère: convertir en parallèle, dans des mots machine, les classes ASCII Base64 en sextets, puis empaqueter les octets décodés. Garder la gestion de fin paddée hors du chemin principal et ne traiter que des groupes complets dans les chargements larges. Vérifier les 64 caractères de l’alphabet, les fins paddées, les entrées vides et des longueurs variées; préserver la signature, le budget de threads et le format de sortie, sans surlecture ni spécialisation aux données de performance. Comparer des mesures répétées au baseline et consigner aussi les variantes moins performantes.",
+        "records": 6,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "9db5bff585e34596",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0003170242707532053,
+          "hypothesis_as_data": "Le décodeur SWAR fourni classe simultanément les quatre octets d’un groupe avec des opérations sur mots, puis deux groupes par chargement de 8 octets; il pourrait réduire les recherches dépendantes et les branches par rapport au baseline. L"
+        },
+        "latest": {
+          "id": "163e6223249f4ef4",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0006251196151635022,
+          "hypothesis_as_data": "Le parent SWAR est correct mais nettement plus lent que le baseline mesuré; ses comparaisons séparées des classes majuscules et minuscules et ses multiples seuils peuvent annuler le bénéfice du traitement par lanes. Cette variante regroupe "
+        },
+        "alternative": {
+          "id": "163e6223249f4ef4",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0006251196151635022,
+          "hypothesis_as_data": "Le parent SWAR est correct mais nettement plus lent que le baseline mesuré; ses comparaisons séparées des classes majuscules et minuscules et ses multiples seuils peuvent annuler le bénéfice du traitement par lanes. Cette variante regroupe "
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "163e6223249f4ef4",
+    "163e6223249f4ef4-h01",
+    "9db5bff585e34596-h01",
+    "9db5bff585e34596",
+    "9db5bff585e34596-h02",
+    "lesson:163e6223249f4ef4:0:0"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "6576256c38e64d8d025a7c6e5802391753880ae2",
+  "selected_parent_id": null
+}

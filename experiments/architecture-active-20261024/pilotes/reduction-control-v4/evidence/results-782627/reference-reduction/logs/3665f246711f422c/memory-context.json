@@ -1,0 +1,170 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "521cc621e46c9e04500551e056aece96796862cffb7fc301f3b8010a474b51ec",
+    "tree_id": "e1:T2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "da71647248f546cb",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "da71647248f546cb",
+        "facts": {
+          "commit": "e31365d1fd3f2cfc12a8e1fc3fd5275f8b1417fd",
+          "base_commit": "9edc22c4ee0b2af92510de44fe714d5ac17bb086",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0803840160369874e-05,
+          "score": 0.6014358948077145
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A warp-shuffle reduction followed by one shared exchange of four warp partials should reduce CTA-wide synchronization from the baseline tree’s repeated barriers to one per block. The recursive 128-element pass geometry stays fixed; 64-bit partials prevent overflow in intermediate groups when the valid final sum fits int. Added wide arithmetic and scratch traffic could offset the synchronization savings, so no whole-call speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the modulo/shared-memory reduction tree with warp shuffles, four shared warp partials, and one CTA barrier; retain 128 threads and one input per lane.\",\"Accumulate recursive partials in signed 64-bit values and narrow only when the final reduction writes the int result.\",\"Retain the recursive ceil(count/128) passes, caller-supplied scratch, default-stream launches, and final asynchronous device-to-device copy.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "da71647248f546cb-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "da71647248f546cb",
+        "facts": {
+          "commit": null,
+          "base_commit": "9edc22c4ee0b2af92510de44fe714d5ac17bb086",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A warp-shuffle reduction followed by one shared exchange of four warp partials should reduce CTA-wide synchronization from the baseline tree’s repeated barriers to one per block. The recursive 128-element pass geometry stays fixed; 64-bit partials prevent overflow in intermediate groups when the valid final sum fits int. Added wide arithmetic and scratch traffic could offset the synchronization savings, so no whole-call speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the modulo/shared-memory reduction tree with warp shuffles, four shared warp partials, and one CTA barrier; retain 128 threads and one input per lane.\",\"Accumulate recursive partials in signed 64-bit values and narrow only when the final reduction writes the int result.\",\"Retain the recursive ceil(count/128) passes, caller-supplied scratch, default-stream launches, and final asynchronous device-to-device copy.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "9edc22c4ee0b2af92510de44fe714d5ac17bb086",
+          "base_commit": "9edc22c4ee0b2af92510de44fe714d5ac17bb086",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.648320039113363e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T2",
+        "subject": "Intra-block reduction primitive and synchronization",
+        "objective": "Explore replacing reduce0's intra-block modulo/shared-memory reduction tree with a lower-synchronization block reduction, such as warp shuffles plus a small shared warp-partial exchange or an allowed CUB block primitive. To isolate this axis, retain the baseline's recursive global pass structure, 128-thread mapping, and one input element per lane; do not change the global tile geometry. Preserve correct synchronization and exact summation for every valid input, including safe handling of intermediate sums, and obey the scratch, stream, allocation, and bounds constraints. Validate all required inputs and compare repeated full-call measurements against the baseline; report failures and do not assume a local-kernel improvement guarantees a whole-call improvement.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "da71647248f546cb",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0803840160369874e-05,
+          "hypothesis_as_data": "A warp-shuffle reduction followed by one shared exchange of four warp partials should reduce CTA-wide synchronization from the baseline tree’s repeated barriers to one per block. The recursive 128-element pass geometry stays fixed; 64-bit p"
+        },
+        "latest": {
+          "id": "da71647248f546cb",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0803840160369874e-05,
+          "hypothesis_as_data": "A warp-shuffle reduction followed by one shared exchange of four warp partials should reduce CTA-wide synchronization from the baseline tree’s repeated barriers to one per block. The recursive 128-element pass geometry stays fixed; 64-bit p"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "da71647248f546cb",
+    "da71647248f546cb-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "e31365d1fd3f2cfc12a8e1fc3fd5275f8b1417fd",
+  "selected_parent_id": "da71647248f546cb"
+}

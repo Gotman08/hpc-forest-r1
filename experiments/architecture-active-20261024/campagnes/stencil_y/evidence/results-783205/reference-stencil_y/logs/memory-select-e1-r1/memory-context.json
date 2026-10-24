@@ -1,0 +1,372 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "6fb663e8c8e2cdca38921304b4fae8331cd7da0e40c170d4757ca72c7504dc31",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "cb0db758c3bc46a8",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "cb0db758c3bc46a8",
+        "facts": {
+          "commit": "f0555eaaf8cef5caa0ed080260d8283f653bf145",
+          "base_commit": "4353dd077f17db521ebf2375ce4c2216b92abf28",
+          "parent_id": "dc76ae46db21414e",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.5923199417699997e-06,
+          "score": 0.49306078285377636
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Measured direct-global mappings differ: 32x8 averaged 3.00448 μs, 64x4 averaged 3.11989 μs, flattened averaged 3.27797 μs, and the selected 32x4 parent averaged 3.49440 μs (matching baseline). This experiment retains the parent launch and changes only halo-index control: the 56 interior y rows use direct offsets, while the eight edge rows retain each baseline period-(my-1) remap. Since each warp spans one x-contiguous row, the interior/edge condition is warp-uniform. This tests whether avoiding eight offset-bound checks on interior rows helps, without assuming a speedup.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Retain the selected parent 32x4 launch and direct-global one-output-per-thread kernel.\",\"Initialize all eight unrolled y-neighbor indices directly, then apply the baseline's per-offset period-(my-1) halo adjustments only for edge rows j<4 or j>=my-4.\",\"Preserve the original coefficients, arithmetic order, complete output coverage, and single-call launch/allocation behavior.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4bf3de724d1e4f6f",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "4bf3de724d1e4f6f",
+        "facts": {
+          "commit": "425a77f0f2539f2b0f6332d8cda14a2cb1cf6c11",
+          "base_commit": "7e9fc5e3aeba118fa15b249f570b3ac12b50b257",
+          "parent_id": "b8038404f884418a",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0943999687833334e-06,
+          "score": 0.5303241257389929
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Among the six distinct valid programs in the catalog, 32x16 measured 2.901 μs, 16x32 measured 3.128 μs, and the selected 16x64 parent measured 3.249 μs; those results do not establish a cause. This experiment holds the 32-wide x pencil fixed and expands the y output tile from 16 to 32 rows. It halves the y-tile count and relative radius-4 halo duplication (50% to 25% of core rows), but doubles threads per block from 512 to 1024 and increases shared memory per block. The competing effects on block count, halo traffic, and occupancy require measurement; no winner is presumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Set the x pencil width and y output tile height to 32, launching a 32x32 block over x pencils, y subtiles, and z planes.\",\"Load radius-4 lower and upper halo rows directly from the existing input, wrapping out-of-domain halo rows with the baseline period-(my-1) endpoint convention.\",\"Use one barrier after center and halo loads; preserve the stencil coefficients, arithmetic expression, output coverage, buffers, entry point, and launch model.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "3124b8354d9f416e",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "3124b8354d9f416e",
+        "facts": {
+          "commit": "5c617116e7956fdb69dddb2df364546a42031462",
+          "base_commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "score": 0.0
+        },
+        "diagnostic": "Protected correctness checks failed",
+        "model_interpretation": {
+          "claim": "The catalog's fastest T3 candidate used two y outputs per thread with a 32-by-4 CTA (2.976 μs), while two outputs with 32-by-8 measured 3.199 μs and four outputs with 32-by-2 measured 3.359 μs. This experiment keeps the two-output register neighborhood and contiguous-x warps but uses a 32-by-2 CTA, covering four output rows per block. Smaller CTAs could improve scheduling or residency, while the increased y-grid CTA count could offset that; correctness and full-run latency remain for controller measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Assign two consecutive y outputs to each thread and retain their overlapping ten-row input neighborhood in scalar registers.\",\"Use 32-by-2 thread blocks so each CTA covers four y output rows, keeping contiguous x coordinates across warp lanes.\",\"Preserve the coefficient arithmetic, period-(my-1) y-neighbor wrapping, input A, single kernel launch, and allocation behavior.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+          "base_commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.4939732868199997e-06,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "cb0db758c3bc46a8-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "cb0db758c3bc46a8",
+        "facts": {
+          "commit": null,
+          "base_commit": "4353dd077f17db521ebf2375ce4c2216b92abf28",
+          "parent_id": "dc76ae46db21414e",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Measured direct-global mappings differ: 32x8 averaged 3.00448 μs, 64x4 averaged 3.11989 μs, flattened averaged 3.27797 μs, and the selected 32x4 parent averaged 3.49440 μs (matching baseline). This experiment retains the parent launch and changes only halo-index control: the 56 interior y rows use direct offsets, while the eight edge rows retain each baseline period-(my-1) remap. Since each warp spans one x-contiguous row, the interior/edge condition is warp-uniform. This tests whether avoiding eight offset-bound checks on interior rows helps, without assuming a speedup.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Retain the selected parent 32x4 launch and direct-global one-output-per-thread kernel.\",\"Initialize all eight unrolled y-neighbor indices directly, then apply the baseline's per-offset period-(my-1) halo adjustments only for edge rows j<4 or j>=my-4.\",\"Preserve the original coefficients, arithmetic order, complete output coverage, and single-call launch/allocation behavior.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4bf3de724d1e4f6f-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "4bf3de724d1e4f6f",
+        "facts": {
+          "commit": null,
+          "base_commit": "7e9fc5e3aeba118fa15b249f570b3ac12b50b257",
+          "parent_id": "b8038404f884418a",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Among the six distinct valid programs in the catalog, 32x16 measured 2.901 μs, 16x32 measured 3.128 μs, and the selected 16x64 parent measured 3.249 μs; those results do not establish a cause. This experiment holds the 32-wide x pencil fixed and expands the y output tile from 16 to 32 rows. It halves the y-tile count and relative radius-4 halo duplication (50% to 25% of core rows), but doubles threads per block from 512 to 1024 and increases shared memory per block. The competing effects on block count, halo traffic, and occupancy require measurement; no winner is presumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Set the x pencil width and y output tile height to 32, launching a 32x32 block over x pencils, y subtiles, and z planes.\",\"Load radius-4 lower and upper halo rows directly from the existing input, wrapping out-of-domain halo rows with the baseline period-(my-1) endpoint convention.\",\"Use one barrier after center and halo loads; preserve the stencil coefficients, arithmetic expression, output coverage, buffers, entry point, and launch model.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 49,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Coalesced direct-global stencil without shared memory",
+        "objective": "Implement and measure a single-pass direct-global stencil with one output per thread and no shared memory or block-wide barriers. Map warp lanes to contiguous x elements; compare practical launch mappings and unroll the eight neighbor terms. Reproduce the baseline y-halo mapping for every offset, produce all 64³ outputs from current A on every call, and use no extra launch or allocation. Validate against the independent oracle and compare full-run event latency with the baseline.",
+        "records": 14,
+        "results": {
+          "trials": 5,
+          "valid": 5,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 5,
+          "distinct_programs": 5,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "4ed11623d73f46b4",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0044799981e-06,
+          "hypothesis_as_data": "The baseline averaged 3.494 μs; the prior valid flattened direct-global candidate averaged 3.278 μs, about 6.2% lower, but the catalog has only one distinct candidate and cannot establish which launch mapping is better. This experiment keep"
+        },
+        "latest": {
+          "id": "cb0db758c3bc46a8",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.5923199417699997e-06,
+          "hypothesis_as_data": "Measured direct-global mappings differ: 32x8 averaged 3.00448 μs, 64x4 averaged 3.11989 μs, flattened averaged 3.27797 μs, and the selected 32x4 parent averaged 3.49440 μs (matching baseline). This experiment retains the parent launch and c"
+        },
+        "alternative": {
+          "id": "cb0db758c3bc46a8",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.5923199417699997e-06,
+          "hypothesis_as_data": "Measured direct-global mappings differ: 32x8 averaged 3.00448 μs, 64x4 averaged 3.11989 μs, flattened averaged 3.27797 μs, and the selected 32x4 parent averaged 3.49440 μs (matching baseline). This experiment retains the parent launch and c"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "Shared-memory pencil geometry: fu",
+        "objective": "Explore shared-memory pencil geometry as a contrast to the supplied 4-by-64 block. Compare wider x pencils while retaining the full 64-row y slab (for example, 8- or 16-wide x pencils) against x-wide blocks producing smaller y subtiles with radius-4 halos. Measure the tradeoff between improved x coalescing, block count, halo duplicat",
+        "records": 18,
+        "results": {
+          "trials": 7,
+          "valid": 7,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 7,
+          "distinct_programs": 7,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "264197d63c124b41",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.900586696343333e-06,
+          "hypothesis_as_data": "The catalog reports five distinct valid programs: 8x64 measured 3.061 μs, 16x64 3.249 μs, 16x32 3.128 μs, 16x16 3.283 μs"
+        },
+        "latest": {
+          "id": "4bf3de724d1e4f6f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0943999687833334e-06,
+          "hypothesis_as_data": "Among the six distinct valid programs in the catalog, 32x16 measured 2.901 μs, 16x32 measured 3.128 μs, and the selected"
+        },
+        "alternative": {
+          "id": "4bf3de724d1e4f6f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0943999687833334e-06,
+          "hypothesis_as_data": "Among the six distinct valid programs in the catalog, 32x16 measured 2.901 μs, 16x32 measured 3.128 μs, and the selected"
+        },
+        "text_truncated": true
+      },
+      {
+        "role": "T3",
+        "subject": "Register reuse across multiple y outputs",
+        "objective": "Implement and measure register-blocked y outputs: assign contiguous x elements across warp lanes and have each thread compute multiple nearby y outputs, reusing their overlapping input neighborhood in registers rather than shared memory. Explore a small number of outputs per thread and suitable launch geometry; preserve exact coefficients and baseline halo mapping, compute every output from current A, and use no additional allocation or launch. Compare oracle correctness and full-run latency.",
+        "records": 16,
+        "results": {
+          "trials": 4,
+          "valid": 3,
+          "incorrect": 1,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "94ee21b6e9dd4f08",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9763201406866667e-06,
+          "hypothesis_as_data": "The measured four-output version used 12 input loads for four results per thread. Two outputs reduce the per-thread neighborhood to ten values, but increase loads per result; a 32-by-4 block keeps an 8-row output span and contiguous-x warps"
+        },
+        "latest": {
+          "id": "3124b8354d9f416e",
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "hypothesis_as_data": "The catalog's fastest T3 candidate used two y outputs per thread with a 32-by-4 CTA (2.976 μs), while two outputs with 32-by-8 measured 3.199 μs and four outputs with 32-by-2 measured 3.359 μs. This experiment keeps the two-output register "
+        },
+        "alternative": {
+          "id": "86851286e2ec45b0",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.198720049113333e-06,
+          "hypothesis_as_data": "Using two y outputs per thread retains a smaller overlapping register neighborhood than the selected four-output kernel, while an eight-warp 32-by-8 CTA covers 16 output rows. This halves the y-grid CTA count versus the selected parent's 8-"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "cb0db758c3bc46a8",
+    "4bf3de724d1e4f6f",
+    "3124b8354d9f416e",
+    "baseline-e1",
+    "cb0db758c3bc46a8-h01",
+    "4bf3de724d1e4f6f-h01",
+    "4ed11623d73f46b4",
+    "264197d63c124b41",
+    "94ee21b6e9dd4f08",
+    "86851286e2ec45b0"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "1882ec1ddb60c902d7d5da913340299adcfbb887",
+  "selected_parent_id": null
+}

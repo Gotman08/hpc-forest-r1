@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "#include <cuda_runtime.h>\n\nextern \"C\" {\n\n__global__ void dwconv1d_fwd_bwd_input_fused(\n    const float* x,   // [B,H,L]\n    const float* k,   // [H,K]\n    const float* gy,  // [B,H,L]\n    float* y,         // [B,H,L]\n    float* gx,        // [B,H,L]\n    int B, int H, int L, int K)\n{\n    int b = (int)blockIdx.z;\n    int h = (int)blockIdx.y;\n    int t = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (b >= B || h >= H || t >= L) return;\n\n    int half = K / 2;\n    int base = (b * H + h) * L;\n    const float* filter = k + h * K;\n\n    float y_acc = 0.0f;\n    float gx_acc = 0.0f;\n    for (int j = 0; j < K; ++j) {\n        int xi = t + j - half;\n        if (xi >= 0 && xi < L) {\n            y_acc += x[base + xi] * filter[j];\n            gx_acc += gy[base + xi] * filter[K - 1 - j];\n        }\n    }\n\n    y[base + t] = y_acc;\n    gx[base + t] = gx_acc;\n}\n\n__global__ void dwconv1d_bwd_kernel_naive(\n    const float* gy, // [B,H,L]\n    const float* x,  // [B,H,L]\n    float* gk,       // [H,K]\n    int B, int H, int L, int K)\n{\n    int h   = (int)blockIdx.y;\n    int j_i = (int)blockIdx.x * (int)blockDim.x + (int)threadIdx.x;\n\n    if (h >= H || j_i >= K) return;\n\n    int half = K / 2;\n    float acc = 0.0f;\n\n    for (int b = 0; b < B; ++b) {\n        int base = (b * H + h) * L;\n        for (int t = 0; t < L; ++t) {\n            int xi = t + j_i - half;\n            if (xi >= 0 && xi < L) {\n                acc += gy[base + t] * x[base + xi];\n            }\n        }\n    }\n\n    gk[h * K + j_i] = acc;\n}\n\n}\nextern \"C\" void run(const void*x,const void*k,const void*gy,void*out,void*scratch,int n,int h,int l,int ks)\n{size_t size=size_t(n)*h*l;float*y=(float*)out;float*gx=y+size;float*gk=gx+size;\ndwconv1d_fwd_bwd_input_fused<<<dim3((l+255)/256,h,n),256>>>((const float*)x,(const float*)k,(const float*)gy,y,gx,n,h,l,ks);\ndwconv1d_bwd_kernel_naive<<<dim3((ks+255)/256,h,1),256>>>((const float*)gy,(const float*)x,gk,n,h,l,ks);}\n",
+      "path": "src/candidate.cu"
+    }
+  ],
+  "hypothesis": "Fusing the forward and input-gradient work into one launch should save launch overhead and reuse output coordinates, input bounds checks, and filter-base setup. The shared loop adds a second accumulator and loads for both paths, so register pressure or reduced occupancy may offset those savings; complete-call timing is needed to determine the result.",
+  "notes": "The supplied baseline is correct and measured at 0.035464 s mean over three samples. No fused-candidate measurement is available yet; the controller must validate correctness and compare complete-call timing. The weight-gradient kernel and its execution path are unchanged.",
+  "sources_kept": [],
+  "transformations": [
+    "Replace separate forward and input-gradient launches with one fused kernel.",
+    "Share output-coordinate calculation, filter-base setup, and zero-padding bounds checks while preserving each accumulation order and fresh writes to both outputs.",
+    "Keep the weight-gradient kernel and launch unchanged."
+  ]
+}

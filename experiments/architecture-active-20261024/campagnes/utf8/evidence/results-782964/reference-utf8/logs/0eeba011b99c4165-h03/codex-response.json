@@ -1,0 +1,169 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n\nstatic bool validate_utf8_scalar(const char *b, size_t length) {\n  const unsigned char *bytes = (const unsigned char *)b;\n  for (size_t index = 0;;) {\n    unsigned char byte1;\n\n    do {\n      if (index >= length) {\n        return true;\n      }\n      byte1 = bytes[index++];\n    } while (byte1 < 0x80);\n    if (byte1 < 0xE0) {\n      if (index == length) {\n        return false;\n      }\n      if (byte1 < 0xC2 || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    } else if (byte1 < 0xF0) {\n      if (index + 1 >= length) {\n        return false;\n      }\n      unsigned char byte2 = bytes[index++];\n      if ((byte2 & 0xC0) != 0x80\n          || (byte1 == 0xE0 && byte2 < 0xA0)\n          || (byte1 == 0xED && 0xA0 <= byte2)\n          || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    } else {\n      if (index + 2 >= length) {\n        return false;\n      }\n      int byte2 = bytes[index++];\n      if ((byte2 & 0xC0) != 0x80\n          || (byte1 > 0xF4 || (byte1 == 0xF0 && byte2 < 0x90) || (byte1 == 0xF4 && byte2 > 0x8F))\n          || (bytes[index++] & 0xC0) != 0x80\n          || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    }\n  }\n}\n\n// Compress one selected bit from each byte lane into an 8-bit mask.\nstatic inline uint8_t byte_bit_mask(uint64_t word, unsigned bit) {\n  uint64_t lanes = (word >> bit) & UINT64_C(0x0101010101010101);\n  lanes = (lanes | (lanes >> 7)) & UINT64_C(0x0003000300030003);\n  lanes = (lanes | (lanes >> 14)) & UINT64_C(0x0000000F0000000F);\n  lanes = (lanes | (lanes >> 28)) & UINT64_C(0x00000000000000FF);\n  return (uint8_t)lanes;\n}\n\nstatic bool validate_utf8(const char *b, size_t length) {\n  const unsigned char *bytes = (const unsigned char *)b;\n  size_t index = 0;\n\n  while (length - index >= 8) {\n    // Assemble explicit little-endian lanes without alignment or host-endian assumptions.\n    const uint64_t word = (uint64_t)bytes[index]\n        | ((uint64_t)bytes[index + 1] << 8)\n        | ((uint64_t)bytes[index + 2] << 16)\n        | ((uint64_t)bytes[index + 3] << 24)\n        | ((uint64_t)bytes[index + 4] << 32)\n        | ((uint64_t)bytes[index + 5] << 40)\n        | ((uint64_t)bytes[index + 6] << 48)\n        | ((uint64_t)bytes[index + 7] << 56);\n\n    if ((word & UINT64_C(0x8080808080808080)) == 0) {\n      index += 8;\n      continue;\n    }\n\n    const uint8_t p0 = byte_bit_mask(word, 0);\n    const uint8_t p1 = byte_bit_mask(word, 1);\n    const uint8_t p2 = byte_bit_mask(word, 2);\n    const uint8_t p3 = byte_bit_mask(word, 3);\n    const uint8_t p4 = byte_bit_mask(word, 4);\n    const uint8_t p5 = byte_bit_mask(word, 5);\n    const uint8_t p6 = byte_bit_mask(word, 6);\n    const uint8_t p7 = byte_bit_mask(word, 7);\n\n    const uint8_t ascii = (uint8_t)~p7;\n    const uint8_t continuation = (uint8_t)(p7 & (uint8_t)~p6);\n    const uint8_t two_prefix = (uint8_t)(p7 & p6 & (uint8_t)~p5);\n    const uint8_t three_prefix = (uint8_t)(p7 & p6 & p5 & (uint8_t)~p4);\n    const uint8_t four_prefix = (uint8_t)(p7 & p6 & p5 & p4 & (uint8_t)~p3);\n\n    // Exclude C0/C1 and F5-F7 while retaining the legal lead-byte ranges.\n    const uint8_t invalid_two = (uint8_t)(two_prefix & (uint8_t)~(p4 | p3 | p2 | p1));\n    const uint8_t lead2 = (uint8_t)(two_prefix & (uint8_t)~invalid_two);\n    const uint8_t lead3 = three_prefix;\n    const uint8_t invalid_four = (uint8_t)(four_prefix & p2 & (p1 | p0));\n    const uint8_t lead4 = (uint8_t)(four_prefix & (uint8_t)~invalid_four);\n    const uint8_t invalid = (uint8_t)~(ascii | continuation | lead2 | lead3 | lead4);\n    if (invalid != 0) {\n      return false;\n    }\n\n    // Each starter emits its exact continuation requirement into later lanes.\n    const uint16_t expected_wide = (uint16_t)(\n        ((uint16_t)(lead2 | lead3 | lead4) << 1)\n        | ((uint16_t)(lead3 | lead4) << 2)\n        | ((uint16_t)lead4 << 3));\n    if ((uint8_t)expected_wide != continuation) {\n      return false;\n    }\n\n    // Enforce the second-byte limits that exclude overlongs, surrogates, and values above U+10FFFF.\n    const uint8_t e0 = (uint8_t)(lead3 & (uint8_t)~(p3 | p2 | p1 | p0));\n    const uint8_t ed = (uint8_t)(lead3 & p3 & p2 & (uint8_t)~p1 & p0);\n    const uint8_t f0 = (uint8_t)(lead4 & (uint8_t)~(p2 | p1 | p0));\n    const uint8_t f4 = (uint8_t)(lead4 & p2 & (uint8_t)~p1 & (uint8_t)~p0);\n    const uint8_t e0_second = (uint8_t)(e0 << 1);\n    const uint8_t ed_second = (uint8_t)(ed << 1);\n    const uint8_t f0_second = (uint8_t)(f0 << 1);\n    const uint8_t f4_second = (uint8_t)(f4 << 1);\n    if ((e0_second & (uint8_t)~p5) != 0\n        || (ed_second & p5) != 0\n        || (f0_second & (uint8_t)~p4) != 0\n        || (f4_second & p4) != 0) {\n      return false;\n    }\n\n    // A requirement beyond this block means a code point crosses the boundary.\n    // Revalidate from this known block boundary with the scalar control.\n    if ((expected_wide >> 8) != 0) {\n      return validate_utf8_scalar((const char *)(bytes + index), length - index);\n    }\n\n    index += 8;\n  }\n\n  return validate_utf8_scalar((const char *)(bytes + index), length - index);\n}\n\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{*(uint32_t*)output=validate_utf8((const char*)input1,n);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "A portable 8-byte SWAR bit-plane classifier may reduce per-byte control flow on mixed-width inputs by classifying lead and continuation lanes together, comparing shifted continuation requirements, and checking restricted second-byte ranges. If a sequence crosses a block boundary, defer that block and suffix to the strict scalar validator instead of carrying state. This contrasts with the selected T1 parent's ASCII-block skip and the earlier carry-state variants; it is an unmeasured experiment, not a claimed speedup.",
+    "memory_lessons": [
+      {
+        "applicability": "Compare mixed-width performance against the selected parent and baseline; correctness alone does not show this block-skip strategy helps.",
+        "claim": "The selected T1 parent 1bef6299446e4809 was correct but measured 57.50 µs, versus the 49.62 µs baseline, so its portable 64-bit ASCII-block skip did not improve the reported mixed-width timing.",
+        "evidence_ids": [
+          "1bef6299446e4809",
+          "baseline-e1"
+        ],
+        "next_experiment": "Measure this whole-block mask candidate with the unchanged official mixed-width n=65536 protocol."
+      },
+      {
+        "applicability": "A different role's faster hybrid is useful context but does not establish the performance of whole-stream masks.",
+        "claim": "The T2 hybrid 31112ea757f04c4a was correct at 39.98 µs; it is a distinct strategy and is not a measurement of this SIMD-mask candidate.",
+        "evidence_ids": [
+          "31112ea757f04c4a",
+          "1bef6299446e4809"
+        ],
+        "next_experiment": "Keep the strategies distinct when comparing controller measurements."
+      },
+      {
+        "applicability": "Distinguish correctness logs from final runtime status when recording failed carry-state variants.",
+        "claim": "The T1 carry-state variant c557b10fc09a4c93 ended runtime_failed with no timing, although its available correctness log lists 18 passing cases; a separate development attempt 0eeba011b99c4165-h02 failed protected correctness at n=1024.",
+        "evidence_ids": [
+          "c557b10fc09a4c93",
+          "0eeba011b99c4165-h02"
+        ],
+        "next_experiment": "Treat boundary-state handling as unproven until the new no-carry fallback passes controller checks."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "The candidate is unmeasured. The selected parent 1bef6299446e4809 was correct at 57.50 µs, slower than the 49.62 µs baseline. The T2 hybrid 31112ea757f04c4a measured 39.98 µs but is a different strategy. Prior T1 experiments include c557b10fc09a4c93 (runtime_failed, no timing) and 0eeba011b99c4165-h02 (protected correctness failure at n=1024). Leave official boundary, truncation, ASCII, and malformed-input checks and timing to the controller.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Retained the strict scalar UTF-8 validator as the correctness control and bounded suffix validator.",
+      "Added portable 8-byte SWAR bit-plane extraction and lead/continuation classification without alignment assumptions or target-specific instructions.",
+      "Compared shifted continuation requirements per block and checked E0, ED, F0, and F4 second-byte restrictions.",
+      "Delegated from a block boundary to the scalar validator whenever continuation requirements cross that boundary; kept the run ABI, output, and thread budget unchanged."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "2036080fa7ee4524aa83fb0b9a4228b2",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "5614842dff5b9ae08e85663bf518e9e8272741cd3c86d73bf718a3b18ab36112",
+  "session_id": "84bf5b1d844645aba6fb57b65acabefa",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "33066d461f2ac8fe2ff918ec98d1149680a63faf1d364afe0f56435ad9b38b0e",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4352,
+        "input_tokens": 37617,
+        "output_tokens": 14676,
+        "reasoning_output_tokens": 11508
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "312153914191ed4adba7f5c132d54f0a335d7d445b0797c190a6ee9712c6ab2c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "0eeba011b99c4165-h03",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "baseline-e1",
+            "1bef6299446e4809",
+            "c557b10fc09a4c93",
+            "0eeba011b99c4165-h02"
+          ],
+          "status": "applied",
+          "summary": "Proposed a distinct whole-block mask experiment with scalar fallback at crossing boundaries and made no performance claim."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The candidate uses portable fixed-width integer operations and does not rely on target-specific instructions or runtime probing."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No ISA-specific intrinsics or compiler-specific API are used; no uncertain documentation-dependent property is required."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "1bef6299446e4809",
+            "31112ea757f04c4a"
+          ],
+          "status": "applied",
+          "summary": "Compared only available official measurements and marked this candidate unmeasured for controller evaluation."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "2036080fa7ee4524aa83fb0b9a4228b2",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "5614842dff5b9ae08e85663bf518e9e8272741cd3c86d73bf718a3b18ab36112",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "84bf5b1d844645aba6fb57b65acabefa"
+    },
+    "observed_tokens": 52293,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 52293,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

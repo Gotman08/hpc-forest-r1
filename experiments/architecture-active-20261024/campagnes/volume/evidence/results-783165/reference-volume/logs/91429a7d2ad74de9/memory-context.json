@@ -1,0 +1,206 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "dca0ca5e4166f9f1dda8a92ae7f09d2b110c7bb3822e214283fe32c8009f68d7",
+    "tree_id": "e1:Gm1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "a2e0eefcabe94221",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "a2e0eefcabe94221",
+        "facts": {
+          "commit": "596195635aeb8c93b0919c4342f4abdb679715f5",
+          "base_commit": "bbaa5f20f562c8a8afc9493244cb3c61efdfd28c",
+          "parent_id": "382b2ac15e8648af",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.9422905106658404,
+          "score": 0.8479900177457642
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Sur la boucle aplatie de pixels, un ordonnancement dynamique par blocs contigus de 256 pixels pourrait réduire le coût de distribution par rapport aux blocs de 64 tout en conservant assez de blocs pour absorber les variations de coût des rayons. Il pourrait aussi dégrader l’équilibrage si les blocs sont trop gros. Le chemin à un thread reste sériel; comparer à 1, 4 et 40 threads testera ce compromis sans présumer d’un gain.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Remplace le partage statique cyclique de lignes par une boucle OpenMP collapse(2) avec schedule(dynamic, 256) sur les coordonnées de pixels.\",\"Factorise le rendu d’un pixel; chaque couple (x,y) calcule et écrit un indice image distinct en std::size_t.\",\"Conserve le parcours sériel lorsque threads <= 1 et borne la taille d’équipe à min(threads, nombre de pixels).\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "28cfe80ea031466e",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "28cfe80ea031466e",
+        "facts": {
+          "commit": "3f4ebb5773be6bd7dc6cc8e63513ebb109be78d0",
+          "base_commit": "85c50083637258be9c27f21868d12500a71c2e36",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.71354895341026,
+          "score": 0.5272329979084583
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Les essais T2 précédents donnent deux programmes distincts et corrects : la variante halo a mesuré 5,0628 s en moyenne, la variante partageant les clamps 5,1887 s, face aux 5,2566 s de référence. Avec une seule série de trois mesures par programme, ces résultats ne démontrent pas la cause d’un éventuel gain. Cette expérience isolée teste une autre voie sans copie : calculer une fois par rendu les trois facteurs nVoxels/(pMax-pMin), puis remplacer les divisions par axe de chaque appel à Density par des multiplications. Les bornes inclusives, la conversion mathématique en coordonnées voxel, les clamps D et l’ordre d’interpolation restent en place. Le contrôleur devra vérifier la tolérance, notamment aux bords, et mesurer le temps complet du rendu avec cette préparation incluse.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Pré-calculer une seule fois par appel à volume_serial les trois facteurs d’échelle nVoxels[k]/(pMax[k]-pMin[k]) et les réutiliser pour convertir les coordonnées dans Density.\",\"Laisser inchangés les bornes inclusives, les accès par D avec clamp et l’ordre des interpolations; compter le calcul des facteurs dans le temps du rendu.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "ea64c9423f774121",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "ea64c9423f774121",
+        "facts": {
+          "commit": "742c99251d9e2cf2063e6c6a037840b49b796579",
+          "base_commit": "85c50083637258be9c27f21868d12500a71c2e36",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.3936832225275635,
+          "score": 0.7904319359212347
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Dans raymarch, un échantillon où Density(pos) vaut exactement zéro n'ajoute pas de radiance pour des entrées finies, mais prépare quand même un rayon d'ombre et parcourt transmittance. Calculer Li seulement lorsque d != 0 devrait éviter ce travail sur ces échantillons, au prix d'une branche supplémentaire sur les autres. La mise à jour de L reste présente; l'ordre des échantillons, l'atténuation, l'accumulation de tau, les pas, les mises à jour de position/paramètre et l'arrêt anticipé ne changent pas. La correction et le temps de cette piste contrastante restent à mesurer.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Dans raymarch, initialiser Li à zéro et ne calculer distanceSquared ainsi que transmittance que si la densité échantillonnée d est non nulle; conserver l'accumulation de L, la mise à jour de tau, la séquence des échantillons, les pas et les contrôles inchangés.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "85c50083637258be9c27f21868d12500a71c2e36",
+          "base_commit": "85c50083637258be9c27f21868d12500a71c2e36",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.256582067911694,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 4,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm1",
+        "subject": "Intégration mesurée des pistes parallélisme, Density et traversée",
+        "objective": "Mesurer la combinaison du rendu parallèle par pixels de T1, de la variante Density de T2 et de la variante de traversée de T3, en partant de la meilleure source mesurée. Valider la correction et comparer selon le protocole officiel; ne présumer aucun gain additif.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "a2e0eefcabe94221",
+    "28cfe80ea031466e",
+    "ea64c9423f774121",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "596195635aeb8c93b0919c4342f4abdb679715f5",
+  "selected_parent_id": null
+}

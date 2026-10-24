@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "content": "/*\n * Copyright (c) 2007 Bart Massey\n * [This program is licensed under the \"MIT License\"]\n * Please see the file LICENSE in the source\n * distribution of this software for license terms.\n */\n\n#include <cstdint>\nstatic inline uint32_t\npopcount_swar(uint32_t n) {\n    n = (n & 0x55555555u) + ((n >> 1) & 0x55555555u);\n    n = (n & 0x33333333u) + ((n >> 2) & 0x33333333u);\n    n = (n + (n >> 4)) & 0x0f0f0f0fu;\n    n = n + (n >> 8);\n    n = n + (n >> 16);\n    return n & 0x3fu;\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{const uint32_t*a=(const uint32_t*)input1;uint32_t result=0;for(int j=0;j<parameter;j++)for(int i=0;i<n;i++)result+=popcount_swar(a[i]^result);*(uint32_t*)output=result;}\n",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "The selected parent uses subtraction to form two-bit population counts. Replacing only that first SWAR stage with masked addition tests whether add-based field aggregation performs better under the frozen compiler; the extra mask/add work may instead make it slower. The remaining count stages and serial recurrence are unchanged. This is distinct from the measured multiply-reduction and nibble-subtraction variants, whose results show that SWAR formulations need measurement rather than presumed ranking.",
+  "notes": "The pairwise masked addition stores each pair's bit count (0–2) in its two-bit field; the following stages produce nibble counts (0–4), byte counts (0–8), and a total no greater than 32. This gives exact counts for every uint32_t input, with the final 0x3f mask retaining the total. The ordered recurrence, uint32_t accumulation and wraparound, dimensions, output overwrite, and thread usage are unchanged. No exhaustive runtime enumeration or official measurement was performed here; the controller should run its correctness and performance protocol.",
+  "sources_kept": [],
+  "transformations": [
+    "Replaced the subtraction-based two-bit SWAR population-count stage with masked addition of the even- and odd-position bits.",
+    "Kept the remaining SWAR stages and preserved the ordered uint32_t recurrence, generic dimensions, output overwrite, and existing thread usage."
+  ]
+}

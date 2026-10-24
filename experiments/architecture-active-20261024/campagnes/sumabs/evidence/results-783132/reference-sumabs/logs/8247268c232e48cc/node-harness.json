@@ -1,0 +1,177 @@
+{
+  "schema": "hpc-forest-node-harness-v1",
+  "mission_id": "8247268c232e48cc",
+  "tree_id": "e1:T2",
+  "parent_id": "f44a435ddec44211",
+  "delegation_parent": "R/T2",
+  "state": "finished",
+  "reserved_tokens": null,
+  "known_or_bounded_tokens": 18759,
+  "unknown_usage": false,
+  "attempts": [
+    {
+      "attempt": 1,
+      "generation_id": "8247268c232e48cc-h01",
+      "state": "development_passed",
+      "llm_calls": 1,
+      "source_digest_before_call": "635bff8892b4701c9890c5208f18a3a2ca92d706db122bdd2c2dd6197f1a1da0",
+      "generation_usage": {
+        "backend": "codex-mailbox",
+        "cached_tokens_included_in_input": true,
+        "codex_jsonl_sha256": "a2b9ddfac02ead64e26ef6a066bf303ddc84da81209fd13f7972c17b813fbdf7",
+        "events": [
+          {
+            "cache_write_input_tokens": 0,
+            "cached_input_tokens": 6400,
+            "input_tokens": 15828,
+            "output_tokens": 2931,
+            "reasoning_output_tokens": 2070
+          }
+        ],
+        "forbidden_tool_events": [],
+        "llm_calls": 1,
+        "mcp_tool_calls": [],
+        "model_requested": "gpt-6-luna",
+        "model_skills": {
+          "conversation": null,
+          "effective_instructions_sha256": "a3bf11d4fa1b442f3ce3b8f9d3db6ff8be9d5741a2c919159d96937ca556300c",
+          "loading": "explicit_system_instructions",
+          "manifest": {
+            "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+            "loaded": [
+              {
+                "name": "conduire-experience-optimisation",
+                "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+              },
+              {
+                "name": "inspecter-environnement",
+                "path": "assets/skills/inspecter-environnement/SKILL.md",
+                "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+              },
+              {
+                "name": "evaluer-performances",
+                "path": "assets/skills/evaluer-performances/SKILL.md",
+                "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+              }
+            ],
+            "phase": "research",
+            "role": "T2",
+            "version": "hpc-forest-project-skills-v1"
+          },
+          "mission_id": "8247268c232e48cc-h01",
+          "model_declarations_are_execution_proof": false,
+          "model_reported": [
+            {
+              "name": "conduire-experience-optimisation",
+              "references": [
+                "f44a435ddec44211"
+              ],
+              "status": "applied",
+              "summary": "Changed only the large-input CTA cap to test the atomic-count versus parallelism tradeoff."
+            },
+            {
+              "name": "inspecter-environnement",
+              "references": [],
+              "status": "not_needed",
+              "summary": "The experiment uses the existing CUDA/CUB path and introduces no hardware-specific feature; the controller will measure it on the frozen target."
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "references": [],
+              "status": "not_needed",
+              "summary": "No new API, instruction, or compiler behavior is needed for a cap-only change."
+            },
+            {
+              "name": "evaluer-performances",
+              "references": [
+                "f44a435ddec44211",
+                "baseline-e1"
+              ],
+              "status": "applied",
+              "summary": "Recorded the measured parent and baseline for context, without claiming a result for the unmeasured candidate."
+            }
+          ],
+          "native_turn_completed": true,
+          "nonce": "a85277bfa4c5438f989ac0ef4919bd59",
+          "observed_mcp_calls": [],
+          "report_error": null,
+          "report_status": "reported",
+          "request_sha256": "46b08aab7ac91ef0e489d82e703da68d71eca5918ec3c656c8417e00234cbeab",
+          "schema": "hpc-forest-project-skills-v1",
+          "session_id": "9b36f1da2fcd4bf3b7a71e91231ca668"
+        },
+        "observed_tokens": 18759,
+        "reasoning_effort_requested": "max",
+        "token_accounting": "exact",
+        "tokens": 18759,
+        "tool_events": [],
+        "tool_runtime_errors": [],
+        "turn_failure_messages": [],
+        "model": "gpt-6-luna",
+        "reasoning_effort": "max",
+        "request_sha256": "46b08aab7ac91ef0e489d82e703da68d71eca5918ec3c656c8417e00234cbeab",
+        "memory_lessons": [
+          {
+            "applicability": "The current parent using a 1024-CTA cap was correct on all 10 reported cases and measured 0.4474 ms mean; that result does not isolate the cap's effect or establish that fewer CTAs will be faster.",
+            "claim": "The selected single-kernel parent is valid across the reported sizes and seeds, but its performance provides no evidence yet about a smaller CTA cap.",
+            "evidence_ids": [
+              "f44a435ddec44211"
+            ],
+            "next_experiment": "Measure this 256-CTA cap under the same protocol, including output reset and launch overhead, and compare correctness and timing with the parent."
+          }
+        ],
+        "rejected_memory_lessons": []
+      },
+      "generation_error": null,
+      "tokens": 18759,
+      "proposal": {
+        "hypothesis": "Reducing the large-input grid cap from 1024 to 256 limits output atomics to at most 256 per call while preserving one input pass and the per-call reset. This may reduce contention, but it may also reduce memory-level parallelism; the controller should compare total time including reset and launch overhead and validate every required size and the FP64 tolerance.",
+        "transformations": {
+          "retained": [
+            "Keep the asynchronous per-call output reset and the one-pass input reduction with one CTA atomicAdd.",
+            "Reduce the large-input grid cap from 1024 CTAs to 256; retain ceil(n/256) blocks for smaller inputs."
+          ],
+          "files": [
+            "src/candidate.cu"
+          ]
+        }
+      },
+      "source_digest": "e8d2439453028e1999b75f1dee847a827f6e3fda92aa707fe7551940475a9a3a",
+      "development_outcome": {
+        "status": "development_valid",
+        "commit": "5b3b78221156803ce6506354a1e279c9d6b694af",
+        "tree_hash": "8a4b0261012a696c9f2d588a64c2941ccb27a10c",
+        "binary_sha256": "08d2468700443dc87472d60c682db312715ddfbc04ee792ca1d5b84f2a2cba4c",
+        "correct": true,
+        "times": [],
+        "reason": "",
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-active-sumabs-9b36f1da2fcd4bf3b7a71e91231ca668/results-783132/reference-sumabs/logs/e1/8247268c232e48cc-h01/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-active-sumabs-9b36f1da2fcd4bf3b7a71e91231ca668/results-783132/reference-sumabs/logs/e1/8247268c232e48cc-h01/search/attempt-001/correctness.log"
+        ],
+        "cache_key": "0ac577df9babb4ace3bb17fdd0c2f76f645dc0bc3e6b2f4ed4901ee6575a9d05"
+      },
+      "measured_diagnostics": [
+        {
+          "path": "logs/e1/8247268c232e48cc-h01/search/attempt-001/build.log",
+          "text": "",
+          "truncated": false
+        },
+        {
+          "path": "logs/e1/8247268c232e48cc-h01/search/attempt-001/correctness.log",
+          "text": "{\"correct\": true, \"cases\": 10, \"details\": [{\"case_id\": \"sumabs\", \"n\": 1, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0}, {\"case_id\": \"sumabs\", \"n\": 1, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0}, {\"case_id\": \"sumabs\", \"n\": 127, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0}, {\"case_id\": \"sumabs\", \"n\": 127, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 7.62939453125e-06}, {\"case_id\": \"sumabs\", \"n\": 1024, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0}, {\"case_id\": \"sumabs\", \"n\": 1024, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0}, {\"case_id\": \"sumabs\", \"n\": 1048576, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.1875}, {\"case_id\": \"sumabs\", \"n\": 1048576, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0}, {\"case_id\": \"sumabs\", \"n\": 268435456, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 23, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 0.0}, {\"case_id\": \"sumabs\", \"n\": 268435456, \"h\": 0, \"l\": 0, \"k\": 0, \"seed\": 60, \"correct\": true, \"errors\": 0, \"guards\": true, \"input_unchanged\": true, \"max_abs_error\": 64.0}]}\n",
+          "truncated": false
+        }
+      ]
+    }
+  ],
+  "development_checks": 1,
+  "outer_tree_reward_assigned": false,
+  "holdout_access": false
+}

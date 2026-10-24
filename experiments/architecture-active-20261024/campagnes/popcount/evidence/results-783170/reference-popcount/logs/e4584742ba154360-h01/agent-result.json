@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "/*\n * Copyright (c) 2007 Bart Massey\n * [This program is licensed under the \"MIT License\"]\n * Please see the file LICENSE in the source\n * distribution of this software for license terms.\n */\n\n#include <cstdint>\nstatic inline uint32_t\npopcount_builtin(uint32_t n) {\n    return static_cast<uint32_t>(__builtin_popcount(static_cast<unsigned int>(n)));\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\n\nextern \"C\" void run(const void* input1, const void* input2, void* output,\n                     int n, int parameter, int threads)\n{\n    const uint32_t* a = static_cast<const uint32_t*>(input1);\n    uint32_t result = 0;\n\n    for (int j = 0; j < parameter; ++j) {\n        const uint32_t* p = a;\n        int remaining = n;\n        while (remaining >= 2) {\n            result += popcount_builtin(p[0] ^ result);\n            result += popcount_builtin(p[1] ^ result);\n            p += 2;\n            remaining -= 2;\n        }\n        if (remaining > 0)\n            result += popcount_builtin(*p ^ result);\n    }\n\n    *static_cast<uint32_t*>(output) = result;\n}\n",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "The prior fixed-popcount, factor-two unroll trial was valid and measured 0.000974642 s versus the baseline's 0.001046088 s, but that single result does not establish the cause or repeatability of the difference. This candidate tests whether the same modest paired, sequential updates combine well with GCC's exact 32-bit population-count builtin. The recurrence order and uint32 wraparound remain unchanged; the controller must measure this complete program.",
+  "notes": "The paired updates are applied in the original order, with a one-element tail for odd sizes. The pointer is reset for each repetition; execution remains serial and output is overwritten. No measurement or correctness validation has been performed on this candidate; leave both to the controller.",
+  "sources_kept": [],
+  "transformations": [
+    "Replace the bit-by-bit population count with GCC __builtin_popcount for each uint32_t value.",
+    "Traverse each repetition in pairs with a pointer and handle an odd final element separately.",
+    "Preserve the sequential recurrence update order, uint32_t arithmetic, serial execution, and output overwrite."
+  ]
+}

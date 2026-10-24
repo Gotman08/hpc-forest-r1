@@ -1,0 +1,166 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "5be6679d34e629a8f731453a2dfa8318b083af39613d0edd43ce0da0815ffb85",
+    "tree_id": "e1:Gm1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "1395d856b89b4d08",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "1395d856b89b4d08",
+        "facts": {
+          "commit": "57a154894cdff496fd194c11a9085e4c505f6386",
+          "base_commit": "8c144b3264c47b324ac3723e891093bfdb9cd5f1",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 9.89453493379696e-07,
+          "score": 0.8185385671638985
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The catalog has two distinct valid programs and no repeats: the first-block-seeded lane-state variant measured about 0.990 µs, the sentinel/masked-tail variant about 1.718 µs, and the baseline about 4.463 µs. This candidate tests whether maintaining vector index state each block is costly: it keeps signed lane minima in AVX-512, but updates scalar absolute indices only for lanes selected by the strict-lower mask. Sparse updates might benefit; decreasing inputs may make mask decoding slower. No speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"For n below 16, retain a scalar argmin; otherwise seed 16 signed lane minima from the first complete vector and initialize each lane's earliest absolute index.\",\"For each later complete vector, update SIMD minima with signed strict-less comparisons and decode the changed-lane mask to write only those lanes' scalar indices.\",\"Combine lane results by value then earliest index, then process the scalar tail with the same ordering; return index zero for non-positive n.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "8d1cb2ab28e04b5a",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "8d1cb2ab28e04b5a",
+        "facts": {
+          "commit": "dc6078d0ffb2f78fcba9c71d900b17d924225c5b",
+          "base_commit": "8c144b3264c47b324ac3723e891093bfdb9cd5f1",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.304603966666666e-07,
+          "score": 0.9120378443885775
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The first-pass four-accumulator variant measured 5.26604e-7 seconds versus 5.25586e-7 for the single-accumulator two-pass version, a small difference that does not establish an effect. This experiment keeps the single vector-minimum recurrence and instead unrolls the equality search across four vectors before checking for a match. Reducing loop and mask-check frequency may help when the search prefix is long, but loading a whole group can waste work on earlier matches; random and decreasing inputs may therefore behave differently.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Compute the signed int32 minimum with one AVX-512 minimum accumulator and reduce it, including a scalar tail.\",\"Search from index zero using four unrolled AVX-512 equality comparisons per group; choose the earliest matching vector and lowest matching lane.\",\"Retain a vector remainder scan and scalar tail so incomplete groups and all valid lengths are handled.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "8c144b3264c47b324ac3723e891093bfdb9cd5f1",
+          "base_commit": "8c144b3264c47b324ac3723e891093bfdb9cd5f1",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.4632395550290205e-06,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm1",
+        "subject": "Hybride T2 à deux passes et suivi d’indices par lane de T1",
+        "objective": "Partir de la candidate T2, la plus rapide mesurée, et tester une hybridation qui reprend le suivi des minima et indices les plus précoces par lane de T1 afin d’éviter le second balayage de T2. Conserver la réduction vectorielle signée et les queues correctes; comparer le résultat mesuré à T2 sans présumer d’un gain.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "1395d856b89b4d08",
+    "8d1cb2ab28e04b5a",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "dc6078d0ffb2f78fcba9c71d900b17d924225c5b",
+  "selected_parent_id": null
+}

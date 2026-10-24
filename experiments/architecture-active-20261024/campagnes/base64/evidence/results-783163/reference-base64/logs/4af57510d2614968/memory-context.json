@@ -1,0 +1,421 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "f859ed57d3b7360c0950ba347177b8153a39e8291d7510b062ff04f2c0f2941f",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "9fa13cab1cf14b4c",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "9fa13cab1cf14b4c",
+        "facts": {
+          "commit": "1f58b1edfec8910e51d3432a616b52364a602860",
+          "base_commit": "4232af68fceeaee492ef670b5474780a7c878828",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.9773619913346982e-05,
+          "score": 0.735555388634538
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured AVX2 candidates do not isolate mapping cost: the valid single-block candidate averaged 22.43 µs and a paired-loop candidate 17.93 µs. This experiment tests whether forming one per-byte arithmetic offset from the existing mutually exclusive range masks, then adding it to the input vector, is faster than separate class-specific arithmetic mappings. The combined offset may reduce mapping instructions but add dependency depth; short inputs and tails should remain unaffected.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Moved standard headers, including <cstring>, before their first use to address the known build diagnostic.\",\"Replaced separate class-specific sextet arithmetic with per-class arithmetic offsets combined under the existing AVX2 range masks, followed by one vector byte addition; retained vector packing and all scalar, tail, padding, dispatch, and bounded memory paths.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "d3c9857d0af34a15",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "d3c9857d0af34a15",
+        "facts": {
+          "commit": "a2d9b9a02722e9bcdeb355e0b565f1e24db039d8",
+          "base_commit": "3825a445a7749fb44b9e23d1cdf4ecbbae93fe31",
+          "parent_id": "49c9a44541894d26",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0005891625114808199,
+          "score": 0.08538292738239964
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured low-six-bit VBMI mapper was correct but slower than the baseline (82.57 µs vs 55.00 µs). Test a contrasting direct seven-bit mapping: two 64-byte VBMI tables selected by ASCII bit 6, with invalid entries marked in-table, to see whether removing collision corrections offsets the cost of a second permutation.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace the parent's single low-six-bit mapping plus digit/punctuation correction masks with two 64-byte tables for ASCII low and high banks, selected by bit 6.\",\"Mark invalid table entries with 0xff and reject non-ASCII input before packing; retain a scalar fallback for unsupported ISA, invalid vector blocks, tails, and terminal padding quartets.\",\"Reorder packed-byte selection to emit decoded bytes in source order, use bounded 64-byte input loads and 48-byte output stores, and preserve the existing single-thread behavior.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "722a395607c74fc1",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "722a395607c74fc1",
+        "facts": {
+          "commit": "e6883c3d353ab3d96783651a74edbc6bce212089",
+          "base_commit": "4232af68fceeaee492ef670b5474780a7c878828",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "score": 0.0
+        },
+        "diagnostic": "Protected correctness checks failed",
+        "model_interpretation": {
+          "claim": "Prior scalar unroll choices were all slower than the 55.00 µs baseline, and the staged two-group variant failed correctness on Lena. This contrasting two-group schedule tests whether interleaved lookups followed by one combined validity branch and an all-or-nothing exact-size output commit can reduce valid-path control overhead while keeping invalid input and padding in the existing scalar path. No speedup or correctness result is assumed before controller evaluation.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Changed only the bulk decode loop in src/candidate.cpp to interleave scalar table lookups for two independent eight-character groups.\",\"Combined validity checks for both groups before storing output or advancing input, leaving an invalid group for the original scalar fallback.\",\"Kept the existing 21-character guard, exact six-byte-per-group writes, scalar tail and padding handling, and threads behavior; added no explicit SIMD or parallel execution.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "f42c40ea87974114",
+        "kind": "experiment",
+        "role": "T4",
+        "tree_id": "e1:T4",
+        "mission_id": "f42c40ea87974114",
+        "facts": {
+          "commit": "0e4cdb24a73d73e29684c0e77e6b41ec15c08029",
+          "base_commit": "4875cffce1496b1be0a9b39b9e393a16809d92ed",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 9.002922821400202e-06,
+          "score": 0.8593369105883983
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "La source AVX2 fournie omet déjà le masque de validité et le movemask par bloc; le dernier candidat T4 similaire était correct à 15,47 µs. Pour éviter une répétition, cette variante conserve ce chemin sans validation et remplace les comparaisons de classes ASCII par une table d’offsets `vpshufb` indexée par nibble, avec une correction dédiée à `/`. Cela peut réduire le coût de mapping des blocs complets, mais le gain reste à mesurer.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Remplacement de la combinaison de comparaisons SIMD de classes ASCII par des offsets sélectionnés par `vpshufb` sur le nibble supérieur, plus une correction de trois pour `/`.\",\"Conservation du mapping sans calcul de masque de validité ni test movemask/fallback par bloc complet.\",\"Conservation du bit-packing, des stores bornés de 24 octets, du dispatch runtime AVX2 et du chemin scalaire de suffixe/padding.\",\"Correction de la continuation des deux directives préprocesseur pour ne contenir qu’un antislash source.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "4232af68fceeaee492ef670b5474780a7c878828",
+          "base_commit": "4232af68fceeaee492ef670b5474780a7c878828",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.500052583780187e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "9fa13cab1cf14b4c-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "9fa13cab1cf14b4c",
+        "facts": {
+          "commit": null,
+          "base_commit": "4232af68fceeaee492ef670b5474780a7c878828",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "build_failed",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Build failed or exceeded candidate timeout",
+        "model_interpretation": {
+          "claim": "The recorded range-classification AVX2 candidate was valid but measured at 22.43 µs, while a paired-block candidate measured 17.93 µs. Replacing shift/mask-based bit assembly with AVX2 pairwise multiply-add packing and lane interleaving may reduce packing work; classification overhead, stores, or tails could erase any gain. This candidate keeps bounded full-block accesses and uses scalar decoding when its vector or safe-quartet paths cannot accept the input.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Retained the original scalar decoder under an internal reference name to preserve fallback behavior for malformed inputs.\",\"Added an AVX2-targeted full-block decoder with vector range masks and arithmetic offsets for the Base64 alphabet; invalid vector blocks fall back to the reference path.\",\"Replaced per-output-bit assembly with AVX2 pairwise multiply-add packing, saturating pack operations, and lane-local byte interleaving; loads are bounded to 32 input bytes and exactly 24 output bytes are copied per block.\",\"Decoded the residual input in bounded four-character quartets, preserving terminal padding while avoiding wide scalar stores on valid short inputs and tails; unrecognized input falls back to the original decoder.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 53,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "AVX2 arithmetic-classification decoder",
+        "objective": "In its own research branch, modify only src/candidate.cpp to evaluate an AVX2 decoder whose primary mapping method is vector range classification and arithmetic offsets, followed by vector bit packing—not a wide table-permute lookup. Use safe block loads/stores and a correct tail/padding path; verify ISA support under the frozen build without changing flags. Preserve exact output semantics and stay within the threads budget. Validate empty and short strings plus lengths around vector-block boundaries, all padding cases, random valid inputs, and the official Lena input before repeated native timing. Do not specialize to its length; record failures and results.",
+        "records": 16,
+        "results": {
+          "trials": 4,
+          "valid": 3,
+          "incorrect": 1,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "3bf34d0190944fef",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.793490482861376e-05,
+          "hypothesis_as_data": "The recorded single-vector AVX2 candidate is valid and faster than baseline, but its per-32-byte loop may retain avoidable loop-control overhead. Processing pairs of complete 32-character blocks per iteration may reduce that overhead for lo"
+        },
+        "latest": {
+          "id": "9fa13cab1cf14b4c",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.9773619913346982e-05,
+          "hypothesis_as_data": "The measured AVX2 candidates do not isolate mapping cost: the valid single-block candidate averaged 22.43 µs and a paired-loop candidate 17.93 µs. This experiment tests whether forming one per-byte arithmetic offset from the existing mutual"
+        },
+        "alternative": {
+          "id": "9fa13cab1cf14b4c",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.9773619913346982e-05,
+          "hypothesis_as_data": "The measured AVX2 candidates do not isolate mapping cost: the valid single-block candidate averaged 22.43 µs and a paired-loop candidate 17.93 µs. This experiment tests whether forming one per-byte arithmetic offset from the existing mutual"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "AVX-512VBMI permutation decoder",
+        "objective": "In its own research branch, modify only src/candidate.cpp to evaluate a distinct AVX-512VBMI table-permutation approach for mapping Base64 input bytes to six-bit values, then pack decoded bytes. Do not merely widen T1’s loop: contrast its mapping strategy explicitly. Verify the required instructions are enabled by the frozen build and supported by the target; do not change compiler flags or assume 512-bit execution is faster. Use safe loads/stores and correct tails/padding, preserve exact output semantics, and respect the threads budget. Validate empty and short strings, lengths around vector-block boundaries, every padding case, random valid inputs, and the official Lena input before repeated native timing; record unsupported-ISA and performance failures.",
+        "records": 9,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "49c9a44541894d26",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 8.257233535980233e-05,
+          "hypothesis_as_data": "Un test séparé de l’élargissement d’une boucle est possible en changeant explicitement le mécanisme de mapping : permuter un dictionnaire de 64 octets avec AVX-512VBMI, indexé par les six bits bas de chaque caractère, puis corriger les caté"
+        },
+        "latest": {
+          "id": "d3c9857d0af34a15",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0005891625114808199,
+          "hypothesis_as_data": "The measured low-six-bit VBMI mapper was correct but slower than the baseline (82.57 µs vs 55.00 µs). Test a contrasting direct seven-bit mapping: two 64-byte VBMI tables selected by ASCII bit 6, with invalid entries marked in-table, to see"
+        },
+        "alternative": {
+          "id": "d3c9857d0af34a15",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0005891625114808199,
+          "hypothesis_as_data": "The measured low-six-bit VBMI mapper was correct but slower than the baseline (82.57 µs vs 55.00 µs). Test a contrasting direct seven-bit mapping: two 64-byte VBMI tables selected by ASCII bit 6, with invalid entries marked in-table, to see"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T3",
+        "subject": "Scalar table-loop unrolling",
+        "objective": "In its own research branch, modify only src/candidate.cpp to test scalar scheduling improvements to the existing table-driven eight-character/six-byte decode loop: unroll multiple independent groups so table lookups can overlap and loop overhead is amortized. Keep this a scalar-focused contrast to the SIMD trees; do not add explicit SIMD or parallel execution. Preserve exact output semantics, safe tails/padding, and the threads budget. Validate empty and short strings, lengths around the unrolled-group boundary, every padding case, random valid inputs, and the official Lena input before repeated native timing. Do not specialize to the benchmark length; record unsuccessful unroll/group-size choices and results.",
+        "records": 19,
+        "results": {
+          "trials": 6,
+          "valid": 4,
+          "incorrect": 2,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 6,
+          "distinct_programs": 6,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "624f7b074b9c4fc6",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 6.381195391645677e-05,
+          "hypothesis_as_data": "The only measured unroll candidate so far—two 8-character groups—was correct but slower than baseline (82.32 µs versus 55.00 µs mean). This contrasting four-group schedule computes each group’s table lookups before validating the group, the"
+        },
+        "latest": {
+          "id": "722a395607c74fc1",
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "hypothesis_as_data": "Prior scalar unroll choices were all slower than the 55.00 µs baseline, and the staged two-group variant failed correctness on Lena. This contrasting two-group schedule tests whether interleaved lookups followed by one combined validity bra"
+        },
+        "alternative": {
+          "id": "5b164d060a4d4cb3",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 8.129514219078062e-05,
+          "hypothesis_as_data": "The three prior scalar schedules were correct but slower than the 55.00 µs baseline: two groups measured 82.32 µs, three groups 147.64 µs, and four groups 63.81 µs. The catalog reports three distinct prior programs. This eight-group (64-inp"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T4",
+        "subject": "Voie rapide AVX2 sans validation par bloc",
+        "objective": "À partir de la source AVX2 correcte mesurée, tester une voie rapide pour les blocs complets de 32 caractères qui supprime le calcul du masque de validité et le test movemask/fallback de chaque bloc. La précondition d’entrée est une Base64 standard valide; conserver le mapping, le bit-packing, la gestion scalaire du suffixe/padding et les accès sûrs. Ne pas spécialiser à Lena. Valider avec des chaînes valides aléatoires, des longueurs variées et le cas officiel, puis mesurer sur la cible. Arrêter si la correction échoue ou si la moyenne ne bat pas 17,93 µs.",
+        "records": 8,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "f42c40ea87974114",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 9.002922821400202e-06,
+          "hypothesis_as_data": "La source AVX2 fournie omet déjà le masque de validité et le movemask par bloc; le dernier candidat T4 similaire était correct à 15,47 µs. Pour éviter une répétition, cette variante conserve ce chemin sans validation et remplace les compara"
+        },
+        "latest": {
+          "id": "f42c40ea87974114",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 9.002922821400202e-06,
+          "hypothesis_as_data": "La source AVX2 fournie omet déjà le masque de validité et le movemask par bloc; le dernier candidat T4 similaire était correct à 15,47 µs. Pour éviter une répétition, cette variante conserve ce chemin sans validation et remplace les compara"
+        },
+        "alternative": {
+          "id": "744cf508453f4ba6",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.5468589717213848e-05,
+          "hypothesis_as_data": "The input contract guarantees standard Base64, so every byte in each full 32-character, unpadded AVX2 block belongs to exactly one mapping class. Removing the aggregate validity vector, movemask branch, and per-block failure return should s"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 4,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "9fa13cab1cf14b4c",
+    "d3c9857d0af34a15",
+    "722a395607c74fc1",
+    "f42c40ea87974114",
+    "baseline-e1",
+    "9fa13cab1cf14b4c-h01",
+    "3bf34d0190944fef",
+    "49c9a44541894d26",
+    "624f7b074b9c4fc6",
+    "5b164d060a4d4cb3",
+    "744cf508453f4ba6"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "0e4cdb24a73d73e29684c0e77e6b41ec15c08029",
+  "selected_parent_id": null
+}

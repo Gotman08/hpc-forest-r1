@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "#include <cuda_runtime.h>\n\n__global__ void sgemm_coalesced(int M, int N, int K, float alpha,\n                                const float *A, const float *B, float beta,\n                                float *C) {\n  const int col = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);\n  const int row = static_cast<int>(blockIdx.y * blockDim.y + threadIdx.y);\n\n  if (row < M && col < N) {\n    float sum = 0.0f;\n    const size_t a_row = static_cast<size_t>(row) * static_cast<size_t>(K);\n    const size_t b_col = static_cast<size_t>(col);\n    for (int p = 0; p < K; ++p) {\n      sum += A[a_row + static_cast<size_t>(p)] *\n             B[static_cast<size_t>(p) * static_cast<size_t>(N) + b_col];\n    }\n    const size_t c_index = static_cast<size_t>(row) * static_cast<size_t>(N) + b_col;\n    C[c_index] = alpha * sum + beta * C[c_index];\n  }\n}\n\nextern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n                    int n, int m, int k, float alpha, float beta) {\n  if (n <= 0 || m <= 0) {\n    return;\n  }\n  const dim3 block(32, 32);\n  const dim3 grid((m - 1) / 32 + 1, (n - 1) / 32 + 1);\n  sgemm_coalesced<<<grid, block>>>(n, m, k, alpha, A, B, beta, C);\n}\n",
+      "path": "src/candidate.cu"
+    }
+  ],
+  "hypothesis": "Mapping threadIdx.x to output columns while keeping the serial K loop and 32-by-32 CTA output shape should give each warp contiguous B and C accesses (and a broadcast A access), isolating the baseline lane-mapping cost before adding shared-memory tiling. This is a hypothesis; the controller must measure it.",
+  "notes": "This is the coalesced one-output-per-thread control only; shared-memory tile variants are left for a later experiment. The controller should check correctness and collect repeated timings; no candidate result is claimed here.",
+  "sources_kept": [],
+  "transformations": [
+    "Reoriented the output mapping so threadIdx.x varies over columns and adjacent lanes access contiguous B and C elements.",
+    "Retained one output per thread, the serial full-FP32 K accumulation, and the existing alpha/beta update.",
+    "Kept the 32-by-32 CTA output shape and added bounds checks for matrix tails; used size_t for element offsets and avoided overflowing ceil-division expressions."
+  ]
+}

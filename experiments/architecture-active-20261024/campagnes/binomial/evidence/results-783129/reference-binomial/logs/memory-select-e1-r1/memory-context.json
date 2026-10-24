@@ -1,0 +1,465 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "cbfb9198c27699b03b580064f2c92a1167e56e51e70234c3a39b58b239f7b244",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "90b739a8b59c4b0e",
+        "kind": "experiment",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "90b739a8b59c4b0e",
+        "facts": {
+          "commit": "05672dd3fb6f3eb2145eed75a7df410b313d2f13",
+          "base_commit": "44f7ab510902eb9c9ca1d7a34fefb8db0505d525",
+          "parent_id": null,
+          "source_ids": [
+            "b9f90f30f9684579",
+            "6ffd5d83eb5045bc"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.037431956934238335,
+          "score": 0.9126268128430617
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Combiner le parallélisme externe borné de T1 avec les lots SIMD de huit options indépendantes de T4 peut conserver l’efficacité observée de T1 sur les grands appels tout en vectorisant les calculs de rollback. Les performances ne sont pas supposées additives : T4 seul est plus lent que T1, et seul le protocole officiel peut établir l’effet de leur combinaison.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Conservé le dispatch parallèle externe de T1, avec workers bornés par le budget fourni et au moins 256 éléments par worker; réparti les lots SIMD plutôt que les éléments individuels.\",\"Adapté le traitement SIMD de T4 en lots de huit options avec stockage lane-contiguous et directives OpenMP SIMD pour l’initialisation, les payoffs terminaux, le rollback et les stores; traité aussi les lots incomplets.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "65b8f9b9574545c1",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "65b8f9b9574545c1",
+        "facts": {
+          "commit": "e62c55ddd46704700ec0ec5a5ebbdb80ef7abaf2",
+          "base_commit": "9cf372347d35e0d5463d3211b451a73e7b657be6",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.07192095722775113,
+          "score": 0.8446308408045907
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The prior valid static-worksharing candidate with a 256-element-per-worker dispatch threshold measured 0.071596 seconds; direct contiguous ranges at that threshold measured 0.072476 seconds. Those whole-call measurements are close and do not establish the scheduler as the cause. This contrasting candidate keeps static scheduling but lowers the per-worker threshold to 64, testing whether parallelizing n=128 with two workers (while keeping n=16 serial) amortizes dispatch overhead; worker count remains bounded by the supplied threads budget. The new candidate is unmeasured.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Factored the unchanged per-input binomial pricing calculation into a helper with private stack-local intermediates, allowing independent calls from serial and parallel paths.\",\"Retained a serial path for counts below 128 or a caller thread budget of one.\",\"For larger calls, requested min(threads, count / 64) workers and used static OpenMP loop scheduling; each iteration fully overwrites its corresponding result, without changing global OpenMP controls.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "31acf205101441a9",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "31acf205101441a9",
+        "facts": {
+          "commit": "d892b6e9b3e5b1ebd892719699cb592afa85f0dd",
+          "base_commit": "9cf372347d35e0d5463d3211b451a73e7b657be6",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3307775245415403,
+          "score": 0.541707207034574
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Binary decomposition of the even terminal exponents can replace 64 powf calls per input with a small table of squared powers and bounded products, without the long sequential recurrence tested previously. Double-precision table construction and composition may limit drift, but loop overhead, reciprocals, payoff-boundary sensitivity, and full-call speed remain unmeasured.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Precompute double-precision powers of u^2 and their reciprocals by repeated squaring.\",\"Generate each of the 64 terminal powers by composing the table entries selected by the magnitude's binary representation, preserving exponents -64 through 62 by twos.\",\"Keep the max(0, X-S*upow) terminal payoff calculation and the existing rollback unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "31c053d9f320458b",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "31c053d9f320458b",
+        "facts": {
+          "commit": "416b9ab7f063e46b544ceaa19d48c4502d21aa9c",
+          "base_commit": "6d8e903ef611840f75ad317874f8217df7c4d04e",
+          "parent_id": "31838b58b6c34a43",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3042913398144954,
+          "score": 0.5623433240749224
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Explicitly fusing the down-weight product with the weighted-sum addition may reduce rollback arithmetic latency and intermediate rounding while preserving the precomputed coefficients and traversal. The prior hoisted-weight parent was correct on all 8 varied cases (maximum absolute error 0.0003281) at 0.29647 s mean; the separate shared-denominator variant was also correct at 0.29428 s. This FMA candidate still requires controller accuracy and whole-call timing measurements.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Use `fmaf(downWeight, V[k], upWeight * V[k + 1])` for the rollback weighted sum, fusing one multiplication and the addition.\",\"Retain the existing precomputed transition weights, descending j traversal, ascending k traversal, and endpoint convention.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "649a050361b14203",
+        "kind": "experiment",
+        "role": "T4",
+        "tree_id": "e1:T4",
+        "mission_id": "649a050361b14203",
+        "facts": {
+          "commit": "a4ff14783f9dc3354841573c1efd51eb4d1c79c9",
+          "base_commit": "9cf372347d35e0d5463d3211b451a73e7b657be6",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3910746968030516,
+          "score": 0.499941204297063
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The previous explicit eight-lane batch was valid and measured 0.17501 s versus the 0.39098 s baseline, but that does not isolate the benefit of its mapping. This contrasting experiment puts the SIMD dimension directly on the outer loop over independent options, with each iteration owning its local V array. Letting the compiler choose the SIMD width may avoid fixed-batch and scratch-management overhead; scalarized powf calls or spills could instead limit performance. Terminal-power generation and rollback order and arithmetic remain unchanged. The new candidate has not been measured.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Apply OpenMP SIMD to the outer loop over independent options, using a per-iteration local V array instead of explicit fixed-width lane batches.\",\"Leave each option's terminal powf expression, rollback loop order, and rollback arithmetic unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "9cf372347d35e0d5463d3211b451a73e7b657be6",
+          "base_commit": "9cf372347d35e0d5463d3211b451a73e7b657be6",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3909827335703398,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 34,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Outer-loop CPU parallelism and thread-budget-aware dispatch",
+        "objective": "In `src/candidate.cpp`, investigate parallelizing the independent per-element pricing work and dispatch using the supplied `threads` budget. Explore a low-overhead serial path for small workloads and suitable work partitioning without hardcoding the environment's 40-thread setting or changing global OpenMP controls. Preserve complete output overwrite and correctness for every entry. Compare whole-call timings across the official workload and available `n`/`threads` cases, including parallel overhead, and record failed scheduling or threshold variants.",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "b9f90f30f9684579",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.07159570636544861,
+          "hypothesis_as_data": "The pricing for each input is independent and has a fixed-size 64-node initialization and rollback, so a static outer-loop partition should reduce the dominant large-call work without synchronization between elements. The dispatch limits wo"
+        },
+        "latest": {
+          "id": "65b8f9b9574545c1",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.07192095722775113,
+          "hypothesis_as_data": "The prior valid static-worksharing candidate with a 256-element-per-worker dispatch threshold measured 0.071596 seconds; direct contiguous ranges at that threshold measured 0.072476 seconds. Those whole-call measurements are close and do no"
+        },
+        "alternative": {
+          "id": "65b8f9b9574545c1",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.07192095722775113,
+          "hypothesis_as_data": "The prior valid static-worksharing candidate with a 256-element-per-worker dispatch threshold measured 0.071596 seconds; direct contiguous ranges at that threshold measured 0.072476 seconds. Those whole-call measurements are close and do no"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "Reduce terminal-state power-function cost without changing endpoint convention",
+        "objective": "In `src/candidate.cpp`, focus only on generating terminal payoffs more cheaply than 64 repeated `powf` evaluations per input. Explore a recurrence or other general power-generation method while preserving all 64 terminal indices and their existing exponents `2*j-64` (`-64` through `62` by twos), the `max(0, X-S*upow)` floor, and the subsequent rollback. Validate varied inputs, especially values near payoff boundaries, against the fixed tolerance; record failed numerical variants and compare full-call timings.",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "1dc5570ef1884777",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.2968683685674755,
+          "hypothesis_as_data": "A two-sided recurrence anchored at exponent zero can eliminate powf calls entirely: powers on each side use at most 32 multiplications, rather than the parent's eight powf seeds and seven-step segments. Accumulating powers in double should "
+        },
+        "latest": {
+          "id": "31acf205101441a9",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3307775245415403,
+          "hypothesis_as_data": "Binary decomposition of the even terminal exponents can replace 64 powf calls per input with a small table of squared powers and bounded products, without the long sequential recurrence tested previously. Double-precision table construction"
+        },
+        "alternative": {
+          "id": "31acf205101441a9",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3307775245415403,
+          "hypothesis_as_data": "Binary decomposition of the even terminal exponents can replace 64 powf calls per input with a small table of squared powers and bounded products, without the long sequential recurrence tested previously. Double-precision table construction"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T3",
+        "subject": "Hoist invariant rollback coefficients and reduce per-state arithmetic",
+        "objective": "In `src/candidate.cpp`, focus on the rollback transition expression: explore hoisting input-invariant factors (including discount-related division) or equivalent arithmetic rearrangements to reduce work repeated across the 2,080 state updates. Keep the backward `j`/`k` update order and endpoint convention; retain only variants that satisfy the fixed tolerance on varied inputs. Report accuracy and whole-call timing rather than assuming algebraic equivalence guarantees acceptable rounding or speed.",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "55e402f3863b4c72",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.2942833284450579,
+          "hypothesis_as_data": "Factoring the discount and transition-probability denominators into one shared reciprocal may reduce invariant coefficient setup compared with the earlier valid hoisted-weight variant. The backward j/k order and endpoints remain unchanged; "
+        },
+        "latest": {
+          "id": "31c053d9f320458b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3042913398144954,
+          "hypothesis_as_data": "Explicitly fusing the down-weight product with the weighted-sum addition may reduce rollback arithmetic latency and intermediate rounding while preserving the precomputed coefficients and traversal. The prior hoisted-weight parent was corre"
+        },
+        "alternative": {
+          "id": "31c053d9f320458b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3042913398144954,
+          "hypothesis_as_data": "Explicitly fusing the down-weight product with the weighted-sum addition may reduce rollback arithmetic latency and intermediate rounding while preserving the precomputed coefficients and traversal. The prior hoisted-weight parent was corre"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T4",
+        "subject": "SIMD mapping across",
+        "objective": "In `src/candidate.cpp`, explore SIMD or batched execution across independent input elements (or another demonstrably distinct SIMD mapping) while leaving the baseline terminal-power generation and rollback arithmetic formulation unchanged, to avoid duplicating the other trees' subjects. Use onl",
+        "records": 6,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "6ffd5d83eb5045bc",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.1750077131540452,
+          "hypothesis_as_data": "Processing up to eight independent options in contiguous lanes should let the compiler SIMD-vectorize the numerous rollb"
+        },
+        "latest": {
+          "id": "649a050361b14203",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3910746968030516,
+          "hypothesis_as_data": "The previous explicit eight-lane batch was valid and measured 0.17501 s versus the 0.39098 s baseline, but that does not"
+        },
+        "alternative": {
+          "id": "649a050361b14203",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.3910746968030516,
+          "hypothesis_as_data": "The previous explicit eight-lane batch was valid and measured 0.17501 s versus the 0.39098 s baseline, but that does not"
+        },
+        "text_truncated": true
+      },
+      {
+        "role": "Gm1",
+        "subject": "Mesurer l’intégration du parallélisme externe T1 et du SIMD T4",
+        "objective": "Demander un programme combinant les sources T1 et T4, en partant de la source la plus rapide T1. Mesurer et valider le résultat combiné sur le protocole officiel; ne pas supposer les gains additifs. Le comparer à T1, T4 et au baseline.",
+        "records": 3,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "90b739a8b59c4b0e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.037431956934238335,
+          "hypothesis_as_data": "Combiner le parallélisme externe borné de T1 avec les lots SIMD de huit options indépendantes de T4 peut conserver l’efficacité observée de T1 sur les grands appels tout en vectorisant les calculs de rollback. Les performances ne sont pas s"
+        },
+        "latest": {
+          "id": "90b739a8b59c4b0e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.037431956934238335,
+          "hypothesis_as_data": "Combiner le parallélisme externe borné de T1 avec les lots SIMD de huit options indépendantes de T4 peut conserver l’efficacité observée de T1 sur les grands appels tout en vectorisant les calculs de rollback. Les performances ne sont pas s"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 5,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "90b739a8b59c4b0e",
+    "65b8f9b9574545c1",
+    "31acf205101441a9",
+    "31c053d9f320458b",
+    "649a050361b14203",
+    "baseline-e1",
+    "b9f90f30f9684579",
+    "1dc5570ef1884777",
+    "55e402f3863b4c72",
+    "6ffd5d83eb5045bc"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "05672dd3fb6f3eb2145eed75a7df410b313d2f13",
+  "selected_parent_id": null
+}

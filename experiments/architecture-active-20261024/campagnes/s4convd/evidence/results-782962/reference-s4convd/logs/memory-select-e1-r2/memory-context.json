@@ -1,0 +1,472 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "7af34e0eaefb7c68bd0bf0c071b2972e3188b50e8667616ff553de5a3205a8ac",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "38f593e95a0f410e",
+        "kind": "experiment",
+        "role": "G",
+        "tree_id": "e1:G-merge-1-1",
+        "mission_id": "38f593e95a0f410e",
+        "facts": {
+          "commit": "00d4d5f3a753380e4231b7c5409e2e67dd55f3a8",
+          "base_commit": "fa8d09505107630c8ac4fb516310e273ce56d66d",
+          "parent_id": null,
+          "source_ids": [
+            "5711050b847f4e97",
+            "cc2c83db63bc4022"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.008784507751464844,
+          "score": 0.8014734160739847
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "La fusion T2 pourrait réduire le coût du chemin forward/input-gradient lorsqu’elle est combinée au kernel gk quatre-sorties de Gm2; le partage des halos et des filtres pourrait compenser son surcoût constaté seule. Ce gain reste à mesurer sur l’appel complet.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Remplace les deux kernels séparés forward et input-gradient par le kernel fusionné de T2, avec halos et filtre en mémoire partagée sous le seuil de 8 KiB et un chemin global sinon.\",\"Conserve le kernel gk de Gm2: quatre sorties j par CTA, accumulations FP32 et réduction partagée.\",\"Utilise des indices size_t/long long pour les offsets et garde les écritures fraîches des sorties.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "cd2e715d4dd34664",
+        "kind": "experiment",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "cd2e715d4dd34664",
+        "facts": {
+          "commit": "00ff1bab6b637d936c2db36ad601fc6f64715b4f",
+          "base_commit": "976f881a98d9f007e050086732c2972a834c0d75",
+          "parent_id": null,
+          "source_ids": [
+            "f014e1b6f1494b52",
+            "9b2a7876f05a474b"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.013141353607177735,
+          "score": 0.7296316351136916
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le regroupement de plusieurs lignes H dans les CTA forward et input-gradient lorsque L<256 peut réduire les CTA et threads inactifs de ces deux passes, tandis que la réduction gk de T3 reste intacte. Les mesures complètes disponibles favorisent T3 (0,01437546 s) par rapport à T1 (0,03414718 s) et au baseline (0,03546401 s), mais n’isolent pas les kernels; le bénéfice de leur combinaison doit donc être mesuré.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Mappe forward et input-gradient sur plusieurs lignes H par CTA lorsque L<256, avec block.x=L, block.y=floor(256/L) et garde de bornes pour les groupes H incomplets.\",\"Conserve des tuiles x de 256 et une ligne par CTA lorsque L>=256, avec écriture complète et bornes sûres.\",\"Conserve sans modification la réduction FP32 gk par CTA et réduction en mémoire partagée de T3.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "5711050b847f4e97",
+        "kind": "experiment",
+        "role": "Gm2",
+        "tree_id": "e1:Gm2",
+        "mission_id": "5711050b847f4e97",
+        "facts": {
+          "commit": "fa8d09505107630c8ac4fb516310e273ce56d66d",
+          "base_commit": "746a3d0af789cf66ab83c77e429ef4e6bd87e808",
+          "parent_id": null,
+          "source_ids": [
+            "f014e1b6f1494b52",
+            "b95765cb6a144c79"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.008074953397115071,
+          "score": 0.8145350248781509
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Pour L<256, empaqueter floor(256/L) lignes H dans les CTA des kernels forward et input-gradient devrait réduire le nombre de CTA et les threads inactifs de ces passes. Le mapping reste celui d’une ligne par CTA pour L>=256. Le kernel gk à quatre sorties par CTA de b957 ne change pas : le gain sur l’appel complet est à mesurer, sans supposer d’additivité.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Reprendre le mapping f014 des kernels forward et input-gradient : bloc.x vaut L pour 0<L<256, sinon 256; bloc.y vaut floor(256/bloc.x), avec calcul de h combinant blockIdx.y et threadIdx.y et garde de bornes.\",\"Calculer les grilles x et y par plafonds afin de couvrir les longueurs et groupes H incomplets; conserver une ligne par CTA et des tuiles x de 256 pour L>=256.\",\"Préserver sans modification le kernel gk b957 qui calcule quatre sorties j par CTA, ses réductions FP32 et ses gardes d’indices.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "ddb802d77f7f4fdf",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "ddb802d77f7f4fdf",
+        "facts": {
+          "commit": "244e8d0a611f0b4c84dc10eabd8d72edafdeb27d",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.034885115305582685,
+          "score": 0.5041144653991195
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "For rows with 33–64 elements, grouping eight warp-aligned rows into each 256-thread CTA should reduce CTA count versus the prior four-row mapping while retaining contiguous lane access within each row. This may trade off against occupancy or latency hiding. The two prior valid T1 programs measured 34.147 ms and 34.678 ms for the full call; neither isolates the effect of these kernels. This experiment tests CTA group size rather than asserting a speedup.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"For L <= 32, pack floor(256/L) rows per CTA using a two-dimensional block, preserving one output thread per element.\",\"For 33 <= L <= 64, assign one 32-lane warp to each of eight rows in a 256-thread CTA; each lane processes positions at a stride of 32.\",\"For L > 64, retain one-row 256-wide output tiles.\",\"Keep forward and input-gradient kernels separate, preserve bounds-safe padding and FP32 arithmetic, and leave the weight-gradient computation unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "cc2c83db63bc4022",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "cc2c83db63bc4022",
+        "facts": {
+          "commit": "d6c944c24a383c57fa56e354b71eae881857fa09",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03485852559407552,
+          "score": 0.5043050765230912
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured same-thread fusion was correct at 34.929 ms versus the 35.464 ms baseline, while a one-launch variant using separate block cohorts measured 36.408 ms. This experiment keeps same-thread fusion but cooperatively stages each block's x and gy halo plus filter in shared memory. That should reduce repeated global loads and per-tap bounds checks for the shared-memory-sized path; staging overhead, synchronization, or resource pressure may outweigh the savings. Larger filters use a fused global-memory fallback so correctness does not depend on shared-memory capacity. This candidate has not been measured.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace separate forward and input-gradient launches with one fused kernel that accumulates and freshly writes y and gx for each output element.\",\"For filters fitting within the bounded shared-memory allocation, cooperatively stage x and gy tile halos plus the filter; rely on zero-filled halo elements instead of per-tap bounds checks.\",\"Use a fused global-memory path when the shared-memory requirement exceeds 8 KiB, preserving the operation for larger filters without depending on device-specific shared-memory capacity.\",\"Leave the weight-gradient kernel and launch unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "b95765cb6a144c79",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "b95765cb6a144c79",
+        "facts": {
+          "commit": "746a3d0af789cf66ab83c77e429ef4e6bd87e808",
+          "base_commit": "976f881a98d9f007e050086732c2972a834c0d75",
+          "parent_id": "9b2a7876f05a474b",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.009406145095825194,
+          "score": 0.7903696931888737
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Grouping four neighboring j outputs in each CTA may amortize repeated gy loads while retaining a direct FP32 reduction over B and L for each output. The extra accumulators and four shared-memory reductions per CTA could offset that reuse. Earlier valid results show the one-stage CTA parent at 0.014375 s and the split-scratch variant at 0.019781 s mean complete-call time; this contrasting experiment avoids another scratch stage and must be judged on complete-call timing and correctness.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Changed the weight-gradient kernel to assign each CTA four neighboring j outputs for one h.\",\"Each CTA traverses B and L using the existing thread layout, reuses one gy load across the four output accumulators, and performs four independent shared-memory FP32 reductions.\",\"Preserved bounds checks and writes every valid gk output; the variant does not use scratch or allocate additional memory.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 34,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Improve forward and input-gradient CTA mapping without fusion",
+        "objective": "Own the separate forward and input-gradient kernels and their launch mapping in src/candidate.cu. Explore packing multiple short rows per CTA and other coalesced, well-utilized mappings to reduce inactive threads and CTA overhead; keep the two passes separate so this tree isolates mapping/kernel-efficiency gains from fusion. Preserve bounds-safe zero padding, full FP32, all-input correctness, complete output writes, and the fixed API. Judge candidates by correctness and full-call timing, not an assumed per-kernel benefit.",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "f014e1b6f1494b52",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03414717864990235,
+          "hypothesis_as_data": "Packing short H rows into each CTA should reduce CTA overhead and inactive threads in the separate forward and input-gradient passes. The mapping uses row_width=min(L,256) and packs floor(256/row_width) rows per CTA; for L=48, this assigns "
+        },
+        "latest": {
+          "id": "ddb802d77f7f4fdf",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.034885115305582685,
+          "hypothesis_as_data": "For rows with 33–64 elements, grouping eight warp-aligned rows into each 256-thread CTA should reduce CTA count versus the prior four-row mapping while retaining contiguous lane access within each row. This may trade off against occupancy o"
+        },
+        "alternative": {
+          "id": "ddb802d77f7f4fdf",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.034885115305582685,
+          "hypothesis_as_data": "For rows with 33–64 elements, grouping eight warp-aligned rows into each 256-thread CTA should reduce CTA count versus the prior four-row mapping while retaining contiguous lane access within each row. This may trade off against occupancy o"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "Measure a fused forward and input-gradient kernel",
+        "objective": "Own the forward/input-gradient execution path in src/candidate.cu. Test a fused kernel that computes y and gx together, sharing coordinate/filter handling where beneficial; measure whether fewer launches and shared work outweigh increased register use or reduced occupancy. Do not modify the weight-gradient path. Preserve full FP32, zero-padding semantics, all-input correctness and tolerances, complete fresh writes to both outputs, and the fixed API. Compare complete-call timing and report measured results rather than assuming fusion helps.",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "cc2c83db63bc4022",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03485852559407552,
+          "hypothesis_as_data": "The measured same-thread fusion was correct at 34.929 ms versus the 35.464 ms baseline, while a one-launch variant using separate block cohorts measured 36.408 ms. This experiment keeps same-thread fusion but cooperatively stages each block"
+        },
+        "latest": {
+          "id": "cc2c83db63bc4022",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03485852559407552,
+          "hypothesis_as_data": "The measured same-thread fusion was correct at 34.929 ms versus the 35.464 ms baseline, while a one-launch variant using separate block cohorts measured 36.408 ms. This experiment keeps same-thread fusion but cooperatively stages each block"
+        },
+        "alternative": {
+          "id": "626a9fb119ef42b2",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03640788014729818,
+          "hypothesis_as_data": "The measured same-thread fusion is correct and modestly faster than baseline (34.929 ms vs 35.464 ms, about 1.51%), but it keeps two accumulators and two input streams live per output thread. This contrasting launch-fused variant assigns se"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T3",
+        "subject": "Compare one-stage and split weight-gradient reductions",
+        "objective": "Own the weight-gradient kernel and its use of scratch in src/candidate.cu. Compare reduction granularities rather than assuming multi-stage partial sums win: test a CTA-level reduction distributed across B*L for each (h,j), and, where useful, split B*L into tiles that write partial sums to scratch followed by a final reduction. You may also test tiling neighboring j outputs if it enables useful reuse. Use no extra allocations; every scratch read must follow a write in the current call, and all outputs must be freshly written. Preserve bounds, the contracted gradient, full FP32, and the required tolerances for all valid inputs. Judge variants by correctness and complete-call timing, since the supplied baseline timing does not attribute cost to this kernel.",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "b95765cb6a144c79",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.009406145095825194,
+          "hypothesis_as_data": "Grouping four neighboring j outputs in each CTA may amortize repeated gy loads while retaining a direct FP32 reduction over B and L for each output. The extra accumulators and four shared-memory reductions per CTA could offset that reuse. E"
+        },
+        "latest": {
+          "id": "b95765cb6a144c79",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.009406145095825194,
+          "hypothesis_as_data": "Grouping four neighboring j outputs in each CTA may amortize repeated gy loads while retaining a direct FP32 reduction over B and L for each output. The extra accumulators and four shared-memory reductions per CTA could offset that reuse. E"
+        },
+        "alternative": {
+          "id": "cf4d414cae9d482e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.01978063138326009,
+          "hypothesis_as_data": "The earlier valid one-CTA-per-(h,j) variant distributes B*L across threads but still leaves each output reduction within one CTA. For sufficiently large B*L, splitting into 65,536-element tiles creates multiple CTAs per output, writes one F"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "Gm1",
+        "subject": "Combiner le mapping T1 et la réduction gk T3",
+        "objective": "Partir du programme T3, le plus rapide mesuré, et y intégrer le mapping séparé des kernels forward et input-gradient de T1. Conserver la réduction gk de T3. Mesurer le programme complet et vérifier la correction; ne pas présumer que les gains s’additionnent.",
+        "records": 3,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "cd2e715d4dd34664",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.013141353607177735,
+          "hypothesis_as_data": "Le regroupement de plusieurs lignes H dans les CTA forward et input-gradient lorsque L<256 peut réduire les CTA et threads inactifs de ces deux passes, tandis que la réduction gk de T3 reste intacte. Les mesures complètes disponibles favori"
+        },
+        "latest": {
+          "id": "cd2e715d4dd34664",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.013141353607177735,
+          "hypothesis_as_data": "Le regroupement de plusieurs lignes H dans les CTA forward et input-gradient lorsque L<256 peut réduire les CTA et threads inactifs de ces deux passes, tandis que la réduction gk de T3 reste intacte. Les mesures complètes disponibles favori"
+        },
+        "alternative": null,
+        "text_truncated": false
+      },
+      {
+        "role": "Gm2",
+        "subject": "Intégrer le mapping T1 au kernel gk b957",
+        "objective": "Partir de b957, qui regroupe quatre sorties gk par CTA, et y intégrer uniquement le mapping séparé forward/input-gradient de f014. Ces changements visent des kernels distincts; mesurer la combinaison complète sans présumer d’un gain additif.",
+        "records": 3,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "5711050b847f4e97",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.008074953397115071,
+          "hypothesis_as_data": "Pour L<256, empaqueter floor(256/L) lignes H dans les CTA des kernels forward et input-gradient devrait réduire le nombre de CTA et les threads inactifs de ces passes. Le mapping reste celui d’une ligne par CTA pour L>=256. Le kernel gk à q"
+        },
+        "latest": {
+          "id": "5711050b847f4e97",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.008074953397115071,
+          "hypothesis_as_data": "Pour L<256, empaqueter floor(256/L) lignes H dans les CTA des kernels forward et input-gradient devrait réduire le nombre de CTA et les threads inactifs de ces passes. Le mapping reste celui d’une ligne par CTA pour L>=256. Le kernel gk à q"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 5,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "38f593e95a0f410e",
+    "cd2e715d4dd34664",
+    "5711050b847f4e97",
+    "ddb802d77f7f4fdf",
+    "cc2c83db63bc4022",
+    "b95765cb6a144c79",
+    "f014e1b6f1494b52",
+    "626a9fb119ef42b2",
+    "cf4d414cae9d482e"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "fa8d09505107630c8ac4fb516310e273ce56d66d",
+  "selected_parent_id": null
+}

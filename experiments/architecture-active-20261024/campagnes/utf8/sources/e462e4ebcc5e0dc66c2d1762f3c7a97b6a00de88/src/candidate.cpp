@@ -1,0 +1,82 @@
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#endif
+
+static inline size_t skip_ascii(const unsigned char *bytes, size_t index,
+                                size_t length) {
+#if defined(__SSE2__)
+  while (length - index >= 16) {
+    const __m128i block =
+        _mm_loadu_si128((const __m128i *)(bytes + index));
+    if (_mm_movemask_epi8(block) != 0) {
+      break;
+    }
+    index += 16;
+  }
+#endif
+  while (index < length && bytes[index] < 0x80) {
+    ++index;
+  }
+  return index;
+}
+
+static bool validate_utf8(const char *b, size_t length) {
+  const unsigned char *bytes = (const unsigned char *)b;
+  for (size_t index = 0;;) {
+    index = skip_ascii(bytes, index, length);
+    if (index >= length) {
+      return true;
+    }
+    unsigned char byte1 = bytes[index++];
+    if (byte1 < 0xE0) {
+      // Two-byte form.
+      if (index == length) {
+        return false;
+      }
+      if (byte1 < 0xC2 || (bytes[index++] & 0xC0) != 0x80) {
+        return false;
+      }
+    } else if (byte1 < 0xF0) {
+      // Three-byte form.
+      if (index + 1 >= length) {
+        return false;
+      }
+      unsigned char byte2 = bytes[index++];
+      if ((byte2 & 0xC0) != 0x80
+          // Overlong? 5 most significant bits must not all be zero.
+          || (byte1 == 0xE0 && byte2 < 0xA0)
+          // Check for illegal surrogate codepoints.
+          || (byte1 == 0xED && 0xA0 <= byte2)
+          // Third byte trailing-byte test.
+          || (bytes[index++] & 0xC0) != 0x80) {
+        return false;
+      }
+    } else {
+      // Four-byte form.
+      if (index + 2 >= length) {
+        return false;
+      }
+      int byte2 = bytes[index++];
+      if ((byte2 & 0xC0) != 0x80
+          // Check that 1 <= plane <= 16.
+          || (byte1 > 0xF4 || (byte1 == 0xF0 && byte2 < 0x90) || (byte1 == 0xF4 && byte2 > 0x8F))
+          // Third byte trailing-byte test
+          || (bytes[index++] & 0xC0) != 0x80
+          // Fourth byte trailing-byte test
+          || (bytes[index++] & 0xC0) != 0x80) {
+        return false;
+      }
+    }
+  }
+}
+
+#include <cstdint>
+#include <cstring>
+#include <cmath>
+#include <algorithm>
+#include <omp.h>
+extern "C" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)
+{*(uint32_t*)output=validate_utf8((const char*)input1,n);}

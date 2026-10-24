@@ -1,0 +1,170 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "890e61fde2073f79a1047764e06b2498b9cca063aec4f5109eae336ba016ae3f",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "5f05ca36bcd347ee",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "5f05ca36bcd347ee",
+        "facts": {
+          "commit": "dce421e91cb9e753a809d631c00803b4a0b2e5ba",
+          "base_commit": "c4229d9ed28395c6e6046c269dd1dd27f0a17cc7",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.2534400622066666e-06,
+          "score": 0.8387188891715357
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A 32x32 shared tile indexed as tile[row][col ^ row] provides a meaningful alternative to the padded 32x33 scalar layout: it preserves coalesced global loads/stores while avoiding padding, and may avoid shared-memory bank conflicts on a 32-bank organization. Whether its XOR indexing helps on this target versus the padded layout is an empirical question; this candidate alone cannot establish that comparison.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the naive transpose launch with a single-pass 32x32 shared-memory tiled transpose using 32x8 threads, each handling four rows.\",\"Use an XOR-swizzled 32x32 shared-memory layout instead of padded 32x33 storage; transpose tile coordinates between the coalesced load and store phases.\",\"Preserve the run entry point, perform no floating-point arithmetic, and add no allocation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "5f05ca36bcd347ee-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "5f05ca36bcd347ee",
+        "facts": {
+          "commit": null,
+          "base_commit": "c4229d9ed28395c6e6046c269dd1dd27f0a17cc7",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A 32x32 shared tile indexed as tile[row][col ^ row] provides a meaningful alternative to the padded 32x33 scalar layout: it preserves coalesced global loads/stores while avoiding padding, and may avoid shared-memory bank conflicts on a 32-bank organization. Whether its XOR indexing helps on this target versus the padded layout is an empirical question; this candidate alone cannot establish that comparison.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the naive transpose launch with a single-pass 32x32 shared-memory tiled transpose using 32x8 threads, each handling four rows.\",\"Use an XOR-swizzled 32x32 shared-memory layout instead of padded 32x33 storage; transpose tile coordinates between the coalesced load and store phases.\",\"Preserve the run entry point, perform no floating-point arithmetic, and add no allocation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "c4229d9ed28395c6e6046c269dd1dd27f0a17cc7",
+          "base_commit": "c4229d9ed28395c6e6046c269dd1dd27f0a17cc7",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.6919040431599998e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Shared-memory transpose layouts and ownership",
+        "objective": "Own only src/candidate.cu. Replace the baseline's strided global stores with a single-pass shared-memory tiled transpose: load input rows coalesced, exchange tile orientation in shared memory, then store output rows coalesced. Compare the padded 32x33 scalar tile with at least one meaningfully different shared-memory layout or multi-element/vectorized thread-ownership variant; do not presume the padded scalar layout is fastest on this target. Measure the complete run at n=1024. Preserve the run entry point and exact bit patterns; produce every C element for every positive n multiple of 32, pass correctness at n=32, 64, 256, and 1024, use no new allocation or other file edits, and report build, correctness, and repeated timing evidence.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "5f05ca36bcd347ee",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.2534400622066666e-06,
+          "hypothesis_as_data": "A 32x32 shared tile indexed as tile[row][col ^ row] provides a meaningful alternative to the padded 32x33 scalar layout: it preserves coalesced global loads/stores while avoiding padding, and may avoid shared-memory bank conflicts on a 32-b"
+        },
+        "latest": {
+          "id": "5f05ca36bcd347ee",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.2534400622066666e-06,
+          "hypothesis_as_data": "A 32x32 shared tile indexed as tile[row][col ^ row] provides a meaningful alternative to the padded 32x33 scalar layout: it preserves coalesced global loads/stores while avoiding padding, and may avoid shared-memory bank conflicts on a 32-b"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "5f05ca36bcd347ee",
+    "5f05ca36bcd347ee-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "c4229d9ed28395c6e6046c269dd1dd27f0a17cc7",
+  "selected_parent_id": null
+}

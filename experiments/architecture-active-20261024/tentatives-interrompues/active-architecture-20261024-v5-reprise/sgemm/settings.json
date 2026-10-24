@@ -1,0 +1,133 @@
+{
+  "problem": "reference-sgemm",
+  "method": "H",
+  "backend": "codex",
+  "seed": 23,
+  "binary_tree": {
+    "enabled": false
+  },
+  "forest": {
+    "policy": "mother",
+    "conversation": "persistent",
+    "integration": "memory-guided-v1",
+    "plan_review_calls": 2,
+    "statement": "Optimize the supplied baseline on one NVIDIA GH200 with CUDA 12.6.3. Use the real independent AB-MCTS research trees and persistent Mother memory/integration policy. Choose useful topics yourself.\nCompute row-major FP32 square SGEMM C = alpha*(A@B)+beta*C. The performance case is M=N=K=4096, alpha=0.5, beta=3.0. Correctness also checks sizes 128,256,512 and varied signed random values. Match full FP32 cuBLAS within absolute error 0.01. No reduced-precision TF32, FP16 or BF16.\nEdit only src/candidate.cu. Preserve the extern C host entry point:\nvoid run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta).\nThe host provides contiguous device buffers, n=m=k for square matrices, and scratch of at least n*n+65536 floats (64^3+65536 for the derivative). A and B are read-only. C must be fully produced. Do not overwrite any buffer or allocate beyond the declared storage. Scratch contents must not be assumed initialized between calls. The call uses the default CUDA stream; custom device helper functions and multiple launches are allowed. The full run is timed using CUDA events, with allocation, transfers, compilation and correctness checks excluded. Use actual CUDA source, no external optimized math library calls or other resources. Do not read files, environment variables, timers or benchmark state to detect inputs or phases. No persistent cached answers; every invocation must compute its output for the current input. Input dimensions and valid numerical invariants may be specialized.\nThe driver and oracle are protected. Development harness checks only search inputs; fresh confirmation uses independent seeds. Candidate GPU tests are serialized by the controller. Record failures and measured evidence, integrate after research closes, and independently confirm final G. No new allocations. The published optimized implementations are withheld from the source workspace.\n",
+    "active": {
+      "mode": "full",
+      "analysis_every": 3,
+      "analysis_calls": 3,
+      "steering_calls": 3,
+      "control_workers": 1,
+      "surprise_gain": 0.25
+    }
+  },
+  "completion": {
+    "policy": "finish-started",
+    "postprocess_tokens": null,
+    "reserve_policy": "adaptive",
+    "confirm_final_g": true,
+    "token_policy": "observe-only"
+  },
+  "roles": [
+    "A",
+    "B",
+    "C"
+  ],
+  "budget": {
+    "search_slots": null,
+    "confirmation_slots": 3,
+    "wall_seconds": 1800,
+    "tokens": null,
+    "mission_tokens": null,
+    "max_workers": 1,
+    "max_depth": 0,
+    "generation_seconds": 600,
+    "infrastructure_retries": 0,
+    "confirmation_seconds": 120
+  },
+  "schedule": {
+    "cycles": null,
+    "trials_per_role_per_cycle": 1,
+    "integrations_per_cycle": 0
+  },
+  "protocol": {
+    "build": [
+      "{python}",
+      "{trusted}/protocol.py",
+      "build",
+      "{worktree}",
+      "{build}"
+    ],
+    "check": [
+      "{python}",
+      "{trusted}/protocol.py",
+      "check",
+      "{binary}",
+      "{phase}"
+    ],
+    "benchmark": [
+      "{python}",
+      "{trusted}/protocol.py",
+      "benchmark",
+      "{binary}",
+      "{phase}"
+    ],
+    "repetitions": 3,
+    "confirmation_repetitions": 5,
+    "warmups": 0,
+    "timeout_seconds": 240,
+    "build_timeout_seconds": 180,
+    "environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "FOREST_GPU_TARGET": "NVIDIA GH200 CUDA 12.6.3"
+    }
+  },
+  "codex": {
+    "model": "gpt-6-luna",
+    "reasoning_effort": "max",
+    "transport": "codex-mailbox",
+    "mailbox_dir": "/scratch_p/nimarano/forest-active-sgemm-e09118e139814f869adfa4bb67f7b037/pending/mailbox",
+    "session_id": "e09118e139814f869adfa4bb67f7b037"
+  },
+  "ollama": {
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen2.5-coder:7b",
+    "temperature": 0.0,
+    "context_tokens": 8192,
+    "max_output_tokens": 4096,
+    "num_threads": 4
+  },
+  "minimum_gain": 0.03,
+  "harness": {
+    "enabled": true,
+    "max_attempts": 3,
+    "call_token_ceiling": null,
+    "research": {
+      "enabled": true,
+      "corpus": null,
+      "corpus_sha256": null,
+      "allowed_hosts": [
+        "docs.nvidia.com",
+        "developer.nvidia.com",
+        "gcc.gnu.org",
+        "clang.llvm.org"
+      ]
+    }
+  },
+  "skills": {
+    "enabled": true,
+    "version": "hpc-forest-project-skills-v1",
+    "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a"
+  },
+  "memory": {
+    "mode": "active",
+    "assembly_rounds": 16,
+    "selection_calls": 4,
+    "reads_per_mission": 3,
+    "page_size": 6,
+    "context_characters": 12000,
+    "sources_per_integration": 3
+  }
+}

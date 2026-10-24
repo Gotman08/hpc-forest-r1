@@ -1,0 +1,291 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "a1ef51a848fa6d317e2f8e784f3120aab226567e556433f8d42a38eb9d343297",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "ae1d98143ce04df2",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "ae1d98143ce04df2",
+        "facts": {
+          "commit": "cae3944bd9d8cd8008b7362684cd778bced778a0",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0004733679930369059,
+          "score": 0.7217874811209777
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The previous fused candidate was correct and measured 0.459449 ms with up to 8192 partials. Keeping its approximate 4096-elements-per-partial policy but raising the cap to 16384 halves the large-input chunk size and doubles finalizer fan-in at the largest size. This tests whether more first-stage CTAs improve large-input parallelism enough to offset the more expensive finalizer; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the two full-size absolute-value and atomic-sum passes with a fused first-stage sum(abs(x)) and one partial write per CTA.\",\"Retain approximately 4096 input elements per partial, but raise the maximum partial count from 8192 to 16384; each CTA covers a contiguous input chunk with scalar loads.\",\"Use a single 256-thread CUB finalizer to reduce all current-call partials and overwrite output; zero-length input explicitly overwrites output with zero.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "ae1d98143ce04df2-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "ae1d98143ce04df2",
+        "facts": {
+          "commit": null,
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The previous fused candidate was correct and measured 0.459449 ms with up to 8192 partials. Keeping its approximate 4096-elements-per-partial policy but raising the cap to 16384 halves the large-input chunk size and doubles finalizer fan-in at the largest size. This tests whether more first-stage CTAs improve large-input parallelism enough to offset the more expensive finalizer; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the two full-size absolute-value and atomic-sum passes with a fused first-stage sum(abs(x)) and one partial write per CTA.\",\"Retain approximately 4096 input elements per partial, but raise the maximum partial count from 8192 to 16384; each CTA covers a contiguous input chunk with scalar loads.\",\"Use a single 256-thread CUB finalizer to reduce all current-call partials and overwrite output; zero-length input explicitly overwrites output with zero.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "de3c9c834e5e486b",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "de3c9c834e5e486b",
+        "facts": {
+          "commit": "b30319ad82692c2a4ce5e28e709385060e48c666",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00045944908459981284,
+          "score": 0.7277408073952532
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Fusing absolute value into the first reduction removes the full-size temporary pass and its associated initialization. Choosing roughly one partial per 4096 input values, capped at 8192, should expose more CTAs for large inputs while keeping finalization to one CTA with at most 8192 partials; the controller must measure full-call time and validate the FP64 error bound.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(x[i]) into first-stage accumulation, eliminating the intermediate full-size absolute-value array.\",\"Partition input into contiguous CTA chunks sized by ceil(n/partial_count), with partial_count=ceil(n/4096) clamped to [1,8192].\",\"Reduce each CTA's scalar loads with CUB BlockReduce and write one current-call partial per CTA.\",\"Use one final CTA to reduce all partials and overwrite output without atomics or a separate output initialization.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "de3c9c834e5e486b-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "de3c9c834e5e486b",
+        "facts": {
+          "commit": null,
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Fusing absolute value into the first reduction removes the full-size temporary pass and its associated initialization. Choosing roughly one partial per 4096 input values, capped at 8192, should expose more CTAs for large inputs while keeping finalization to one CTA with at most 8192 partials; the controller must measure full-call time and validate the FP64 error bound.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(x[i]) into first-stage accumulation, eliminating the intermediate full-size absolute-value array.\",\"Partition input into contiguous CTA chunks sized by ceil(n/partial_count), with partial_count=ceil(n/4096) clamped to [1,8192].\",\"Reduce each CTA's scalar loads with CUB BlockReduce and write one current-call partial per CTA.\",\"Use one final CTA to reduce all partials and overwrite output without atomics or a separate output initialization.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "f44a435ddec44211",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "f44a435ddec44211",
+        "facts": {
+          "commit": "491cc58c78499d8b277124a2e9b168cfb4fe3e27",
+          "base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00044738987286885583,
+          "score": 0.732978685992908
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Fusing absolute value into the grid-stride reduction avoids the scratch write/read and one kernel launch. A grid of ceil(n/256), capped at 1024 CTAs, avoids needless atomics for small inputs while bounding CTA-level atomics for large inputs. Whether those savings offset the required output reset and atomic contention must be measured; the controller must validate FP64 tolerance for every required size and seed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Fuse fabsf(input) into the per-thread grid-stride accumulation, eliminating the intermediate scratch array and its producer kernel.\",\"Retain an asynchronous per-call output reset in the default stream before reduction.\",\"Set CTA count to ceil(n/256), capped at 1024, and perform one output atomicAdd per CTA.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:ae1d98143ce04df2:0:0",
+        "kind": "lesson",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "ae1d98143ce04df2",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The fused candidate with a cap of 8192 partials was valid at 0.459449 ms versus the baseline's 1.228094 ms. It had zero correctness errors across 10 cases, including a maximum absolute error of 16 at the largest input; these results support fusion but do not establish that 8192 is optimal.",
+          "transformations": "{}",
+          "applicability": "Use as context for the larger partial-count experiment; it does not establish the best cap.",
+          "next_experiment": "Measure the proposed 16384 cap against its parent on full-call time and all required correctness cases.",
+          "evidence_ids": [
+            "de3c9c834e5e486b",
+            "baseline-e1"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 7,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Hierarchical fusion: partial granularity and finalization",
+        "objective": "Build a two-stage fused sum(abs(x)) with simple contiguous scalar loads and a conventional per-CTA reduction. Explore global work partitioning: vary first-stage partial count/granularity and the finalizer’s fan-in so the large input is sufficiently parallel while finalization stays cheap. Leave vectorized loads and thread/block mapping to T3. Every consumed partial must be written in the current call, and the finalizer must overwrite output. Validate all required sizes and the stated FP64 error bound; compare full-call time.",
+        "records": 5,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "de3c9c834e5e486b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00045944908459981284,
+          "hypothesis_as_data": "Fusing absolute value into the first reduction removes the full-size temporary pass and its associated initialization. Choosing roughly one partial per 4096 input values, capped at 8192, should expose more CTAs for large inputs while keepin"
+        },
+        "latest": {
+          "id": "ae1d98143ce04df2",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0004733679930369059,
+          "hypothesis_as_data": "The previous fused candidate was correct and measured 0.459449 ms with up to 8192 partials. Keeping its approximate 4096-elements-per-partial policy but raising the cap to 16384 halves the large-input chunk size and doubles finalizer fan-in"
+        },
+        "alternative": {
+          "id": "ae1d98143ce04df2",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0004733679930369059,
+          "hypothesis_as_data": "The previous fused candidate was correct and measured 0.459449 ms with up to 8192 partials. Keeping its approximate 4096-elements-per-partial policy but raising the cap to 16384 halves the large-input chunk size and doubles finalizer fan-in"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "ae1d98143ce04df2",
+    "ae1d98143ce04df2-h01",
+    "de3c9c834e5e486b",
+    "de3c9c834e5e486b-h01",
+    "f44a435ddec44211",
+    "lesson:ae1d98143ce04df2:0:0"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "de406b69bfb5323c35a3230f49a6e1e3d4b2e115",
+  "selected_parent_id": null
+}

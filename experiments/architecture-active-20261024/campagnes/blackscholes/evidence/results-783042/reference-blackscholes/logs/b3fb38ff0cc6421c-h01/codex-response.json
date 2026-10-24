@@ -1,0 +1,150 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "/*\n  Copyright (c) 2010-2023, Intel Corporation\n\n  SPDX-License-Identifier: BSD-3-Clause\n*/\n\n#ifdef _MSC_VER\n#define _CRT_SECURE_NO_WARNINGS\n#define NOMINMAX\n#pragma warning(disable : 4244)\n#pragma warning(disable : 4305)\n#endif\n\n/*\n  Copyright (c) 2010-2023, Intel Corporation\n\n  SPDX-License-Identifier: BSD-3-Clause\n*/\n\n#ifndef OPTIONS_DEFS_H\n#define OPTIONS_DEFS_H 1\n\n#define BINOMIAL_NUM 64\n\n#endif // OPTIONS_DEFS_H\n\n#include <algorithm>\n#include <math.h>\n\n// Cumulative normal distribution function\nstatic inline float CND(float X) {\n    float L = fabsf(X);\n\n    float k = 1.f / (1.f + 0.2316419f * L);\n    float k2 = k * k;\n\n    const float invSqrt2Pi = 0.39894228040f;\n    float low = 0.31938153f - 0.356563782f * k;\n    float high = 1.781477937f - 1.821255978f * k + 1.330274429f * k2;\n    float w = k * (low + k2 * high);\n    w *= invSqrt2Pi * expf(-L * L * .5f);\n\n    if (X > 0.f)\n        w = 1.f - w;\n    return w;\n}\n\nvoid black_scholes_serial(float Sa[], float Xa[], float Ta[], float ra[], float va[], float result[], int count) {\n    for (int i = 0; i < count; ++i) {\n        float S = Sa[i], X = Xa[i];\n        float T = Ta[i], r = ra[i];\n        float v = va[i];\n\n        float d1 = (logf(S / X) + (r + v * v * .5f) * T) / (v * sqrtf(T));\n        float d2 = d1 - v * sqrtf(T);\n\n        result[i] = S * CND(d1) - X * expf(-r * T) * CND(d2);\n    }\n}\n\nvoid binomial_put_serial(float Sa[], float Xa[], float Ta[], float ra[], float va[], float result[], int count) {\n    float V[BINOMIAL_NUM];\n\n    for (int i = 0; i < count; ++i) {\n        float S = Sa[i], X = Xa[i];\n        float T = Ta[i], r = ra[i];\n        float v = va[i];\n\n        float dt = T / BINOMIAL_NUM;\n        float u = expf(v * sqrtf(dt));\n        float d = 1.f / u;\n        float disc = expf(r * dt);\n        float Pu = (disc - d) / (u - d);\n\n        for (int j = 0; j < BINOMIAL_NUM; ++j) {\n            float upow = powf(u, (float)(2 * j - BINOMIAL_NUM));\n            V[j] = std::max(0.f, X - S * upow);\n        }\n\n        for (int j = BINOMIAL_NUM - 1; j >= 0; --j)\n            for (int k = 0; k < j; ++k)\n                V[k] = ((1 - Pu) * V[k] + Pu * V[k + 1]) / disc;\n\n        result[i] = V[0];\n    }\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{float*a=(float*)input1;black_scholes_serial(a,a+n,a+2*n,a+3*n,a+4*n,(float*)output,n);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "Previous T3 measurements found the Horner-only rewrite correct at 0.007254 s, versus 0.007529 s for baseline; sqrtf(T) sharing alone measured 0.008214 s, and their combination measured 0.008066 s. This candidate leaves sqrtf expressions unchanged and uses a factored, balanced partial-sum evaluation of the same CND polynomial and coefficients. It tests whether the shorter dependency structure offsets its extra intermediate arithmetic; rounding and time remain for the controller to measure.",
+    "memory_lessons": [
+      {
+        "applicability": "Use these results as measured comparisons for further scalar CND and sqrtf(T) experiments, not as proof of the compiler's transformations.",
+        "claim": "The Horner-only rewrite passed the 8 varied correctness cases and measured 0.007254 s; sqrtf(T) sharing alone and Horner combined with that sharing also passed but measured 0.008214 s and 0.008066 s, respectively. The baseline measured 0.007529 s.",
+        "evidence_ids": [
+          "9d9339dc29f64dbe",
+          "69cd3b4f03c544ba",
+          "39dadc45c96d4f9a"
+        ],
+        "next_experiment": "Measure this distinct balanced polynomial evaluation against Horner-only for correctness, rounding, and time."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "This is an unmeasured, scalar-only CND evaluation-order experiment. The CND coefficients and mathematical polynomial are retained; the controller's varied-input correctness checks and timing determine whether the reassociation is acceptable and useful.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Rewrite only the supplied CND polynomial as a factored balanced partial-sum evaluation: compute k², the low pair, and the high group, then combine them. Retain all supplied coefficients and the surrounding CND formula.",
+      "Leave sqrtf(T), Black-Scholes option arithmetic, binomial code, and entrypoint unchanged."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "b1a3ea90e59c4d3b961dac35cbb4cafb",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "b44e40da5da8b1366053f3a286f622202a92fad1c6f5953dacbc3d3913acc663",
+  "session_id": "748a382c279447d6b51e9e502de62594",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "6be00c07bceaf52f60dbfb267c95513f63f19626741ca1afc62642b41ce7f3c8",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 22442,
+        "output_tokens": 7212,
+        "reasoning_output_tokens": 5587
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "b3fb38ff0cc6421c-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "9d9339dc29f64dbe",
+            "69cd3b4f03c544ba",
+            "39dadc45c96d4f9a"
+          ],
+          "status": "applied",
+          "summary": "Selected a contrasting scalar polynomial evaluation schedule based on the prior measured candidates; left sqrtf expressions unchanged to isolate it."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "This experiment uses ordinary scalar C++ floating-point expressions and makes no architecture-specific or resource-dependent assumption."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No target-specific API, instruction, or compiler behavior is assumed; the candidate's correctness and performance require controller measurement."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "9d9339dc29f64dbe",
+            "69cd3b4f03c544ba",
+            "39dadc45c96d4f9a"
+          ],
+          "status": "applied",
+          "summary": "Compared prior correctness-passing measured means to inform a new contrast; this candidate has no measured result yet."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "b1a3ea90e59c4d3b961dac35cbb4cafb",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "b44e40da5da8b1366053f3a286f622202a92fad1c6f5953dacbc3d3913acc663",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "748a382c279447d6b51e9e502de62594"
+    },
+    "observed_tokens": 29654,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 29654,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

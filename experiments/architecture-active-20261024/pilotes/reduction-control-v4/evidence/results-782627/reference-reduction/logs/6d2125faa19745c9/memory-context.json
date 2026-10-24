@@ -1,0 +1,166 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "521cc621e46c9e04500551e056aece96796862cffb7fc301f3b8010a474b51ec",
+    "tree_id": "e1:Gm2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "6e0f71dc5f294618",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "6e0f71dc5f294618",
+        "facts": {
+          "commit": "6b076a4ba27c924155065e5a687ce381141b225e",
+          "base_commit": "9edc22c4ee0b2af92510de44fe714d5ac17bb086",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 7.815679907798767e-06,
+          "score": 0.8560618586466058
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Changing the input tile from 128 to 4096 elements while retaining the 128-thread shared-memory reduction tree and int64 accumulation may cut the large case from 32,768 initial partials to 1,024, enabling input reduction plus direct finalization in two kernels. For larger valid inputs, bounded parallel stages remain in place. This tests whether fewer CTAs and launches improve the full call despite more per-thread accumulation; it is not an assumed speedup.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Kept the 128-thread modulo/shared-memory reduction tree for input tiles, intermediate stages, and finalization.\",\"Raised the input and intermediate reduction tile to a fixed 4096 elements; each thread accumulates its strided values in int64.\",\"Use a bounded one-CTA direct path only for inputs no larger than one tile; larger inputs first write int64 partials to scratch.\",\"Finalize up to 1024 partials directly to out; recursively reduce larger partial arrays in parallel stages using a second scratch buffer.\",\"Handle n == 0 with a zero-writing kernel and reject negative n or required null pointers without reading uninitialized scratch.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "9ce980521a4545d5",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "9ce980521a4545d5",
+        "facts": {
+          "commit": "f53159ab69785c7bbc9f20c3ed67947b3df63fdb",
+          "base_commit": "9edc22c4ee0b2af92510de44fe714d5ac17bb086",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.998528003692627e-05,
+          "score": 0.6078739910996942
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "CUB's BLOCK_REDUCE_WARP_REDUCTIONS may lower the intra-block synchronization and reduction overhead compared with both the baseline modulo/shared-memory tree and the hand-written shuffle variants, while keeping the 128-thread, one-element-per-lane mapping and recursive ceil(count/128) passes. Signed 64-bit accumulation and ping-pong scratch partials avoid intermediate int overflow; only the final block writes int. The hand-written variants measured 30.6225 and 30.8038 microseconds versus the baseline's 46.4832 microseconds, but those search measurements neither isolate the reduction primitive nor establish a CUB speedup.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the modulo/shared-memory reduction tree with cub::BlockReduce<long long, 128, cub::BLOCK_REDUCE_WARP_REDUCTIONS>::Sum, keeping 128 threads and one input element per lane.\",\"Accumulate all block partials in signed 64-bit values, ping-pong them through compact caller-provided scratch buffers, and narrow to int only for the final reduction output.\",\"Retain recursive ceil(count/128) passes, default-stream kernel launches, and the final asynchronous device-to-device copy.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "9edc22c4ee0b2af92510de44fe714d5ac17bb086",
+          "base_commit": "9edc22c4ee0b2af92510de44fe714d5ac17bb086",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.648320039113363e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm2",
+        "subject": "Intégrer la réduction intra-bloc T2 à la hiérarchie T1 la plus rapide",
+        "objective": "Partir de la hiérarchie T1 à deux noyaux de 6e0f71dc5f294618, la source mesurée la plus rapide, et tester l’intégration de la réduction intra-bloc mesurée dans 9ce980521a4545d5. Préserver le traitement complet de l’entrée, l’exactitude, les limites de scratch et le stream par défaut. Valider tous les cas et mesurer l’appel complet; comparer directement à la source T1, sans supposer que les gains s’additionnent.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "6e0f71dc5f294618",
+    "9ce980521a4545d5",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "6b076a4ba27c924155065e5a687ce381141b225e",
+  "selected_parent_id": null
+}

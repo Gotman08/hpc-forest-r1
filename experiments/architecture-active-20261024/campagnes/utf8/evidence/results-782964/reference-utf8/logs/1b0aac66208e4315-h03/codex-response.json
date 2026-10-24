@@ -1,0 +1,158 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n#include <cstring>\n\n#if defined(__SSE2__)\n#include <emmintrin.h>\n#endif\n\nstatic bool validate_utf8_scalar(const char *b, size_t length) {\n  const unsigned char *bytes = (const unsigned char *)b;\n  for (size_t index = 0;;) {\n    unsigned char byte1;\n\n    do {\n      if (index >= length) {\n        return true;\n      }\n      byte1 = bytes[index++];\n    } while (byte1 < 0x80);\n    if (byte1 < 0xE0) {\n      if (index == length) {\n        return false;\n      }\n      if (byte1 < 0xC2 || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    } else if (byte1 < 0xF0) {\n      if (index + 1 >= length) {\n        return false;\n      }\n      unsigned char byte2 = bytes[index++];\n      if ((byte2 & 0xC0) != 0x80\n          || (byte1 == 0xE0 && byte2 < 0xA0)\n          || (byte1 == 0xED && 0xA0 <= byte2)\n          || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    } else {\n      if (index + 2 >= length) {\n        return false;\n      }\n      int byte2 = bytes[index++];\n      if ((byte2 & 0xC0) != 0x80\n          || (byte1 > 0xF4 || (byte1 == 0xF0 && byte2 < 0x90) || (byte1 == 0xF4 && byte2 > 0x8F))\n          || (bytes[index++] & 0xC0) != 0x80\n          || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    }\n  }\n}\n\n#if defined(__SSE2__)\nstatic inline uint16_t utf8_vector_mask(__m128i value) {\n  return (uint16_t)_mm_movemask_epi8(value);\n}\n\nstatic inline bool utf8_second_byte_ok(unsigned char byte, unsigned int check) {\n  switch (check) {\n    case 1: return byte >= 0xA0;\n    case 2: return byte <= 0x9F;\n    case 3: return byte >= 0x90;\n    case 4: return byte <= 0x8F;\n    default: return true;\n  }\n}\n\nstatic bool validate_utf8_sse2(const char *b, size_t length) {\n  const unsigned char *bytes = (const unsigned char *)b;\n  const __m128i zero = _mm_setzero_si128();\n  const __m128i sign_bit = _mm_set1_epi8(-128);\n  const __m128i prefix2_mask = _mm_set1_epi8(-32);\n  const __m128i prefix2_value = _mm_set1_epi8(-64);\n  const __m128i prefix3_mask = _mm_set1_epi8(-16);\n  const __m128i prefix3_value = _mm_set1_epi8(-32);\n  const __m128i prefix4_mask = _mm_set1_epi8(-8);\n  const __m128i prefix4_value = _mm_set1_epi8(-16);\n  const __m128i continuation_mask = _mm_set1_epi8(-64);\n  const __m128i continuation_value = _mm_set1_epi8(-128);\n  const __m128i invalid_short_mask = _mm_set1_epi8(-2);\n  const __m128i invalid_short_value = _mm_set1_epi8(-64);\n  const __m128i threshold_f4 = _mm_set1_epi8(0x74);\n\n  size_t index = 0;\n  size_t safe_index = 0;\n  uint32_t carry = 0;\n  unsigned int pending_check = 0;\n\n  while (length - index >= 16) {\n    if (pending_check != 0) {\n      if (!utf8_second_byte_ok(bytes[index], pending_check)) {\n        return false;\n      }\n      pending_check = 0;\n    }\n\n    __m128i value;\n    std::memcpy(&value, bytes + index, sizeof(value));\n    const __m128i high_lanes = _mm_cmpgt_epi8(zero, value);\n    const uint16_t high_mask = utf8_vector_mask(high_lanes);\n\n    if (high_mask == 0) {\n      if (carry != 0) {\n        return false;\n      }\n      index += 16;\n      safe_index = index;\n      continue;\n    }\n\n    const uint16_t ascii = (uint16_t)~high_mask;\n    const uint16_t continuation = utf8_vector_mask(_mm_cmpeq_epi8(\n        _mm_and_si128(value, continuation_mask), continuation_value));\n    const uint16_t lead2_candidates = utf8_vector_mask(_mm_cmpeq_epi8(\n        _mm_and_si128(value, prefix2_mask), prefix2_value));\n    const uint16_t lead3 = utf8_vector_mask(_mm_cmpeq_epi8(\n        _mm_and_si128(value, prefix3_mask), prefix3_value));\n    const uint16_t lead4_candidates = utf8_vector_mask(_mm_cmpeq_epi8(\n        _mm_and_si128(value, prefix4_mask), prefix4_value));\n    const uint16_t invalid_short = utf8_vector_mask(_mm_cmpeq_epi8(\n        _mm_and_si128(value, invalid_short_mask), invalid_short_value));\n    if (invalid_short != 0) {\n      return false;\n    }\n\n    const __m128i unsigned_order = _mm_xor_si128(value, sign_bit);\n    const uint16_t above_f4 = utf8_vector_mask(\n        _mm_cmpgt_epi8(unsigned_order, threshold_f4));\n    const uint16_t lead2 = lead2_candidates;\n    const uint16_t lead4 = (uint16_t)(lead4_candidates & (uint16_t)~above_f4);\n\n    if ((uint16_t)(ascii | continuation | lead2 | lead3 | lead4) != UINT16_MAX) {\n      return false;\n    }\n\n    const uint32_t lead24 = (uint32_t)(lead2 | lead3 | lead4);\n    const uint32_t lead34 = (uint32_t)(lead3 | lead4);\n    const uint32_t local_expected = (lead24 << 1) | (lead34 << 2) | ((uint32_t)lead4 << 3);\n    const uint32_t expected = local_expected | carry;\n    if ((uint16_t)expected != continuation) {\n      return false;\n    }\n\n    const uint16_t e0 = utf8_vector_mask(_mm_cmpeq_epi8(value, _mm_set1_epi8(-32)));\n    const uint16_t ed = utf8_vector_mask(_mm_cmpeq_epi8(value, _mm_set1_epi8(-19)));\n    const uint16_t f0 = utf8_vector_mask(_mm_cmpeq_epi8(value, _mm_set1_epi8(-16)));\n    const uint16_t f4 = utf8_vector_mask(_mm_cmpeq_epi8(value, _mm_set1_epi8(-12)));\n    const __m128i next_value = _mm_srli_si128(value, 1);\n    const __m128i next_order = _mm_xor_si128(next_value, sign_bit);\n    const __m128i threshold_0f = _mm_set1_epi8(0x0F);\n    const __m128i threshold_10 = _mm_set1_epi8(0x10);\n    const __m128i threshold_1f = _mm_set1_epi8(0x1F);\n    const __m128i threshold_20 = _mm_set1_epi8(0x20);\n    const uint16_t below_a0 = utf8_vector_mask(_mm_cmpgt_epi8(threshold_20, next_order));\n    const uint16_t above_9f = utf8_vector_mask(_mm_cmpgt_epi8(next_order, threshold_1f));\n    const uint16_t below_90 = utf8_vector_mask(_mm_cmpgt_epi8(threshold_10, next_order));\n    const uint16_t above_8f = utf8_vector_mask(_mm_cmpgt_epi8(next_order, threshold_0f));\n    const uint32_t bad_second =\n        (((uint32_t)e0 << 1) & below_a0)\n        | (((uint32_t)ed << 1) & above_9f)\n        | (((uint32_t)f0 << 1) & below_90)\n        | (((uint32_t)f4 << 1) & above_8f);\n    if (bad_second != 0) {\n      return false;\n    }\n\n    pending_check = 0;\n    if (e0 & 0x8000u) {\n      pending_check = 1;\n    } else if (ed & 0x8000u) {\n      pending_check = 2;\n    } else if (f0 & 0x8000u) {\n      pending_check = 3;\n    } else if (f4 & 0x8000u) {\n      pending_check = 4;\n    }\n\n    carry = local_expected >> 16;\n    index += 16;\n    if (carry == 0 && pending_check == 0) {\n      safe_index = index;\n    }\n  }\n\n  const size_t scalar_start = (carry == 0 && pending_check == 0) ? index : safe_index;\n  return validate_utf8_scalar((const char *)(bytes + scalar_start), length - scalar_start);\n}\n#endif\n\nstatic bool validate_utf8(const char *b, size_t length) {\n#if defined(__SSE2__)\n  return validate_utf8_sse2(b, length);\n#else\n  return validate_utf8_scalar(b, length);\n#endif\n}\n\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{*(uint32_t*)output=validate_utf8((const char*)input1,n);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "Replacing the SSE2 path's repeated unsigned-range comparisons for lead-byte classes with masked-prefix equality tests may reduce classification work on mixed 16-byte blocks. The experiment retains the exact exclusions for C0/C1 and F5-F7, as well as shifted continuation requirements, restricted second-byte checks, cross-block state, and scalar tail handling. Earlier evidence does not establish a speedup: the valid T1 ASCII-block variant measured 57.50 µs versus the 49.62 µs baseline, while a distinct valid T2 variant measured 39.98 µs. This classifier variant needs official evaluation.",
+    "memory_lessons": [
+      {
+        "applicability": "A correct ASCII-block optimization may still lose on the mixed-width workload; compare against the official baseline rather than inferring gains from the mechanism.",
+        "claim": "The T1 64-bit ASCII-block hybrid was valid but measured 57.50 µs, above the 49.62 µs baseline.",
+        "evidence_ids": [
+          "baseline-e1",
+          "1bef6299446e4809"
+        ],
+        "next_experiment": "Measure the masked-prefix classifier on the official mixed-width n=65536 case."
+      },
+      {
+        "applicability": "A successful correctness log alone does not establish a valid timed result when the recorded outcome is runtime_failed.",
+        "claim": "Two T1 SWAR-related attempts were recorded as runtime_failed with no timing, despite their displayed correctness cases passing; no cause is established by the available evidence.",
+        "evidence_ids": [
+          "0eeba011b99c4165",
+          "c557b10fc09a4c93"
+        ],
+        "next_experiment": "Keep the controller's full correctness and timing outcome distinct from partial log observations."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "This is a targeted classifier change to the existing compile-time SSE2 implementation; the scalar validator remains the control and fallback, and no flags or runtime environment probing change. The T1 catalog reports three distinct programs and no repeats. The prior SWAR-related runtime failures are recorded without inferring a cause. The submitted variant has no measured outcome yet; request the official ASCII/malformed correctness checks and mixed-width n=65536 timing. sources_kept is empty because integration_source_ids is empty.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Retained the strict scalar UTF-8 validator and compile-time scalar fallback.",
+      "Changed SSE2 lead/continuation classification from unsigned-range comparisons to masked-prefix equality tests; explicitly reject C0/C1 and exclude F5-F7 from four-byte leads.",
+      "Preserved shifted continuation checks, E0/ED/F0/F4 second-byte constraints, cross-block carry and pending state, safe scalar fallback boundaries, bounded tail handling, ABI, output, and thread budget."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "775d2f11e4ee4af49304e7e6266c259b",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "5d4791fc0902ff6010efbffad1bc5986e8be2c6c940fdd39ed5a5399e39c0b5d",
+  "session_id": "84bf5b1d844645aba6fb57b65acabefa",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "1006b6a7790e7d22bc9312db1dd7c04fc8979bf4389771130affa2d929c65568",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4352,
+        "input_tokens": 37552,
+        "output_tokens": 13765,
+        "reasoning_output_tokens": 10503
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "312153914191ed4adba7f5c132d54f0a335d7d445b0797c190a6ee9712c6ab2c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "1b0aac66208e4315-h03",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "baseline-e1",
+            "1bef6299446e4809",
+            "31112ea757f04c4a"
+          ],
+          "status": "applied",
+          "summary": "Made one bounded SIMD classifier change and treated prior outcomes as comparison evidence, not proof of performance."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Kept the code under the existing __SSE2__ compile-time guard with scalar fallback; changed neither flags nor runtime feature probing."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The experiment reuses the existing SSE2 intrinsics and adds no ISA or API dependency."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "1bef6299446e4809",
+            "31112ea757f04c4a"
+          ],
+          "status": "applied",
+          "summary": "Compared only supplied measurements and made no speedup claim; official candidate timing and correctness remain for the controller."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "775d2f11e4ee4af49304e7e6266c259b",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "5d4791fc0902ff6010efbffad1bc5986e8be2c6c940fdd39ed5a5399e39c0b5d",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "84bf5b1d844645aba6fb57b65acabefa"
+    },
+    "observed_tokens": 51317,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 51317,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

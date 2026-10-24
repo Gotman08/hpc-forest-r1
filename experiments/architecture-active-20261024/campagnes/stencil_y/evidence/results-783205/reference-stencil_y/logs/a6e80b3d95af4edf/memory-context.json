@@ -1,0 +1,292 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "6fb663e8c8e2cdca38921304b4fae8331cd7da0e40c170d4757ca72c7504dc31",
+    "tree_id": "e1:T2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "b8038404f884418a",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "b8038404f884418a",
+        "facts": {
+          "commit": "7e9fc5e3aeba118fa15b249f570b3ac12b50b257",
+          "base_commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.2494934275733333e-06,
+          "score": 0.5181271643800692
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured 8x64 full-height tile was faster than baseline (3.061 μs versus 3.494 μs), while the 8x16 subtile was slower (3.839 μs); those timings do not establish a cause. Widening the full-height pencil to 16 may improve x coalescing and reduce the grid from 512 to 256 blocks versus 8x64, but doubles the block to 1024 threads and may reduce occupancy. This isolates the wider full-slab tradeoff while retaining the existing halo logic for correctness.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Set sPencils to 16, producing a 16-wide x pencil while retaining the full 64-row y slab in the active derivative_y block.\",\"Keep the existing radius-4 shared-memory halo assignments, including the period-63 endpoint mapping, and both barriers.\",\"Preserve the stencil coefficients, arithmetic expression, output mapping, buffers, entry point, and launch model.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "b8038404f884418a-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "b8038404f884418a",
+        "facts": {
+          "commit": null,
+          "base_commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured 8x64 full-height tile was faster than baseline (3.061 μs versus 3.494 μs), while the 8x16 subtile was slower (3.839 μs); those timings do not establish a cause. Widening the full-height pencil to 16 may improve x coalescing and reduce the grid from 512 to 256 blocks versus 8x64, but doubles the block to 1024 threads and may reduce occupancy. This isolates the wider full-slab tradeoff while retaining the existing halo logic for correctness.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Set sPencils to 16, producing a 16-wide x pencil while retaining the full 64-row y slab in the active derivative_y block.\",\"Keep the existing radius-4 shared-memory halo assignments, including the period-63 endpoint mapping, and both barriers.\",\"Preserve the stencil coefficients, arithmetic expression, output mapping, buffers, entry point, and launch model.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "188db7c4c14746ee",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "188db7c4c14746ee",
+        "facts": {
+          "commit": "c7044762314f440f088328ac6d5d6d3279a15be7",
+          "base_commit": "c11a06c6a6ebfc90485807685347c0c24cbca30a",
+          "parent_id": "002fbb87c9d94101",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.838613396513333e-06,
+          "score": 0.4764994179696036
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected 8x64 parent measured 3.061 μs versus the 3.494 μs baseline, but that result does not establish whether a full-height tile is preferable. Holding the x pencil at 8 while producing 16 y rows per block may reduce threads per block from 512 to 128 and increase block-level parallelism, at the cost of loading four halo rows on each of four subtiles and thus duplicating halo traffic. Directly loading halo values with the established period-63 mapping also reduces the tile synchronization to one barrier. The competing occupancy, halo-traffic, and synchronization effects require measurement; no winner is presumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Keep the x pencil at 8 while changing each y block from a full 64-row slab to a 16-row output subtile with four halo rows on each side.\",\"Use a three-dimensional grid to cover x pencils, y subtiles, and z planes, with a bounds guard for a partial final y tile.\",\"Load the subtile halos directly from global memory using modulo (my-1), preserving the baseline period-63 endpoint mapping and using one block barrier.\",\"Preserve the existing derivative coefficients, arithmetic expression, output coverage, entry point, buffers, and launch model.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "188db7c4c14746ee-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "188db7c4c14746ee",
+        "facts": {
+          "commit": null,
+          "base_commit": "c11a06c6a6ebfc90485807685347c0c24cbca30a",
+          "parent_id": "002fbb87c9d94101",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected 8x64 parent measured 3.061 μs versus the 3.494 μs baseline, but that result does not establish whether a full-height tile is preferable. Holding the x pencil at 8 while producing 16 y rows per block may reduce threads per block from 512 to 128 and increase block-level parallelism, at the cost of loading four halo rows on each of four subtiles and thus duplicating halo traffic. Directly loading halo values with the established period-63 mapping also reduces the tile synchronization to one barrier. The competing occupancy, halo-traffic, and synchronization effects require measurement; no winner is presumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Keep the x pencil at 8 while changing each y block from a full 64-row slab to a 16-row output subtile with four halo rows on each side.\",\"Use a three-dimensional grid to cover x pencils, y subtiles, and z planes, with a bounds guard for a partial final y tile.\",\"Load the subtile halos directly from global memory using modulo (my-1), preserving the baseline period-63 endpoint mapping and using one block barrier.\",\"Preserve the existing derivative coefficients, arithmetic expression, output coverage, entry point, buffers, and launch model.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:188db7c4c14746ee:0:0",
+        "kind": "lesson",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "188db7c4c14746ee",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The valid 8x64 parent measured 3.06111993268 μs mean versus 3.49397328682 μs for the valid baseline. This is an observed latency difference, not evidence that coalescing or block count caused it.",
+          "transformations": "{}",
+          "applicability": "This motivates contrasting y-subtile geometry while holding the measured parent’s x width constant; the timing does not identify its cause.",
+          "next_experiment": "Measure this 8x16 shared-memory subtile against the 8x64 parent using the controller’s correctness oracle and full-run event latency.",
+          "evidence_ids": [
+            "002fbb87c9d94101",
+            "baseline-e1"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      },
+      {
+        "id": "3c3afe85465e4d5d",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "3c3afe85465e4d5d",
+        "facts": {
+          "commit": "2d22277a1ce19b5c688a972c86f5f6b55db86f59",
+          "base_commit": "c7044762314f440f088328ac6d5d6d3279a15be7",
+          "parent_id": "188db7c4c14746ee",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.2825599579766667e-06,
+          "score": 0.5155989295120529
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Three distinct valid programs are recorded, with no repeats. The 8x64 full-height tile measured 3.061 μs, the 8x16 subtile 3.839 μs, and the 16x64 full-height tile 3.249 μs; these timings do not identify a cause. This candidate holds the 16-row y subtile and its radius-4 halos fixed while widening x from 8 to 16, halving the x-block count and doubling threads per block. It tests whether better x access and fewer blocks offset the larger blocks and unchanged relative halo overhead.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Change sPencils from 8 to 16 while keeping yTileRows at 16, yielding 16x16 blocks for the active y-subtile kernel.\",\"Retain the existing 4-row lower and upper halo loads, one synchronization barrier, exact stencil expression, and period-(my-1) endpoint mapping.\",\"Keep derived grid coverage and the existing entry point, buffers, and launch model unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 12,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T2",
+        "subject": "Shared-memory pencil geometry: fu",
+        "objective": "Explore shared-memory pencil geometry as a contrast to the supplied 4-by-64 block. Compare wider x pencils while retaining the full 64-row y slab (for example, 8- or 16-wide x pencils) against x-wide blocks producing smaller y subtiles with radius-4 halos. Measure the tradeoff between improved x coalescing, block count, halo duplicat",
+        "records": 11,
+        "results": {
+          "trials": 4,
+          "valid": 4,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "002fbb87c9d94101",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.06111993268e-06,
+          "hypothesis_as_data": "Changing the full-height pencil from 4x64 to 8x64 may improve x-direction global-load coalescing and halve the x block c"
+        },
+        "latest": {
+          "id": "3c3afe85465e4d5d",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.2825599579766667e-06,
+          "hypothesis_as_data": "Three distinct valid programs are recorded, with no repeats. The 8x64 full-height tile measured 3.061 μs, the 8x16 subti"
+        },
+        "alternative": {
+          "id": "3c3afe85465e4d5d",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.2825599579766667e-06,
+          "hypothesis_as_data": "Three distinct valid programs are recorded, with no repeats. The 8x64 full-height tile measured 3.061 μs, the 8x16 subti"
+        },
+        "text_truncated": true
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "b8038404f884418a",
+    "b8038404f884418a-h01",
+    "188db7c4c14746ee",
+    "188db7c4c14746ee-h01",
+    "lesson:188db7c4c14746ee:0:0",
+    "3c3afe85465e4d5d",
+    "002fbb87c9d94101"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "c11a06c6a6ebfc90485807685347c0c24cbca30a",
+  "selected_parent_id": "002fbb87c9d94101"
+}

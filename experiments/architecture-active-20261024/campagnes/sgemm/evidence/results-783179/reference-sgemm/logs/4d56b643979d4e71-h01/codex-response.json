@@ -1,0 +1,152 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <cstddef>\n#include <cuda_runtime.h>\n\nstatic constexpr int TILE_M = 32;\nstatic constexpr int TILE_N = 32;\nstatic constexpr int TILE_K = 16;\nstatic constexpr int ROWS_PER_THREAD = 4;\n\n__global__ void sgemm_register_blocked_shared(\n    int M, int N, int K, float alpha, const float *A, const float *B,\n    float beta, float *C) {\n  const size_t col = static_cast<size_t>(blockIdx.x) * TILE_N + threadIdx.x;\n  const size_t row_base = static_cast<size_t>(blockIdx.y) * TILE_M +\n                          static_cast<size_t>(threadIdx.y) * ROWS_PER_THREAD;\n  const size_t row0 = row_base;\n  const size_t row1 = row_base + 1;\n  const size_t row2 = row_base + 2;\n  const size_t row3 = row_base + 3;\n\n  __shared__ float staged_a[TILE_M][TILE_K];\n  __shared__ float staged_b[TILE_K][TILE_N];\n\n  float acc0 = 0.0f;\n  float acc1 = 0.0f;\n  float acc2 = 0.0f;\n  float acc3 = 0.0f;\n\n  const int linear_thread = static_cast<int>(threadIdx.y) * blockDim.x +\n                            static_cast<int>(threadIdx.x);\n  const int thread_count = static_cast<int>(blockDim.x * blockDim.y);\n  const size_t size_M = static_cast<size_t>(M);\n  const size_t size_N = static_cast<size_t>(N);\n  const size_t size_K = static_cast<size_t>(K);\n  const size_t tile_row_base = static_cast<size_t>(blockIdx.y) * TILE_M;\n  const size_t tile_col_base = static_cast<size_t>(blockIdx.x) * TILE_N;\n\n  for (int k0 = 0; k0 < K;) {\n    const int k_remaining = K - k0;\n\n    for (int idx = linear_thread; idx < TILE_M * TILE_K;\n         idx += thread_count) {\n      const int a_row = idx / TILE_K;\n      const int a_k = idx % TILE_K;\n      const size_t global_row = tile_row_base + static_cast<size_t>(a_row);\n      if (global_row < size_M && a_k < k_remaining) {\n        const size_t global_k = static_cast<size_t>(k0) +\n                                static_cast<size_t>(a_k);\n        staged_a[a_row][a_k] = A[global_row * size_K + global_k];\n      } else {\n        staged_a[a_row][a_k] = 0.0f;\n      }\n    }\n\n    for (int idx = linear_thread; idx < TILE_K * TILE_N;\n         idx += thread_count) {\n      const int b_k = idx / TILE_N;\n      const int b_col = idx % TILE_N;\n      const size_t global_col = tile_col_base + static_cast<size_t>(b_col);\n      if (b_k < k_remaining && global_col < size_N) {\n        const size_t global_k = static_cast<size_t>(k0) +\n                                static_cast<size_t>(b_k);\n        staged_b[b_k][b_col] = B[global_k * size_N + global_col];\n      } else {\n        staged_b[b_k][b_col] = 0.0f;\n      }\n    }\n\n    __syncthreads();\n\n    const int local_row_base = static_cast<int>(threadIdx.y) * ROWS_PER_THREAD;\n    for (int kk = 0; kk < TILE_K; ++kk) {\n      const float b = staged_b[kk][threadIdx.x];\n      acc0 += staged_a[local_row_base][kk] * b;\n      acc1 += staged_a[local_row_base + 1][kk] * b;\n      acc2 += staged_a[local_row_base + 2][kk] * b;\n      acc3 += staged_a[local_row_base + 3][kk] * b;\n    }\n\n    __syncthreads();\n    if (k_remaining <= TILE_K) {\n      break;\n    }\n    k0 += TILE_K;\n  }\n\n  if (col < size_N && row0 < size_M) {\n    const size_t idx = row0 * size_N + col;\n    C[idx] = alpha * acc0 + beta * C[idx];\n  }\n  if (col < size_N && row1 < size_M) {\n    const size_t idx = row1 * size_N + col;\n    C[idx] = alpha * acc1 + beta * C[idx];\n  }\n  if (col < size_N && row2 < size_M) {\n    const size_t idx = row2 * size_N + col;\n    C[idx] = alpha * acc2 + beta * C[idx];\n  }\n  if (col < size_N && row3 < size_M) {\n    const size_t idx = row3 * size_N + col;\n    C[idx] = alpha * acc3 + beta * C[idx];\n  }\n}\n\nextern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n                    int n, int m, int k, float alpha, float beta) {\n  (void)scratch;\n  if (n <= 0 || m <= 0) {\n    return;\n  }\n\n  const int blocks_x = m / TILE_N + (m % TILE_N != 0);\n  const int blocks_y = n / TILE_M + (n % TILE_M != 0);\n  sgemm_register_blocked_shared<<<dim3(blocks_x, blocks_y), dim3(32, 8)>>>(\n      n, m, k, alpha, A, B, beta, C);\n}\n",
+        "path": "src/candidate.cu"
+      }
+    ],
+    "hypothesis": "L’hypothèse est que le staging partagé par tranches K de 16 réduira les chargements globaux répétés de A et B par rapport à T2, tout en conservant son CTA de sortie 32×32, ses lanes contiguës en colonnes et ses quatre accumulateurs FP32 par thread. Les barrières et accès partagés peuvent toutefois annuler ce bénéfice. T2 a mesuré 0,0147256 s et T3 0,0173076 s séparément ; cela ne prédit pas la performance du composé.",
+    "memory_lessons": [
+      {
+        "applicability": "Ces deux noyaux sont des contrôles séparés ; leurs temps ne permettent pas d’inférer le résultat de leur combinaison.",
+        "claim": "Les résultats valides disponibles donnent 0,0147256221771 s pour T2 et 0,017307559967066666 s pour T3. Le noyau combiné doit encore être validé et mesuré indépendamment.",
+        "evidence_ids": [
+          "0332e7182e574703",
+          "3906be4089a1452f"
+        ],
+        "next_experiment": "Mesurer ce composé et comparer son temps au T2 valide, avec répétitions, avant toute conclusion."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Le staging conserve le macro-tile de sortie de T2 et adapte les tableaux partagés à A[32][16] et B[16][32], avec des charges coopératives masquées pour les queues. Le catalogue Gm1 ne contient encore aucun résultat propre ; correction et temps du composé restent à établir par le contrôleur.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [
+      "0332e7182e574703",
+      "3906be4089a1452f"
+    ],
+    "transformations": [
+      "Conserver le mapping de sortie T2 : CTA 32×32, bloc 32×8, quatre lignes par thread et B réutilisé par les quatre accumulateurs FP32.",
+      "Ajouter un staging synchrone de largeur K=16, avec A partagé 32×16 et B partagé 16×32 ; les chargements sont coopératifs et masquent les queues M, N et K.",
+      "Synchroniser avant consommation puis avant réutilisation des buffers ; appliquer alpha et beta une fois par sortie valide avec des offsets size_t."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "8b6d523182f34f50ae2e1c3e4821ff90",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "cbc36ce13975a2bd3a431846ef628941bdfe5eb04a88643e358ceaeac00f8704",
+  "session_id": "04fe70c6f9d349daa2a45f91eaa7d412",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "812b8752e5bc7a148010f10770578b8daba3543e993000db139ee2bdf2d8dfde",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 0,
+        "input_tokens": 16480,
+        "output_tokens": 11743,
+        "reasoning_output_tokens": 9425
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "6d8d331c48ef4087faef771a390762682f23e3221a52204ffe15e42883791d46",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "Gm1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "4d56b643979d4e71-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "0332e7182e574703",
+            "3906be4089a1452f"
+          ],
+          "status": "applied",
+          "summary": "Proposition d’un seul composé dont l’hypothèse oppose la réutilisation globale attendue au coût des synchronisations ; aucun gain n’est présumé."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Décision bornée aux faits fournis pour la cible GH200 et CUDA 12.6.3 ; aucune inspection supplémentaire ni modification de cible."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [
+            "3906be4089a1452f"
+          ],
+          "status": "not_needed",
+          "summary": "Le candidat réutilise les barrières et le staging synchrone déjà présents dans le code T3 fourni ; aucune propriété d’API supplémentaire n’est nécessaire à cette proposition."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "0332e7182e574703",
+            "3906be4089a1452f"
+          ],
+          "status": "applied",
+          "summary": "Comparaison limitée aux temps mesurés séparément de T2 et T3 ; le composé doit encore passer la correction et être comparé de façon répétée à T2."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "8b6d523182f34f50ae2e1c3e4821ff90",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "cbc36ce13975a2bd3a431846ef628941bdfe5eb04a88643e358ceaeac00f8704",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "04fe70c6f9d349daa2a45f91eaa7d412"
+    },
+    "observed_tokens": 28223,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 28223,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "/*\n * Copyright (c) 2007 Bart Massey\n * [This program is licensed under the \"MIT License\"]\n * Please see the file LICENSE in the source\n * distribution of this software for license terms.\n */\n\n#include <cstdint>\nstatic inline uint32_t\npopcount_builtin(uint32_t n) {\n    return static_cast<uint32_t>(__builtin_popcount(n));\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{\n    const uint32_t* a = static_cast<const uint32_t*>(input1);\n    uint32_t result = 0;\n    for (int j = 0; j < parameter; j++)\n        for (int i = 0; i < n; i++)\n            result += popcount_builtin(a[i] ^ result);\n    *static_cast<uint32_t*>(output) = result;\n}\n",
+      "path": "src/candidate.cpp"
+    }
+  ],
+  "hypothesis": "The previous target-local POPCNT candidate was valid and measured, but the catalog has only one distinct program and does not establish whether an unannotated builtin behaves similarly. This candidate removes target-specific attributes and uses __builtin_popcount under the unchanged frozen flags. If those flags do not enable POPCNT, GCC may lower the builtin differently; the separate official measurement will test whether the target-local annotation matters.",
+  "notes": "This source isolates the unannotated builtin as a separately measured path. The prior target-local candidate is the available measured comparison; no new measurement or assembly inspection is claimed. The recurrence order, uint32_t accumulation, output overwrite, and threads parameter behavior are preserved.",
+  "sources_kept": [],
+  "transformations": [
+    "Replaced the naive bit-loop helper with an unannotated helper using GCC __builtin_popcount.",
+    "Left the helper and run without target-specific POPCNT attributes and did not change global compiler flags.",
+    "Preserved the ordered j-then-i recurrence, uint32_t accumulation and wraparound, generic dimensions, output overwrite, and threads parameter behavior."
+  ]
+}

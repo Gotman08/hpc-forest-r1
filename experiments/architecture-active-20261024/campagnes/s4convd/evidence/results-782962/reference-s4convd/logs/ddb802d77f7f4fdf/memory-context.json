@@ -1,0 +1,285 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "7af34e0eaefb7c68bd0bf0c071b2972e3188b50e8667616ff553de5a3205a8ac",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "f014e1b6f1494b52",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "f014e1b6f1494b52",
+        "facts": {
+          "commit": "ab9192a40897ad8c85a23a6b0d8ace44f8a8b950",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03414717864990235,
+          "score": 0.5094584989033322
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Packing short H rows into each CTA should reduce CTA overhead and inactive threads in the separate forward and input-gradient passes. The mapping uses row_width=min(L,256) and packs floor(256/row_width) rows per CTA; for L=48, this assigns five rows to a 240-thread CTA instead of launching one 256-thread CTA per row. Rows of length at least 256 retain the existing one-row, 256-thread mapping. The baseline is correct at 35.464 ms mean for the full call, but it does not isolate these kernels; any benefit remains unmeasured.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Map each forward and input-gradient CTA across multiple H rows when L is below 256: block.x is L and block.y is floor(256/L), with a bounds guard for incomplete H groups.\",\"Keep 256-wide x tiles and one row per CTA for L >= 256, preserving the existing per-row output mapping for longer rows.\",\"Retain the separate FP32 forward and input-gradient passes, their bounds-safe zero padding and complete writes; leave the weight-gradient kernel unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "f014e1b6f1494b52-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "f014e1b6f1494b52",
+        "facts": {
+          "commit": null,
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Packing short H rows into each CTA should reduce CTA overhead and inactive threads in the separate forward and input-gradient passes. The mapping uses row_width=min(L,256) and packs floor(256/row_width) rows per CTA; for L=48, this assigns five rows to a 240-thread CTA instead of launching one 256-thread CTA per row. Rows of length at least 256 retain the existing one-row, 256-thread mapping. The baseline is correct at 35.464 ms mean for the full call, but it does not isolate these kernels; any benefit remains unmeasured.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Map each forward and input-gradient CTA across multiple H rows when L is below 256: block.x is L and block.y is floor(256/L), with a bounds guard for incomplete H groups.\",\"Keep 256-wide x tiles and one row per CTA for L >= 256, preserving the existing per-row output mapping for longer rows.\",\"Retain the separate FP32 forward and input-gradient passes, their bounds-safe zero padding and complete writes; leave the weight-gradient kernel unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "71b7793a2dab4e28",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "71b7793a2dab4e28",
+        "facts": {
+          "commit": "07f51070f964591cd7b43af59a414e53e3ee916d",
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03467794672648112,
+          "score": 0.5056033983757118
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The only prior distinct T1 program was correct at 34.147 ms mean versus the 35.464 ms baseline, but those are full-call measurements and do not identify a per-kernel cause. Its L=48 packing uses 48-wide rows, so 32-thread warps cross row boundaries. For 33<=L<=64, assigning each 32-wide warp to one row and letting lanes process t=lane and t=lane+32 should improve same-row access grouping and use fewer threads than the prior 240-thread, five-row CTA. The tradeoff is four rather than five rows per CTA and up to two serial outputs per lane; full-call timing must determine whether that mapping wins. Keep dense packing for L<=32 and 256-wide tiles for larger rows.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"For 33<=L<=64, use 128-thread CTAs with four 32-thread rows; each lane computes one or two positions in its row at a stride of 32.\",\"For L<=32, retain dense row packing with block.x=L and floor(256/L) rows per CTA.\",\"For L>64, retain one-row 256-wide tiles to avoid increasing serial outputs per lane without bound.\",\"Keep forward and input-gradient kernels separate, preserve bounds checks and complete writes, and leave the weight-gradient kernel's computation unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "71b7793a2dab4e28-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "71b7793a2dab4e28",
+        "facts": {
+          "commit": null,
+          "base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The only prior distinct T1 program was correct at 34.147 ms mean versus the 35.464 ms baseline, but those are full-call measurements and do not identify a per-kernel cause. Its L=48 packing uses 48-wide rows, so 32-thread warps cross row boundaries. For 33<=L<=64, assigning each 32-wide warp to one row and letting lanes process t=lane and t=lane+32 should improve same-row access grouping and use fewer threads than the prior 240-thread, five-row CTA. The tradeoff is four rather than five rows per CTA and up to two serial outputs per lane; full-call timing must determine whether that mapping wins. Keep dense packing for L<=32 and 256-wide tiles for larger rows.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"For 33<=L<=64, use 128-thread CTAs with four 32-thread rows; each lane computes one or two positions in its row at a stride of 32.\",\"For L<=32, retain dense row packing with block.x=L and floor(256/L) rows per CTA.\",\"For L>64, retain one-row 256-wide tiles to avoid increasing serial outputs per lane without bound.\",\"Keep forward and input-gradient kernels separate, preserve bounds checks and complete writes, and leave the weight-gradient kernel's computation unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:f014e1b6f1494b52:0:0",
+        "kind": "lesson",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "f014e1b6f1494b52",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The baseline passed all eight reported correctness cases and measured 35.464 ms mean across three samples, but that measurement combines the full call and does not attribute time to individual kernels.",
+          "transformations": "{}",
+          "applicability": "Use full-call timing to assess mapping changes; the baseline's combined time cannot establish the contribution of either pass.",
+          "next_experiment": "Measure this candidate with the controller's correctness checks and full-call timing.",
+          "evidence_ids": [
+            "baseline-e1"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:71b7793a2dab4e28:0:0",
+        "kind": "lesson",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "71b7793a2dab4e28",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The prior short-row packing was correct and measured 34.147 ms mean, compared with the 35.464 ms baseline. This supports testing a contrasting mapping, but does not establish a per-kernel speedup.",
+          "transformations": "{}",
+          "applicability": "Use full-call timing to assess mapping changes; the prior measurement does not attribute time to either pass.",
+          "next_experiment": "Measure this warp-aligned medium-row mapping with the controller's correctness checks and full-call timing.",
+          "evidence_ids": [
+            "f014e1b6f1494b52",
+            "baseline-e1"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 7,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Improve forward and input-gradient CTA mapping without fusion",
+        "objective": "Own the separate forward and input-gradient kernels and their launch mapping in src/candidate.cu. Explore packing multiple short rows per CTA and other coalesced, well-utilized mappings to reduce inactive threads and CTA overhead; keep the two passes separate so this tree isolates mapping/kernel-efficiency gains from fusion. Preserve bounds-safe zero padding, full FP32, all-input correctness, complete output writes, and the fixed API. Judge candidates by correctness and full-call timing, not an assumed per-kernel benefit.",
+        "records": 6,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "f014e1b6f1494b52",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03414717864990235,
+          "hypothesis_as_data": "Packing short H rows into each CTA should reduce CTA overhead and inactive threads in the separate forward and input-gradient passes. The mapping uses row_width=min(L,256) and packs floor(256/row_width) rows per CTA; for L=48, this assigns "
+        },
+        "latest": {
+          "id": "71b7793a2dab4e28",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03467794672648112,
+          "hypothesis_as_data": "The only prior distinct T1 program was correct at 34.147 ms mean versus the 35.464 ms baseline, but those are full-call measurements and do not identify a per-kernel cause. Its L=48 packing uses 48-wide rows, so 32-thread warps cross row bo"
+        },
+        "alternative": {
+          "id": "71b7793a2dab4e28",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.03467794672648112,
+          "hypothesis_as_data": "The only prior distinct T1 program was correct at 34.147 ms mean versus the 35.464 ms baseline, but those are full-call measurements and do not identify a per-kernel cause. Its L=48 packing uses 48-wide rows, so 32-thread warps cross row bo"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "f014e1b6f1494b52",
+    "f014e1b6f1494b52-h01",
+    "71b7793a2dab4e28",
+    "71b7793a2dab4e28-h01",
+    "lesson:f014e1b6f1494b52:0:0",
+    "lesson:71b7793a2dab4e28:0:0"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "de67e354ae804afbacd8b86fcd5638fbcf47c9fb",
+  "selected_parent_id": null
+}

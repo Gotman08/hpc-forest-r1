@@ -1,0 +1,290 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "2d33d81cdcfbbc0125107dd390bec575ba5a2ce3cdcf202e3523a21b61c661cb",
+    "tree_id": "e1:T2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "132b8ca4ab774f70",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "132b8ca4ab774f70",
+        "facts": {
+          "commit": "ff1e5099b79e2b05a690ffca0aed785d27f4ce23",
+          "base_commit": "359c83cd5e093c1682fec2365f7f375dc7dd2b15",
+          "parent_id": "4184453b5e7a41a6",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.005633379654970761,
+          "score": 0.9990145553743008
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Using direct B access for every size, with the parent's same 8x16 microkernel and disjoint OpenMP output tiles, removes panel allocation, copying, and packing barriers. At n=1024 this isolates those costs against the measured B-packed parent; direct access may instead lose if re-reading B across row tiles outweighs the packing cost.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Removed B-panel allocation and packing; all sizes now use direct row-major B access.\",\"Kept the parent's 8x16 AVX-512 FMA microkernel, runtime ISA check, scalar fallback, and generic row/column tails.\",\"Assigned disjoint output tiles to an OpenMP team capped at eight threads; each tile starts from zero and fully overwrites its output.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "132b8ca4ab774f70-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "132b8ca4ab774f70",
+        "facts": {
+          "commit": null,
+          "base_commit": "359c83cd5e093c1682fec2365f7f375dc7dd2b15",
+          "parent_id": "4184453b5e7a41a6",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Using direct B access for every size, with the parent's same 8x16 microkernel and disjoint OpenMP output tiles, removes panel allocation, copying, and packing barriers. At n=1024 this isolates those costs against the measured B-packed parent; direct access may instead lose if re-reading B across row tiles outweighs the packing cost.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Removed B-panel allocation and packing; all sizes now use direct row-major B access.\",\"Kept the parent's 8x16 AVX-512 FMA microkernel, runtime ISA check, scalar fallback, and generic row/column tails.\",\"Assigned disjoint output tiles to an OpenMP team capped at eight threads; each tile starts from zero and fully overwrites its output.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4184453b5e7a41a6",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "4184453b5e7a41a6",
+        "facts": {
+          "commit": "359c83cd5e093c1682fec2365f7f375dc7dd2b15",
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0034432215904214554,
+          "score": 0.9993974479095871
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "An 8x16 register-tiled AVX-512 FMA kernel should accelerate the large GEMM relative to the measured serial baseline. B-only 128x128 panels may improve reuse for larger matrices, but their per-call allocation and packing cost could offset that benefit; the same tile kernel uses direct B access below a generic two-panel threshold. A later matched-size direct-versus-packed run is needed to isolate the packing effect.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace fixed-size scalar GEMM with generic 8-row by 16-column output tiles and explicit AVX-512 FMA microkernel, guarded by runtime AVX-512F/FMA detection; use a scalar fallback for unsupported targets and row tails.\",\"Assign disjoint output row/column tiles to an OpenMP team clamped to at most eight threads.\",\"Use direct B access for dimensions below two 128-column panels; for larger dimensions, allocate a per-call 128x128 B-panel buffer, pack each K/column panel, and reuse the same microkernel across row tiles.\",\"Initialize each output tile from zero on the first K panel and accumulate later panels, ensuring all output elements are overwritten on every invocation and handling K, row, and column tails generically.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4184453b5e7a41a6-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "4184453b5e7a41a6",
+        "facts": {
+          "commit": null,
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "An 8x16 register-tiled AVX-512 FMA kernel should accelerate the large GEMM relative to the measured serial baseline. B-only 128x128 panels may improve reuse for larger matrices, but their per-call allocation and packing cost could offset that benefit; the same tile kernel uses direct B access below a generic two-panel threshold. A later matched-size direct-versus-packed run is needed to isolate the packing effect.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace fixed-size scalar GEMM with generic 8-row by 16-column output tiles and explicit AVX-512 FMA microkernel, guarded by runtime AVX-512F/FMA detection; use a scalar fallback for unsupported targets and row tails.\",\"Assign disjoint output row/column tiles to an OpenMP team clamped to at most eight threads.\",\"Use direct B access for dimensions below two 128-column panels; for larger dimensions, allocate a per-call 128x128 B-panel buffer, pack each K/column panel, and reuse the same microkernel across row tiles.\",\"Initialize each output tile from zero on the first K panel and accumulate later panels, ensuring all output elements are overwritten on every invocation and handling K, row, and column tails generically.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "20d5d3610fd14da9",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "20d5d3610fd14da9",
+        "facts": {
+          "commit": "b41113f1f76033304a2f6892090a0b3806e4ca9d",
+          "base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.015874440047619048,
+          "score": 0.9972280570200296
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The parent’s row-column-K order walks B with a stride of n and performs no parallel work. Tiled i-k-j accumulation makes B and C accesses contiguous in the output-column loop; keeping an 8x128 C tile and 32x128 B panel active should improve locality. Static ownership of disjoint 8-row tiles can use up to eight threads for larger matrices, while serial execution below n=256 avoids parallel overhead on small cases. These are unmeasured expectations, not a speedup claim.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Zero the complete output on every call, then compute generic positive n dimensions without packing or explicit intrinsics.\",\"Tile the row, output-column, and K loops (8x128x32) while keeping the inner output-column loop contiguous and processing K blocks in ascending order.\",\"Use static OpenMP scheduling over disjoint row tiles for n >= 256, clamp worker count to 1..8, and use a serial path for smaller cases.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:132b8ca4ab774f70:0:0",
+        "kind": "lesson",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "132b8ca4ab774f70",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured 8x16 AVX-512 parent with B-only packing was correct on all six tested cases and had repeated n=1024 timings of 0.0034113, 0.0034321, and 0.0034863 seconds (mean 0.0034432 seconds).",
+          "transformations": "{}",
+          "applicability": "A direct-access candidate with the same tile and microkernel provides a matched comparison to the B-only packed parent, especially at n=1024.",
+          "next_experiment": "Compare the controller's direct-access timings and correctness results to the packed parent before deciding whether packing or a different panel layout merits further testing.",
+          "evidence_ids": [
+            "4184453b5e7a41a6"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 7,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T2",
+        "subject": "Register-tiled SIMD GEMM with measured packing ablation",
+        "objective": "Explore an explicit register-tiled FP32 FMA/SIMD microkernel with OpenMP ownership of disjoint output tiles. Measure direct-access and packed-panel variants using the same microkernel and comparable tiles where practical, so packing overhead and benefit are tested rather than assumed; consider packing B alone versus additional panels. Tune microkernel shape and panel layout, and include scratch allocation and packing in total runtime. Use AVX-512 or AVX2 only when compatible with the frozen GCC build and target, without changing compiler settings. Handle tails and small sizes generically, respect the threads budget (at most eight), fully overwrite output each invocation, and validate varying signed inputs against the fixed FP64 tolerance. Change only src/candidate.cpp; record failed attempts and report correctness and repeated native timings, prioritizing n=1024.",
+        "records": 5,
+        "results": {
+          "trials": 2,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 2,
+          "distinct_programs": 2,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "4184453b5e7a41a6",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0034432215904214554,
+          "hypothesis_as_data": "An 8x16 register-tiled AVX-512 FMA kernel should accelerate the large GEMM relative to the measured serial baseline. B-only 128x128 panels may improve reuse for larger matrices, but their per-call allocation and packing cost could offset th"
+        },
+        "latest": {
+          "id": "132b8ca4ab774f70",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.005633379654970761,
+          "hypothesis_as_data": "Using direct B access for every size, with the parent's same 8x16 microkernel and disjoint OpenMP output tiles, removes panel allocation, copying, and packing barriers. At n=1024 this isolates those costs against the measured B-packed paren"
+        },
+        "alternative": {
+          "id": "132b8ca4ab774f70",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.005633379654970761,
+          "hypothesis_as_data": "Using direct B access for every size, with the parent's same 8x16 microkernel and disjoint OpenMP output tiles, removes panel allocation, copying, and packing barriers. At n=1024 this isolates those costs against the measured B-packed paren"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "132b8ca4ab774f70",
+    "132b8ca4ab774f70-h01",
+    "4184453b5e7a41a6",
+    "4184453b5e7a41a6-h01",
+    "20d5d3610fd14da9",
+    "lesson:132b8ca4ab774f70:0:0"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "37fde83d1a31400b6879cdca015746966ad9d942",
+  "selected_parent_id": null
+}

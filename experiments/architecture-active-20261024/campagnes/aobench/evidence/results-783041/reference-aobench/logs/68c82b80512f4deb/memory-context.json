@@ -1,0 +1,416 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "f5a8a354b5dad39ce9b2a10e3ae7298aa04e78b6b4c952819d46769648849559",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "a7899f33b9cf4d5b",
+        "kind": "experiment",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "a7899f33b9cf4d5b",
+        "facts": {
+          "commit": "3949609f0bf6ec2860952ca97a34c106e71bcf11",
+          "base_commit": "a22c2e2d71660012fa770e31ba8cf066fa955009",
+          "parent_id": null,
+          "source_ids": [
+            "9706e210240a448f",
+            "56b0d98c1a6f439f"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.35879393562777756,
+          "score": 0.9069253010367473
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "L’intégration combine les pixels indépendants et l’ordonnancement OpenMP de T1 avec le stockage SoA des directions ambiantes et les tests d’intersection par voie de T3. Les boucles par voie pourraient exposer les intersections au compilateur tout en gardant le parallélisme des pixels; les temporaires et le changement d’ordre des intersections peuvent aussi coûter davantage. Aucun gain additif n’est présumé, et le contrôleur doit valider toutes les tailles, graines et répétitions officielles.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Générer les 64 directions ambiantes dans trois tableaux SoA en conservant l’ordre des boucles, les tirages SplitMix64 et les calculs de direction.\",\"Traiter les sphères sur les voies de rayons indépendantes en conservant la racine positive la plus proche, puis appliquer le test du plan sur les voies et compter les hits.\",\"Conserver la génération de graine par appel, l’état RNG indépendant par pixel, le parcours primaire, les échantillons, l’ordonnancement OpenMP dynamique par blocs de 64 et la limite de threads fournis.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "187778ebb7bb4a38",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "187778ebb7bb4a38",
+        "facts": {
+          "commit": "0dcaf4d99be0e24af2f07226a8ef4db05834fb1d",
+          "base_commit": "a9c63ed159061083064c85cdc3d494d72409961e",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.4652633430748091,
+          "score": 0.8825499609693738
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Dynamic 16-pixel chunks may improve load balance over the measured dynamic-64 schedule when per-pixel hit and ambient-occlusion work varies, especially at high thread counts, but the extra scheduling overhead may offset that benefit. A direct serial path should avoid OpenMP team overhead at one thread. This tests chunk granularity against the valid dynamic-64 candidate; observed aggregate timings do not establish a per-configuration winner.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace ambient-worker drand48 calls with per-pixel SplitMix64 streams seeded from a serial render-seed draw and linear pixel index.\",\"Use OpenMP dynamic scheduling over flattened pixels with chunk size 16 and num_threads capped at the requested thread count; use a direct serial loop for one thread.\",\"Preserve the primary-ray and ambient-ray counts, ray calculations, and one-pixel-per-worker output ownership.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "3ccd59ba1be241b8",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "3ccd59ba1be241b8",
+        "facts": {
+          "commit": "5c856207914e0b969b0a522bf9b6ee02afc60718",
+          "base_commit": "a9c63ed159061083064c85cdc3d494d72409961e",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.516903262858501,
+          "score": 0.4985174555310704
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Combining the prior invariant hoisting with local per-pixel accumulation may reduce repeated scalar setup and channel read-modify-writes, but the isolated results do not imply an additive gain: hoisting was only marginally faster than baseline, while accumulation alone was slower. The ordered float additions, primary-ray generation, AO kernel, RNG sequence, and scheduling remain unchanged; the controller should test the combination for all correctness cases and repeated timings.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Hoist float half-width, half-height, aspect ratio, and subsample-count conversion to per-call setup while retaining the original primary-coordinate arithmetic order.\",\"Accumulate each primary-ray result into one local float per pixel in the original subsample traversal order.\",\"Normalize the accumulated scalar once and write the same resulting value to each of the three image channels once per pixel.\",\"Leave AO ray generation/intersection, geometry, RNG calls and sequence, primary sample count/order, and serial scheduling unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "56b0d98c1a6f439f",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "56b0d98c1a6f439f",
+        "facts": {
+          "commit": "053a951763b788d96fd670ba39037e00c59117aa",
+          "base_commit": "facf6403efab9ad1e3b2cd1d31d9c34fd3e5d355",
+          "parent_id": "fec679fa77874855",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.8608690480766965,
+          "score": 0.5499639922435365
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The paired-sine/cosine variant measured 3.493764 s versus the 3.496109 s baseline, while the selected parent’s ambient-origin precomputation measured 3.348743 s; these aggregate results do not establish which ambient cost dominates. This separate experiment keeps the parent’s precomputation and sampling math but stores all 64 generated directions in structure-of-arrays form, then processes each sphere across independent ray lanes. The loops may expose intersection arithmetic to compiler auto-vectorization without ISA-specific code; whether that happens and whether it helps remain to be measured.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Stage all 64 ambient directions in structure-of-arrays form while preserving original loop order, random draws, and direction calculations.\",\"Evaluate each sphere across the independent ray lanes and update each lane's nearest positive root; then run the plane test across all lanes and count hits.\",\"Leave primary-ray traversal, geometry, sample count, OpenMP scheduling, and all compiler/ISA configuration unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "a9c63ed159061083064c85cdc3d494d72409961e",
+          "base_commit": "a9c63ed159061083064c85cdc3d494d72409961e",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.4961090576060223,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "a7899f33b9cf4d5b-h01",
+        "kind": "development",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "a7899f33b9cf4d5b",
+        "facts": {
+          "commit": null,
+          "base_commit": "a22c2e2d71660012fa770e31ba8cf066fa955009",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "L’intégration combine les pixels indépendants et l’ordonnancement OpenMP de T1 avec le stockage SoA des directions ambiantes et les tests d’intersection par voie de T3. Les boucles par voie pourraient exposer les intersections au compilateur tout en gardant le parallélisme des pixels; les temporaires et le changement d’ordre des intersections peuvent aussi coûter davantage. Aucun gain additif n’est présumé, et le contrôleur doit valider toutes les tailles, graines et répétitions officielles.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Générer les 64 directions ambiantes dans trois tableaux SoA en conservant l’ordre des boucles, les tirages SplitMix64 et les calculs de direction.\",\"Traiter les sphères sur les voies de rayons indépendantes en conservant la racine positive la plus proche, puis appliquer le test du plan sur les voies et compter les hits.\",\"Conserver la génération de graine par appel, l’état RNG indépendant par pixel, le parcours primaire, les échantillons, l’ordonnancement OpenMP dynamique par blocs de 64 et la limite de threads fournis.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 31,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Thread-safe OpenMP pixel parallelism and independent sampling",
+        "objective": "Explore OpenMP parallelization of independent pixels or scanlines in src/candidate.cpp, with the requested `threads` as a hard maximum and no writes shared between workers. Replace the shared `drand48` state with a suitable per-logical-sample or per-pixel independent uniform PRNG stream so scheduling and thread count cannot introduce races or reuse correlated streams. Preserve the existing ray math and sample counts: nsubsamples squared primary rays and all 64 ambient rays at each hit. Compare sensible loop granularities/schedules, including the 1-core case, and report correctness plus repeated timings for every official performance configuration. Do not alter other files or the ABI.",
+        "records": 12,
+        "results": {
+          "trials": 4,
+          "valid": 4,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "9706e210240a448f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.46135003664123836,
+          "hypothesis_as_data": "A dynamic pixel schedule with chunks of 64 should balance spatially varying hit and ambient-occlusion work better than a static contiguous partition while keeping scheduling overhead bounded. Per-pixel SplitMix64 streams seeded from one ser"
+        },
+        "latest": {
+          "id": "187778ebb7bb4a38",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.4652633430748091,
+          "hypothesis_as_data": "Dynamic 16-pixel chunks may improve load balance over the measured dynamic-64 schedule when per-pixel hit and ambient-occlusion work varies, especially at high thread counts, but the extra scheduling overhead may offset that benefit. A dire"
+        },
+        "alternative": {
+          "id": "187778ebb7bb4a38",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.4652633430748091,
+          "hypothesis_as_data": "Dynamic 16-pixel chunks may improve load balance over the measured dynamic-64 schedule when per-pixel hit and ambient-occlusion work varies, especially at high thread counts, but the extra scheduling overhead may offset that benefit. A dire"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "Isolated scalar primary-ray and pixel-output experiments",
+        "objective": "Optimize only the scalar primary-ray/per-pixel path in src/candidate.cpp, leaving the ambient-occlusion ray-generation/intersection kernel, RNG sequence, and thread scheduling unchanged. Measure invariant hoisting and local scalar accumulation/write-once changes separately against the original, then measure their combination; do not assume combined gains are additive. Preserve geometry and all primary samples, and check any rounding changes against the required RMSE and absolute-mean thresholds. Run all official correctness cases and repeated timings at each performance configuration so the result remains useful when considered for integration with the other tracks.",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "6e9a100a4acf4e32",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.4935945907689607,
+          "hypothesis_as_data": "Hoisting the per-call half-dimensions, aspect ratio, and subsample-count conversion out of the scalar primary-sample loops may remove repeated invariant work while preserving the order and values of the per-sample arithmetic. The compiler m"
+        },
+        "latest": {
+          "id": "3ccd59ba1be241b8",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.516903262858501,
+          "hypothesis_as_data": "Combining the prior invariant hoisting with local per-pixel accumulation may reduce repeated scalar setup and channel read-modify-writes, but the isolated results do not imply an additive gain: hoisting was only marginally faster than basel"
+        },
+        "alternative": {
+          "id": "3ccd59ba1be241b8",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.516903262858501,
+          "hypothesis_as_data": "Combining the prior invariant hoisting with local per-pixel accumulation may reduce repeated scalar setup and channel read-modify-writes, but the isolated results do not imply an additive gain: hoisting was only marginally faster than basel"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T3",
+        "subject": "Ambient-ray generation and intersection throughput",
+        "objective": "Investigate ambient-ray generation and intersection throughput in src/candidate.cpp while keeping this separate from primary-ray traversal and OpenMP scheduling. Contrast the cost of scalar direction generation (for example, paired sin/cos only if supported by the frozen build) with batched/compiler-vectorized or intrinsic sphere/plane intersections; measure isolated variants before combinations. Preserve the uniform independent sampling distribution, random consumption where possible, all 64 rays per hit, geometry, and hit/root conditions. Do not use early-outs that omit required intersection work or unverified ISA instructions; retain a build-valid fallback if needed and do not inspect the runtime environment. Report correctness and repeated timings for all official configurations, including nsubsamples=3.",
+        "records": 8,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "56b0d98c1a6f439f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.8608690480766965,
+          "hypothesis_as_data": "The paired-sine/cosine variant measured 3.493764 s versus the 3.496109 s baseline, while the selected parent’s ambient-origin precomputation measured 3.348743 s; these aggregate results do not establish which ambient cost dominates. This se"
+        },
+        "latest": {
+          "id": "56b0d98c1a6f439f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.8608690480766965,
+          "hypothesis_as_data": "The paired-sine/cosine variant measured 3.493764 s versus the 3.496109 s baseline, while the selected parent’s ambient-origin precomputation measured 3.348743 s; these aggregate results do not establish which ambient cost dominates. This se"
+        },
+        "alternative": {
+          "id": "d2f45735907842e1",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.493764078428109,
+          "hypothesis_as_data": "This isolates ambient azimuth direction generation: pairing the sine and cosine evaluation may reduce per-ray trig-call overhead without changing either random draw, the float azimuth, or the intended independent sampling distribution. The "
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "Gm1",
+        "subject": "Intégrer parallélisme T1 et chemin ambiant T3",
+        "objective": "Combiner le meilleur candidat mesuré T1, 9706e210240a448f, avec le candidat T3 correct 56b0d98c1a6f439f. Préserver les contraintes du protocole, puis mesurer et vérifier tous les cas officiels; ne pas présumer d’un gain additif.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "a7899f33b9cf4d5b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.35879393562777756,
+          "hypothesis_as_data": "L’intégration combine les pixels indépendants et l’ordonnancement OpenMP de T1 avec le stockage SoA des directions ambiantes et les tests d’intersection par voie de T3. Les boucles par voie pourraient exposer les intersections au compilateu"
+        },
+        "latest": {
+          "id": "a7899f33b9cf4d5b",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.35879393562777756,
+          "hypothesis_as_data": "L’intégration combine les pixels indépendants et l’ordonnancement OpenMP de T1 avec le stockage SoA des directions ambiantes et les tests d’intersection par voie de T3. Les boucles par voie pourraient exposer les intersections au compilateu"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 4,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "a7899f33b9cf4d5b",
+    "187778ebb7bb4a38",
+    "3ccd59ba1be241b8",
+    "56b0d98c1a6f439f",
+    "baseline-e1",
+    "a7899f33b9cf4d5b-h01",
+    "9706e210240a448f",
+    "6e9a100a4acf4e32",
+    "d2f45735907842e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "3949609f0bf6ec2860952ca97a34c106e71bcf11",
+  "selected_parent_id": null
+}

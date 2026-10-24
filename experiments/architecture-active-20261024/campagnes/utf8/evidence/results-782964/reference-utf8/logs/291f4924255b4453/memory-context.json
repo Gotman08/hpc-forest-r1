@@ -1,0 +1,416 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "79762fade4997dfe229474dba7b8ea557ca8d1de5b33302ac6bc0c124eb48d68",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "99d98d0fd9484ad9",
+        "kind": "experiment",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "99d98d0fd9484ad9",
+        "facts": {
+          "commit": "362ffe80bfe4153d3de545f5b1867d687468391b",
+          "base_commit": "b2dc211dc6017983c4f790890693a86d5951f3a8",
+          "parent_id": null,
+          "source_ids": [
+            "31112ea757f04c4a",
+            "1bef6299446e4809"
+          ],
+          "source_count": 2,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.623392328558728e-05,
+          "score": 0.46877504175888246
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The 16-byte SSE2 prefix scan can skip long initial ASCII runs, while the 8-byte word checks after the first mixed vector may skip later complete ASCII blocks that scalar suffix decoding would inspect byte by byte. The additional masks and mixed-block decoding may instead cost more on short or dense non-ASCII inputs. The combined program is unmeasured and must beat the parent's 39.978 µs mean; no additive gain is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Retained the bounded 16-byte SSE2 ASCII-prefix scan and its handoff at the first vector containing a high-bit byte.\",\"Replaced scalar suffix processing with an 8-byte high-bit mask loaded using memcpy; decode mixed blocks by complete code point through the block boundary, then validate the bounded scalar tail.\",\"Preserved the UTF-8 validity rules, run ABI, output, and conditional SSE2 compilation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "1b0aac66208e4315",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "1b0aac66208e4315",
+        "facts": {
+          "commit": "82341ab1a2285183c063c89651d20d00a3887b05",
+          "base_commit": "3042dd9340e0a491b40a335b9e9416ce11ced33a",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9619544029793622e-05,
+          "score": 0.6262173868117621
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The SSE2 path already classifies starters and continuation requirements across 16-byte blocks, but performs several SIMD comparisons to validate restricted second-byte ranges. Checking those ranges scalarly only for E0, ED, F0, or F4 starter lanes may reduce per-block SIMD work when those starters are infrequent. Lane-15 checks remain deferred across the block boundary, and the existing scalar validator remains the fallback/control. This is an unmeasured hybrid; the official mixed-width n=65536 timing will determine whether it helps.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Retained the supplied scalar UTF-8 validator and the existing compile-time SSE2/scalar fallback.\",\"Kept 16-byte SIMD starter classification, shifted continuation requirements, carry state, and bounded scalar tail handling.\",\"Replaced vector-wide restricted second-byte range comparisons with conditional scalar checks only for E0, ED, F0, and F4 lanes.\",\"Deferred restricted checks for lane 15 to the next vector while preserving exact second-byte restrictions and the existing ABI/output.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "24d80931a28445a0",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "24d80931a28445a0",
+        "facts": {
+          "commit": "8006c88638f8cb7c8fcd32c65015d1dcfebda0be",
+          "base_commit": "3042dd9340e0a491b40a335b9e9416ce11ced33a",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 6.763301693531333e-05,
+          "score": 0.42320293751501636
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "This distinct hybrid tests whether SIMD can capture later ASCII spans without paying for a SIMD restart after each decoded code point: skip complete 16-byte ASCII vectors, then strictly decode a 64-byte window after a mixed vector before resuming SIMD. It may help if the official mixed-width input has later ASCII spans; otherwise the scalar windows may add overhead. The fallback begins at a code-point boundary and validates the first high-bit byte rather than assuming it is a lead. No speedup is claimed.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Added a strict single-code-point scalar decoder and used it for scalar validation, preserving UTF-8 checks for overlong encodings, surrogates, out-of-range code points, and malformed continuations.\",\"Skipped only complete 16-byte vectors whose bytes are all ASCII; after a mixed vector, decoded a scalar window through at least 64 bytes before resuming SIMD at the resulting known code-point boundary.\",\"Kept vector loads within length, delegated the tail to scalar validation, and preserved the run ABI and output.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "1e47ac10752b48cc",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "1e47ac10752b48cc",
+        "facts": {
+          "commit": "923a33d9d29840d7e687a5a4c2e918f6d50467fb",
+          "base_commit": "3042dd9340e0a491b40a335b9e9416ce11ced33a",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 9.914890836008484e-05,
+          "score": 0.33355157885408643
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Baseline T3 measurements put the original decoder at 49.623 µs and predicate aggregation at 49.545 µs, while the measured shared-loop and table-DFA variants were slower. This distinct pure-scalar test replaces per-width validation branches in the main loop with masked predicates and arithmetic width advancement, using a bounded four-byte lookahead and the scalar decoder for the final short tail. It may reduce control-flow dependencies, but redundant lookahead loads for short sequences may erase any gain; the controller must measure it on the official mixed-width n=65536 workload.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Keep the scalar ASCII-run skip and the existing run ABI and output assignment.\",\"For non-ASCII bytes with at least four bytes remaining, use bounded lookahead loads and bitwise-masked continuation and UTF-8 boundary predicates instead of width-specific validation branches.\",\"Advance by an arithmetically derived sequence width and use an explicit bounds-checked scalar decoder for the short tail.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "3042dd9340e0a491b40a335b9e9416ce11ced33a",
+          "base_commit": "3042dd9340e0a491b40a335b9e9416ce11ced33a",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.9623157435502036e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "99d98d0fd9484ad9-h01",
+        "kind": "development",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "99d98d0fd9484ad9",
+        "facts": {
+          "commit": null,
+          "base_commit": "b2dc211dc6017983c4f790890693a86d5951f3a8",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The 16-byte SSE2 prefix scan can skip long initial ASCII runs, while the 8-byte word checks after the first mixed vector may skip later complete ASCII blocks that scalar suffix decoding would inspect byte by byte. The additional masks and mixed-block decoding may instead cost more on short or dense non-ASCII inputs. The combined program is unmeasured and must beat the parent's 39.978 µs mean; no additive gain is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Retained the bounded 16-byte SSE2 ASCII-prefix scan and its handoff at the first vector containing a high-bit byte.\",\"Replaced scalar suffix processing with an 8-byte high-bit mask loaded using memcpy; decode mixed blocks by complete code point through the block boundary, then validate the bounded scalar tail.\",\"Preserved the UTF-8 validity rules, run ABI, output, and conditional SSE2 compilation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 57,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Whole-stream SIMD UTF-8 validation with cross-block state",
+        "objective": "Primary hypothesis: SIMD masks validate UTF-8 constraints across the whole buffer, unlike T2's ASCII-span locator. Explore block classification, shifted continuation requirements, restricted second-byte checks, cross-block state, and a bounded tail. Compare relevant SIMD variants only when supported by the frozen target and unchanged build; do not alter flags or add runtime environment probing. Keep the supplied scalar implementation as a control, and report any useful hybrid as a distinct variant rather than excluding it. Preserve exact scalar-value validation, ABI, output, and thread budget. Use the official mixed-width n=65536 timing for performance and official ASCII/malformed checks for correctness, paying particular attention to vector boundaries and truncations where covered. Record failed variants.",
+        "records": 16,
+        "results": {
+          "trials": 4,
+          "valid": 2,
+          "incorrect": 0,
+          "unmeasured": 2
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "1b0aac66208e4315",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9619544029793622e-05,
+          "hypothesis_as_data": "The SSE2 path already classifies starters and continuation requirements across 16-byte blocks, but performs several SIMD comparisons to validate restricted second-byte ranges. Checking those ranges scalarly only for E0, ED, F0, or F4 starte"
+        },
+        "latest": {
+          "id": "1b0aac66208e4315",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9619544029793622e-05,
+          "hypothesis_as_data": "The SSE2 path already classifies starters and continuation requirements across 16-byte blocks, but performs several SIMD comparisons to validate restricted second-byte ranges. Checking those ranges scalarly only for E0, ED, F0, or F4 starte"
+        },
+        "alternative": {
+          "id": "1bef6299446e4809",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.7504732885487084e-05,
+          "hypothesis_as_data": "A portable 64-bit high-bit mask can skip complete ASCII blocks throughout the buffer. For mixed blocks, scalar-decode through the block boundary and any crossing code point, avoiding both repeated per-byte ASCII checks and the prior full bi"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "SIMD-assisted ASCII-run skipping with a scalar slow path",
+        "objective": "Primary hypothesis: vector high-bit scans can skip ASCII spans while the existing strict scalar decoder handles non-ASCII code points. The benefit depends on the actual official mixed-width input containing useful ASCII spans; do not assume this or use synthetic-only results as evidence for the scored workload. Start decoding at a known code-point boundary and treat the first high-bit byte as input to validate—not as an assumed lead, since it may be a stray continuation. Keep loads and tails within n. Preserve exact validity, ABI, output, and thread budget. Measure the official mixed-width n=65536 workload and run the official ASCII/malformed correctness checks, especially for boundaries. Report this approach separately from T1's whole-buffer validation; label any hybrid distinctly and record failed variants.",
+        "records": 22,
+        "results": {
+          "trials": 10,
+          "valid": 10,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 10,
+          "distinct_programs": 10,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "31112ea757f04c4a",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.997831575413008e-05,
+          "hypothesis_as_data": "The catalog has three distinct, valid SIMD-scan programs and no repeats, but none beat the 49.62 µs baseline: the 16-byte scan measured 60.43 µs, the selected lane-bisection parent 77.82 µs, and the 64-byte variant 81.00 µs. This contrastin"
+        },
+        "latest": {
+          "id": "24d80931a28445a0",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 6.763301693531333e-05,
+          "hypothesis_as_data": "This distinct hybrid tests whether SIMD can capture later ASCII spans without paying for a SIMD restart after each decoded code point: skip complete 16-byte ASCII vectors, then strictly decode a 64-byte window after a mixed vector before re"
+        },
+        "alternative": {
+          "id": "24d80931a28445a0",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 6.763301693531333e-05,
+          "hypothesis_as_data": "This distinct hybrid tests whether SIMD can capture later ASCII spans without paying for a SIMD restart after each decoded code point: skip complete 16-byte ASCII vectors, then strictly decode a 64-byte window after a mixed vector before re"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T3",
+        "subject": "Branch-reduced scalar UTF-8 decoding",
+        "objective": "Primary hypothesis: reducing scalar decoding control flow or dependencies helps the mixed-width workload; the supplied baseline already has an ASCII fast path, so do not assume ASCII scanning is the only scalar cost. Compare the baseline decoder with compact-state/DFA or reduced-branch scalar variants, measuring each under the official mixed-width n=65536 workload and checking official ASCII/malformed correctness. Keep scalar decoding as the focus, but do not treat that focus as a ban on useful correctness-preserving experiments; label any hybrid separately from pure-scalar results. Preserve exact validity, ABI, output, bounds, and thread budget. Report failed variants.",
+        "records": 16,
+        "results": {
+          "trials": 5,
+          "valid": 5,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 5,
+          "distinct_programs": 5,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "ec1a08dc37a84021",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.954522326594237e-05,
+          "hypothesis_as_data": "The baseline and previous lead-directed candidate retain the same general scalar width dispatch, but the latter was slower. This pure-scalar variant tests whether aggregating per-sequence validity predicates with bitwise OR, rather than sho"
+        },
+        "latest": {
+          "id": "1e47ac10752b48cc",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 9.914890836008484e-05,
+          "hypothesis_as_data": "Baseline T3 measurements put the original decoder at 49.623 µs and predicate aggregation at 49.545 µs, while the measured shared-loop and table-DFA variants were slower. This distinct pure-scalar test replaces per-width validation branches "
+        },
+        "alternative": {
+          "id": "1e47ac10752b48cc",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 9.914890836008484e-05,
+          "hypothesis_as_data": "Baseline T3 measurements put the original decoder at 49.623 µs and predicate aggregation at 49.545 µs, while the measured shared-loop and table-DFA variants were slower. This distinct pure-scalar test replaces per-width validation branches "
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "Gm1",
+        "subject": "Test a faster ASCII-prefix scan with a word-scanned scalar suffix",
+        "objective": "Starting from the fastest correct source 31112, retain its 16-byte SSE2 ASCII-prefix scan and test replacing its scalar suffix with T1's measured 8-byte ASCII-word/mixed-block decoder from 1bef. This tests whether skipping ASCII blocks after the first non-ASCII block helps without sacrificing the faster prefix. Preserve all correctness and protocol constraints; remeasure the combined program and do not assume additive gains.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "99d98d0fd9484ad9",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.623392328558728e-05,
+          "hypothesis_as_data": "The 16-byte SSE2 prefix scan can skip long initial ASCII runs, while the 8-byte word checks after the first mixed vector may skip later complete ASCII blocks that scalar suffix decoding would inspect byte by byte. The additional masks and m"
+        },
+        "latest": {
+          "id": "99d98d0fd9484ad9",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.623392328558728e-05,
+          "hypothesis_as_data": "The 16-byte SSE2 prefix scan can skip long initial ASCII runs, while the 8-byte word checks after the first mixed vector may skip later complete ASCII blocks that scalar suffix decoding would inspect byte by byte. The additional masks and m"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 4,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "99d98d0fd9484ad9",
+    "1b0aac66208e4315",
+    "24d80931a28445a0",
+    "1e47ac10752b48cc",
+    "baseline-e1",
+    "99d98d0fd9484ad9-h01",
+    "1bef6299446e4809",
+    "31112ea757f04c4a",
+    "ec1a08dc37a84021"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "82341ab1a2285183c063c89651d20d00a3887b05",
+  "selected_parent_id": null
+}

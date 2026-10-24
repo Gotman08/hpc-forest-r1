@@ -1,0 +1,149 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n#if defined(__SSE2__)\n#include <emmintrin.h>\n#endif\nstatic bool validate_utf8(const char *b, size_t length) {\n  const unsigned char *bytes = (const unsigned char *)b;\n  size_t index = 0;\n#if defined(__SSE2__)\n  // Scan a bounded SIMD prefix; decode from the first non-ASCII block onward.\n  while (length - index >= 32) {\n    const __m128i v0 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(bytes + index));\n    const __m128i v1 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(bytes + index + 16));\n    if ((_mm_movemask_epi8(v0) | _mm_movemask_epi8(v1)) != 0) {\n      break;\n    }\n    index += 32;\n  }\n#endif\n  for (;;) {\n    unsigned char byte1;\n\n    do { // fast ASCII Path\n      if (index >= length) {\n        return true;\n      }\n      byte1 = bytes[index++];\n    } while (byte1 < 0x80);\n    if (byte1 < 0xE0) {\n      // Two-byte form.\n      if (index == length) {\n        return false;\n      }\n      if (byte1 < 0xC2 || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    } else if (byte1 < 0xF0) {\n      // Three-byte form.\n      if (index + 1 >= length) {\n        return false;\n      }\n      unsigned char byte2 = bytes[index++];\n      if ((byte2 & 0xC0) != 0x80\n          // Overlong? 5 most significant bits must not all be zero.\n          || (byte1 == 0xE0 && byte2 < 0xA0)\n          // Check for illegal surrogate codepoints.\n          || (byte1 == 0xED && 0xA0 <= byte2)\n          // Third byte trailing-byte test.\n          || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    } else {\n\n      // Four-byte form.\n      if (index + 2 >= length) {\n        return false;\n      }\n      int byte2 = bytes[index++];\n      if ((byte2 & 0xC0) != 0x80\n          // Check that 1 <= plane <= 16. Tricky optimized form of:\n          // if (byte1 > (byte) 0xF4\n          //     || byte1 == (byte) 0xF0 && byte2 < (byte) 0x90\n          //     || byte1 == (byte) 0xF4 && byte2 > (byte) 0x8F)\n          || (byte1 > 0xF4 || (byte1 == 0xF0 && byte2 < 0x90) || (byte1 == 0xF4 && byte2 > 0x8F))\n          // Third byte trailing-byte test\n          || (bytes[index++] & 0xC0) != 0x80\n          // Fourth byte trailing-byte test\n          || (bytes[index++] & 0xC0) != 0x80) {\n        return false;\n      }\n    }\n  }\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{*(uint32_t*)output=validate_utf8((const char*)input1,n);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "A one-way SSE2 scan over complete 32-byte ASCII blocks, followed by the strict scalar decoder from the first non-ASCII block boundary, may balance the measured 16-byte and 64-byte prefix variants. This tests an intermediate block size on the official mixed-width n=65536 workload; it does not assume that input has useful ASCII spans or claim a speedup.",
+    "memory_lessons": [
+      {
+        "applicability": "Motivates an intermediate block-size test for the same workload; does not establish that block size alone caused the timing difference.",
+        "claim": "The catalog reports valid one-way SIMD-prefix/scalar-suffix variants at 39.98 µs for 16-byte blocks and 43.80 µs for 64-byte blocks, against a 49.62 µs baseline. A 32-byte prefix is a contrasting intermediate-size experiment.",
+        "evidence_ids": [
+          "31112ea757f04c4a",
+          "1a132d62e8224843",
+          "baseline-e1"
+        ],
+        "next_experiment": "Measure this bounded 32-byte prefix hybrid on the official mixed-width n=65536 workload and run the official malformed, ASCII, and boundary correctness checks."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "This is a 32-byte SIMD-prefix/scalar-suffix hybrid, distinct from repeated SIMD rescans and from T1 whole-buffer validation. Each complete skipped block is all ASCII; if a block contains any high bit, scalar decoding resumes at its known boundary and validates that byte rather than assuming it is a lead. Loads and vector tails are bounded by n. No measurements were run for this candidate; the controller should evaluate it on the official workload and correctness suite.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace the parent's repeated 64-byte scan inside the decoder loop with a one-way scan of complete 32-byte blocks at the known initial code-point boundary.",
+      "Skip a block only when both bounded 16-byte SSE2 loads contain no high-bit bytes; on the first block with a high bit, retain its start index for strict scalar validation of the suffix.",
+      "Retain scalar tail handling, UTF-8 validity rules, run ABI, output, and thread budget."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "a0732bd37565429a99915cc6ad14a79f",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "18cc8a788b2f0aad99bdf37e81013002d9669d0ea186923bc3dbc2dca5d02bc6",
+  "session_id": "84bf5b1d844645aba6fb57b65acabefa",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "98644142782a5e7caace31a6a63572fdd6e52e61202fc7793106a4f4892f8234",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 0,
+        "input_tokens": 35045,
+        "output_tokens": 4748,
+        "reasoning_output_tokens": 3129
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a3bf11d4fa1b442f3ce3b8f9d3db6ff8be9d5741a2c919159d96937ca556300c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "bc5196115d0740b7-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "31112ea757f04c4a",
+            "1a132d62e8224843"
+          ],
+          "status": "applied",
+          "summary": "Proposed an intermediate 32-byte prefix-scan experiment informed by distinct measured T2 variants, with no performance claim."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No new hardware/compiler assumption is introduced; the candidate retains the existing __SSE2__ guard and SSE2 intrinsics."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The candidate uses the same SSE2 load and movemask intrinsics already present in the supplied source; no uncertain API or instruction property is being relied on."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "31112ea757f04c4a",
+            "1a132d62e8224843"
+          ],
+          "status": "applied",
+          "summary": "Compared recorded timings cautiously to motivate the test, and left official workload measurement and correctness checks to the controller."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "a0732bd37565429a99915cc6ad14a79f",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "18cc8a788b2f0aad99bdf37e81013002d9669d0ea186923bc3dbc2dca5d02bc6",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "84bf5b1d844645aba6fb57b65acabefa"
+    },
+    "observed_tokens": 39793,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 39793,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

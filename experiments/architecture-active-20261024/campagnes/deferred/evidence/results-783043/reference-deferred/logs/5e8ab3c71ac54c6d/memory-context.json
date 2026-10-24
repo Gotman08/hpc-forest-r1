@@ -1,0 +1,166 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "de2c9407d9de7199819c1dbf43ec89e9d88492f8943be90b0ad2f1782dc89249",
+    "tree_id": "e1:Gm1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "5fbc3e3ee21f4957",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "5fbc3e3ee21f4957",
+        "facts": {
+          "commit": "3d9434d0f58d69bb69eb1313b678cfccb5768ac6",
+          "base_commit": "6c7704b6d1d3a87cc229d46d5af1a0ee4e81114e",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.06257816957106434,
+          "score": 0.6475059331207887
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The serial coarse-root loop may leave cores idle when recursive shading workloads differ by tile. This candidate tests dynamic one-tile work assignment across root tiles, with run()'s thread count as the cap; the serial path is retained for one thread. It does not parallelize depth-bound rows, so its effect can be evaluated independently of that approach.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Pass run()'s thread count through to DispatchDynamicC and clamp the requested count to at least one.\",\"Dynamically distribute independent coarse-root tiles in chunks of one when OpenMP is available and more than one thread is requested; preserve serial execution otherwise.\",\"Leave depth-bound generation, higher tree levels, culling, and shading algorithms unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "ce94cd49a4fc4828",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "ce94cd49a4fc4828",
+        "facts": {
+          "commit": "154f8c42e708edb102b5e877bc49e7ffc69bde26",
+          "base_commit": "6c7704b6d1d3a87cc229d46d5af1a0ee4e81114e",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.11100754758272671,
+          "score": 0.5087272283739853
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Each shaded pixel repeats indirect gathers through the same tile light-index list into separate light arrays, and recomputes invariant attenuation-end squared and attenuation range terms. A per-tile packed cache should amortize those loads and calculations while preserving the original per-pixel BRDF operations and light colors. This tests cache/preparation overhead versus reuse; the catalog has no earlier T3 candidates, and the baseline does not provide separate 1- and 4-core timings.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Pack each tile's referenced light positions, attenuation values, and color channels into a local cache once before shading its pixels.\",\"Precompute each light's attenuation-end square and attenuation range once, reusing the same float operations and leaving per-pixel normalization, powf, and BRDF evaluation unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "6c7704b6d1d3a87cc229d46d5af1a0ee4e81114e",
+          "base_commit": "6c7704b6d1d3a87cc229d46d5af1a0ee4e81114e",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.1149515407162521,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "Gm1",
+        "subject": "Combiner le parallélisme des tuiles T1 et l’optimisation du shading T3",
+        "objective": "Partir du candidat T1 le plus rapide et intégrer les changements mesurés de ShadeTileC de T3. Construire et mesurer la combinaison selon le protocole officiel, puis comparer les temps à 1 et 4 cœurs et vérifier les cas avec couleurs modifiées.",
+        "records": 0,
+        "results": {
+          "trials": 0,
+          "valid": 0,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 0,
+          "distinct_programs": 0,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": null,
+        "latest": null,
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "5fbc3e3ee21f4957",
+    "ce94cd49a4fc4828",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "3d9434d0f58d69bb69eb1313b678cfccb5768ac6",
+  "selected_parent_id": null
+}

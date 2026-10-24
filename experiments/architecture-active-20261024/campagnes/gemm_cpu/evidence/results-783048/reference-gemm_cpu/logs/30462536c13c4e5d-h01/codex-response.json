@@ -1,0 +1,149 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <algorithm>\n#include <cstddef>\n#include <cstring>\n#include <vector>\n#include <omp.h>\n\n#if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))\n#include <immintrin.h>\n#define HAVE_TARGETED_AVX512 1\n\n__attribute__((target(\"avx512f,fma\")))\nstatic void kernel_8x16_avx512(const float* a, int lda,\n                               const float* b, int bstride,\n                               float* c, int ldc,\n                               int kc, int cols, bool accumulate)\n{\n    const __mmask16 mask = static_cast<__mmask16>((1u << cols) - 1u);\n    __m512 x0 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 0 * ldc) : _mm512_setzero_ps();\n    __m512 x1 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 1 * ldc) : _mm512_setzero_ps();\n    __m512 x2 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 2 * ldc) : _mm512_setzero_ps();\n    __m512 x3 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 3 * ldc) : _mm512_setzero_ps();\n    __m512 x4 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 4 * ldc) : _mm512_setzero_ps();\n    __m512 x5 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 5 * ldc) : _mm512_setzero_ps();\n    __m512 x6 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 6 * ldc) : _mm512_setzero_ps();\n    __m512 x7 = accumulate ? _mm512_maskz_loadu_ps(mask, c + 7 * ldc) : _mm512_setzero_ps();\n\n    for (int k = 0; k < kc; ++k) {\n        const __m512 bv = _mm512_maskz_loadu_ps(mask, b + static_cast<std::size_t>(k) * bstride);\n        x0 = _mm512_fmadd_ps(_mm512_set1_ps(a[k]), bv, x0);\n        x1 = _mm512_fmadd_ps(_mm512_set1_ps(a[lda + k]), bv, x1);\n        x2 = _mm512_fmadd_ps(_mm512_set1_ps(a[2 * lda + k]), bv, x2);\n        x3 = _mm512_fmadd_ps(_mm512_set1_ps(a[3 * lda + k]), bv, x3);\n        x4 = _mm512_fmadd_ps(_mm512_set1_ps(a[4 * lda + k]), bv, x4);\n        x5 = _mm512_fmadd_ps(_mm512_set1_ps(a[5 * lda + k]), bv, x5);\n        x6 = _mm512_fmadd_ps(_mm512_set1_ps(a[6 * lda + k]), bv, x6);\n        x7 = _mm512_fmadd_ps(_mm512_set1_ps(a[7 * lda + k]), bv, x7);\n    }\n\n    _mm512_mask_storeu_ps(c + 0 * ldc, mask, x0);\n    _mm512_mask_storeu_ps(c + 1 * ldc, mask, x1);\n    _mm512_mask_storeu_ps(c + 2 * ldc, mask, x2);\n    _mm512_mask_storeu_ps(c + 3 * ldc, mask, x3);\n    _mm512_mask_storeu_ps(c + 4 * ldc, mask, x4);\n    _mm512_mask_storeu_ps(c + 5 * ldc, mask, x5);\n    _mm512_mask_storeu_ps(c + 6 * ldc, mask, x6);\n    _mm512_mask_storeu_ps(c + 7 * ldc, mask, x7);\n}\n\nstatic bool avx512_is_available()\n{\n    __builtin_cpu_init();\n    return __builtin_cpu_supports(\"avx512f\") && __builtin_cpu_supports(\"fma\");\n}\n#endif\n\nstatic void kernel_scalar(const float* a, int lda,\n                          const float* b, int bstride,\n                          float* c, int ldc,\n                          int kc, int rows, int cols, bool accumulate)\n{\n    float sums[8][16];\n    for (int r = 0; r < rows; ++r) {\n        for (int x = 0; x < cols; ++x) {\n            sums[r][x] = accumulate ? c[static_cast<std::size_t>(r) * ldc + x] : 0.0f;\n        }\n    }\n\n    for (int k = 0; k < kc; ++k) {\n        const float* brow = b + static_cast<std::size_t>(k) * bstride;\n        for (int r = 0; r < rows; ++r) {\n            const float av = a[static_cast<std::size_t>(r) * lda + k];\n            for (int x = 0; x < cols; ++x) {\n                sums[r][x] += av * brow[x];\n            }\n        }\n    }\n\n    for (int r = 0; r < rows; ++r) {\n        for (int x = 0; x < cols; ++x) {\n            c[static_cast<std::size_t>(r) * ldc + x] = sums[r][x];\n        }\n    }\n}\n\nstatic void compute_tile(const float* a, int lda,\n                         const float* b, int bstride,\n                         float* c, int ldc,\n                         int kc, int rows, int cols, bool accumulate,\n                         bool use_avx512)\n{\n#if defined(HAVE_TARGETED_AVX512)\n    if (use_avx512 && rows == 8) {\n        kernel_8x16_avx512(a, lda, b, bstride, c, ldc, kc, cols, accumulate);\n        return;\n    }\n#else\n    (void)use_avx512;\n#endif\n    kernel_scalar(a, lda, b, bstride, c, ldc, kc, rows, cols, accumulate);\n}\n\nextern \"C\" void run(const void* input1, const void* input2, void* output,\n                    int n, int parameter, int threads)\n{\n    (void)parameter;\n    if (n <= 0) {\n        return;\n    }\n\n    const float* a = static_cast<const float*>(input1);\n    const float* b = static_cast<const float*>(input2);\n    float* c = static_cast<float*>(output);\n    const int nt = std::max(1, std::min(threads, 8));\n    bool use_avx512 = false;\n#if defined(HAVE_TARGETED_AVX512)\n    use_avx512 = avx512_is_available();\n#endif\n\n    constexpr int MR = 8;\n    constexpr int NR = 16;\n    constexpr int KC = 128;\n    constexpr int NC = 128;\n\n    if (n < 2 * NC) {\n        // Match T1's serial policy for small, unpacked problems while retaining\n        // T2's SIMD microkernel and disjoint output-tile traversal.\n        for (int ib = 0; ib < n; ib += MR) {\n            for (int j = 0; j < n; j += NR) {\n                const int rows = std::min(MR, n - ib);\n                const int cols = std::min(NR, n - j);\n                compute_tile(a + static_cast<std::size_t>(ib) * n, n,\n                             b + j, n,\n                             c + static_cast<std::size_t>(ib) * n + j, n,\n                             n, rows, cols, false, use_avx512);\n            }\n        }\n        return;\n    }\n\n    // B-only panels retain the microkernel's contiguous column vectors.\n    // The per-call scratch allocation and copies are part of run's cost.\n    std::vector<float> packed(static_cast<std::size_t>(KC) * NC);\n    #pragma omp parallel num_threads(nt) shared(packed)\n    {\n        for (int jc = 0; jc < n; jc += NC) {\n            const int nc = std::min(NC, n - jc);\n            for (int pc = 0; pc < n; pc += KC) {\n                const int kc = std::min(KC, n - pc);\n                #pragma omp single\n                {\n                    for (int k = 0; k < kc; ++k) {\n                        std::memcpy(packed.data() + static_cast<std::size_t>(k) * nc,\n                                    b + static_cast<std::size_t>(pc + k) * n + jc,\n                                    static_cast<std::size_t>(nc) * sizeof(float));\n                    }\n                }\n                #pragma omp for schedule(static)\n                for (int ib = 0; ib < n; ib += MR) {\n                    const int rows = std::min(MR, n - ib);\n                    for (int j = 0; j < nc; j += NR) {\n                        const int cols = std::min(NR, nc - j);\n                        compute_tile(a + static_cast<std::size_t>(ib) * n + pc, n,\n                                     packed.data() + j, nc,\n                                     c + static_cast<std::size_t>(ib) * n + jc + j, n,\n                                     kc, rows, cols, pc != 0, use_avx512);\n                    }\n                }\n            }\n        }\n    }\n}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "Le noyau SIMD AVX-512 et le chemin de panneaux empaquetés de T2 sont déjà plus rapides que T1 pris seul. Pour les petites dimensions non empaquetées, le lancement de l'équipe OpenMP et le parcours parallèle collapse(2) peuvent coûter plus que le calcul. Appliquer la politique sérielle de T1 sous n=256 tout en conservant le micro-noyau SIMD pourrait réduire ce surcoût; seule la mesure contrôleur dira si cela compense d'éventuelles pertes à n=128.",
+    "memory_lessons": [
+      {
+        "applicability": "Pour intégrer T1 à un noyau spécialisé, isoler ses choix d'ordonnancement sans remplacer le noyau T2 plus rapide.",
+        "claim": "Les résultats valides disponibles donnent 0,003443 s pour T2 et 0,015874 s pour T1. Ils soutiennent le maintien du micro-noyau T2; ils ne démontrent pas qu'une politique T1 intégrée l'améliorera.",
+        "evidence_ids": [
+          "4184453b5e7a41a6",
+          "20d5d3610fd14da9"
+        ],
+        "next_experiment": "Comparer cette politique sérielle au parent T2 avec le protocole inchangé et vérifier séparément les cas petits et n=1024."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "T2 conserve le dispatch AVX-512 avec repli scalaire, le parcours des tuiles et le chemin d'empaquetage pour n>=256. L'unique intégration testée est la politique sérielle T1 dans le chemin direct n<256. Aucune correction ni performance de cette proposition n'a encore été mesurée; les mesures T1/T2 citées sont celles des sources antérieures.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [
+      "4184453b5e7a41a6",
+      "20d5d3610fd14da9"
+    ],
+    "transformations": [
+      "Conserver le noyau SIMD AVX-512 à dispatch d'exécution, son repli scalaire et le chemin T2 de panneaux B empaquetés pour les grandes dimensions.",
+      "Dans le chemin direct n<256, remplacer la région OpenMP collapse(2) par le parcours sériel des mêmes tuiles 8x16, reprenant la politique sérielle de T1 pour les petits cas; tous les autres chemins restent inchangés."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "50814845f26c4c218ae5a9e6026c00ed",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "bc21de89170d13db3707b2b7b2cb53b5db5ab0ffa9caab1488524ce9bbcf43ef",
+  "session_id": "d02fc9631732486bb3394c1f89d10ba0",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "4e7f7192460e83d38b02525d4b23ecbec8617952105892531f9ca6bae8fcbfd9",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 0,
+        "input_tokens": 19230,
+        "output_tokens": 7039,
+        "reasoning_output_tokens": 3978
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "6d8d331c48ef4087faef771a390762682f23e3221a52204ffe15e42883791d46",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "Gm1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "30462536c13c4e5d-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "4184453b5e7a41a6",
+            "20d5d3610fd14da9"
+          ],
+          "status": "applied",
+          "summary": "Cible le coût potentiel du lancement OpenMP sur les petits cas en changeant uniquement l'ordonnancement du chemin direct, et laisse la mesure du candidat au contrôleur."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "S'appuie sur les informations de cible fournies (AMD EPYC 9654, GCC 14.2) et conserve le dispatch existant; les drapeaux effectifs ne sont pas nécessaires à la modification d'ordonnancement proposée."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "Aucune API ou instruction nouvelle n'est introduite; le chemin SIMD existant reste inchangé."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "4184453b5e7a41a6",
+            "20d5d3610fd14da9"
+          ],
+          "status": "applied",
+          "summary": "Compare les moyennes mesurées des deux sources disponibles sans les attribuer au candidat intégré, dont la correction et le temps restent à mesurer."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "50814845f26c4c218ae5a9e6026c00ed",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "bc21de89170d13db3707b2b7b2cb53b5db5ab0ffa9caab1488524ce9bbcf43ef",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "d02fc9631732486bb3394c1f89d10ba0"
+    },
+    "observed_tokens": 26269,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 26269,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

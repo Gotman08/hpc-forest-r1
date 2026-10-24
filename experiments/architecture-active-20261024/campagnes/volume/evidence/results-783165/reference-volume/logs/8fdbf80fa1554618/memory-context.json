@@ -1,0 +1,417 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "dca0ca5e4166f9f1dda8a92ae7f09d2b110c7bb3822e214283fe32c8009f68d7",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "91429a7d2ad74de9",
+        "kind": "experiment",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "91429a7d2ad74de9",
+        "facts": {
+          "commit": "ced00c478a5b20aae26a86cf4d88e5ae65f3b88a",
+          "base_commit": "596195635aeb8c93b0919c4342f4abdb679715f5",
+          "parent_id": null,
+          "source_ids": [
+            "a2e0eefcabe94221",
+            "28cfe80ea031466e",
+            "ea64c9423f774121"
+          ],
+          "source_count": 3,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.2352334225468227,
+          "score": 0.9571665466628445
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "En partant de T1, la combinaison conserve le rendu parallèle par pixels et ajoute le pré-calcul des facteurs Density de T2 ainsi que l’omission du calcul d’éclairage/transmittance lorsque d vaut zéro, comme en T3. Les résultats mesurés des composantes (T1 : 0,942 s; T2 : 4,714 s; T3 : 1,394 s) ne permettent pas de supposer un gain additif; seul le rendu complet combiné dira si ces calculs modifient favorablement le coût sous parallélisme. La déclaration locale manquante de rayT0/rayT1 corrige l’erreur de compilation précédente.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Conserve la boucle OpenMP collapse(2) avec schedule(dynamic, 256), le rendu indépendant de chaque pixel et le chemin sériel lorsque threads <= 1 de T1.\",\"Pré-calcule une fois par appel à volume_serial les trois facteurs d’échelle Density, réutilisés pour transformer les coordonnées voxel.\",\"Dans raymarch, ne calcule distanceSquared ni transmittance que lorsque d est non nul; conserve l’accumulation, les échantillons, les pas et les contrôles.\",\"Déclare rayT0 et rayT1 dans raymarch afin que l’intersection et la traversée compilent correctement.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "af82b0510bfa4f40",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "af82b0510bfa4f40",
+        "facts": {
+          "commit": "cfc4a951108f001b9369887291cb36056d4e97ac",
+          "base_commit": "10782d523098a021f31f5e87a023f221fa7e6597",
+          "parent_id": "842bb9b00e474d39",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.942754809315255,
+          "score": 0.8479265076272218
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le parent attribue dynamiquement une ligne entière à la fois (moyenne observée : 0,9611 s), tandis que la variante aplatie `dynamic, 256` a mesuré 0,9423 s. Un parcours row-major aplati en blocs de 512 pixels teste si des lots plus fins qu’une ligne équilibrent mieux les coûts variables des rayons, avec moins de distributions que les blocs de 256. Cela peut toutefois dégrader l’équilibrage ou ne pas battre le partage par ligne. Chaque indice est unique et le chemin sériel reste sans région OpenMP; la correction et les temps à 1, 4 et 40 threads restent à mesurer.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Linéarise l’image en indices row-major et partage la boucle de pixels avec `schedule(dynamic, 512)`.\",\"Borne la taille d’équipe demandée à `min(threads, pixel_count)` et conserve le parcours sériel effectif pour une équipe d’un thread.\",\"Chaque itération calcule et écrit un indice d’image distinct; les dimensions non positives restent sans travail.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "6ee6084606d44971",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "6ee6084606d44971",
+        "facts": {
+          "commit": "060c99224125f87863d356cd2435f261b2ecd150",
+          "base_commit": "97e63eaa70de654067c306a7fa907f1c1d18a11d",
+          "parent_id": "4e1bd1001df247d6",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.543187818627302,
+          "score": 0.48673093252325506
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le parent sélectionné, qui réutilise les offsets plats après six clamps de voisins, est correct et a mesuré 5,1887 s. Les essais antérieurs distincts et corrects ont varié de 4,7135 s (facteurs) à 5,3165 s (facteurs et indices plats); ces mesures isolées n’établissent pas la cause des écarts. Cette expérience teste une réduction ciblée des opérations entières : clamp de l’indice inférieur une seule fois par axe, puis dérivation de l’indice supérieur à partir de celui-ci et d’un indicateur de frontière. La formule garde le comportement des deux clamps pour tout indice entier et toute dimension positive; aucune copie ni préparation n’est ajoutée. Le contrôleur doit vérifier la tolérance et mesurer ce changement seul.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Dans Density, conserver pour chaque axe l’indice inférieur Clamp(v, 0, n-1), puis dériver le voisin supérieur avec x0 + ((v >= 0 && x0 < n-1) ? 1 : 0). Pour toute dimension positive, cela correspond à Clamp(v+1, 0, n-1) sans recomputer le clamp complet.\",\"Garder inchangés Inside inclusif, conversion des coordonnées, offsets plats et ordre des interpolations; n’ajouter ni allocation ni préparation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "ea64c9423f774121",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "ea64c9423f774121",
+        "facts": {
+          "commit": "742c99251d9e2cf2063e6c6a037840b49b796579",
+          "base_commit": "85c50083637258be9c27f21868d12500a71c2e36",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.3936832225275635,
+          "score": 0.7904319359212347
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Dans raymarch, un échantillon où Density(pos) vaut exactement zéro n'ajoute pas de radiance pour des entrées finies, mais prépare quand même un rayon d'ombre et parcourt transmittance. Calculer Li seulement lorsque d != 0 devrait éviter ce travail sur ces échantillons, au prix d'une branche supplémentaire sur les autres. La mise à jour de L reste présente; l'ordre des échantillons, l'atténuation, l'accumulation de tau, les pas, les mises à jour de position/paramètre et l'arrêt anticipé ne changent pas. La correction et le temps de cette piste contrastante restent à mesurer.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Dans raymarch, initialiser Li à zéro et ne calculer distanceSquared ainsi que transmittance que si la densité échantillonnée d est non nulle; conserver l'accumulation de L, la mise à jour de tau, la séquence des échantillons, les pas et les contrôles inchangés.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "85c50083637258be9c27f21868d12500a71c2e36",
+          "base_commit": "85c50083637258be9c27f21868d12500a71c2e36",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.256582067911694,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "91429a7d2ad74de9-h01",
+        "kind": "development",
+        "role": "Gm1",
+        "tree_id": "e1:Gm1",
+        "mission_id": "91429a7d2ad74de9",
+        "facts": {
+          "commit": null,
+          "base_commit": "596195635aeb8c93b0919c4342f4abdb679715f5",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "build_failed",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Build failed or exceeded candidate timeout",
+        "model_interpretation": {
+          "claim": "En conservant le rendu parallèle par pixels de T1, le calcul préalablement factorisé des coordonnées de Density par T2 pourrait réduire le coût des nombreux échantillons, tandis que le contrôle de T3 évite le calcul de l’éclairage direct lorsque d vaut zéro. Ces effets peuvent interagir avec la répartition dynamique des pixels; l’intégration doit donc être mesurée comme un programme complet et sa correction validée, sans supposer de gains additifs. T1 est la meilleure entrée mesurée fournie (0,9423 s), devant T3 (1,3937 s), T2 (4,7135 s) et la référence (5,2566 s).",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Conserve l’ordonnancement OpenMP dynamique collapse(2) par pixels de T1, avec chemin sériel pour threads <= 1 et équipe bornée par le nombre de pixels.\",\"Pré-calcul une fois par volume_serial les trois facteurs nVoxels[k]/(pMax[k]-pMin[k]) et les réutilise dans Density, en gardant les bornes, clamps et ordre d’interpolation.\",\"Dans raymarch, ne calcule distanceSquared et transmittance que lorsque la densité échantillonnée n’est pas nulle; conserve l’accumulation, l’atténuation et les mises à jour de parcours.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 43,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Parallélisation OpenMP du rendu par pixel",
+        "objective": "Explorer le partage parallèle des pixels dans volume_serial, en utilisant threads comme maximum d’équipe et en comparant une distribution de lignes ou d’itérations adaptée au coût variable des rayons. Garder les écritures sans course, couvrir chaque pixel exactement une fois et préserver le chemin à un thread. Valider la correction et comparer les mesures à 1, 4 et 40 cœurs.",
+        "records": 17,
+        "results": {
+          "trials": 6,
+          "valid": 6,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 6,
+          "distinct_programs": 6,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "a2e0eefcabe94221",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.9422905106658404,
+          "hypothesis_as_data": "Sur la boucle aplatie de pixels, un ordonnancement dynamique par blocs contigus de 256 pixels pourrait réduire le coût de distribution par rapport aux blocs de 64 tout en conservant assez de blocs pour absorber les variations de coût des ra"
+        },
+        "latest": {
+          "id": "af82b0510bfa4f40",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.942754809315255,
+          "hypothesis_as_data": "Le parent attribue dynamiquement une ligne entière à la fois (moyenne observée : 0,9611 s), tandis que la variante aplatie `dynamic, 256` a mesuré 0,9423 s. Un parcours row-major aplati en blocs de 512 pixels teste si des lots plus fins qu’"
+        },
+        "alternative": {
+          "id": "af82b0510bfa4f40",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.942754809315255,
+          "hypothesis_as_data": "Le parent attribue dynamiquement une ligne entière à la fois (moyenne observée : 0,9611 s), tandis que la variante aplatie `dynamic, 256` a mesuré 0,9423 s. Un parcours row-major aplati en blocs de 512 pixels teste si des lots plus fins qu’"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T2",
+        "subject": "Arithmétique et organisation des accès du sampler Density",
+        "objective": "Explorer le calcul de Density en comparant une voie sans copie — facteurs de coordonnées, indices et accès plats — à une éventuelle préparation par appel d’un volume à halo/clamp, en comptant intégralement allocation et préparation dans le temps mesuré. Préserver les dimensions arbitraires, les bornes inclusives, la conversion des coordonnées en indices, le clamp et l’ordre d’interpolation; ne retenir une préparation que si son coût total est compensé. Vérifier la tolérance sur les densités et résolutions requises et mesurer chaque variante isolément.",
+        "records": 12,
+        "results": {
+          "trials": 5,
+          "valid": 5,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 5,
+          "distinct_programs": 5,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "28cfe80ea031466e",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.71354895341026,
+          "hypothesis_as_data": "Les essais T2 précédents donnent deux programmes distincts et corrects : la variante halo a mesuré 5,0628 s en moyenne, la variante partageant les clamps 5,1887 s, face aux 5,2566 s de référence. Avec une seule série de trois mesures par pr"
+        },
+        "latest": {
+          "id": "6ee6084606d44971",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.543187818627302,
+          "hypothesis_as_data": "Le parent sélectionné, qui réutilise les offsets plats après six clamps de voisins, est correct et a mesuré 5,1887 s. Les essais antérieurs distincts et corrects ont varié de 4,7135 s (facteurs) à 5,3165 s (facteurs et indices plats); ces m"
+        },
+        "alternative": {
+          "id": "6ee6084606d44971",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.543187818627302,
+          "hypothesis_as_data": "Le parent sélectionné, qui réutilise les offsets plats après six clamps de voisins, est correct et a mesuré 5,1887 s. Les essais antérieurs distincts et corrects ont varié de 4,7135 s (facteurs) à 5,3165 s (facteurs et indices plats); ces m"
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "T3",
+        "subject": "Surcoût de traversée et de contrôle des rayons",
+        "objective": "Cibler la traversée des rayons, en particulier la préparation/intersection des rayons d’ombre et les mises à jour de position, paramètre et contrôle dans transmittance et raymarch. Chercher à réduire le surcoût de contrôle et de calcul scalaire sans réécrire l’interpolation de Density, afin de distinguer cette piste de T2. Conserver la séquence des échantillons, les pas, l’accumulation, l’atténuation et l’arrêt anticipé; évaluer correction et temps séparément puis dans une combinaison mesurée.",
+        "records": 10,
+        "results": {
+          "trials": 4,
+          "valid": 4,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "ea64c9423f774121",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.3936832225275635,
+          "hypothesis_as_data": "Dans raymarch, un échantillon où Density(pos) vaut exactement zéro n'ajoute pas de radiance pour des entrées finies, mais prépare quand même un rayon d'ombre et parcourt transmittance. Calculer Li seulement lorsque d != 0 devrait éviter ce "
+        },
+        "latest": {
+          "id": "ea64c9423f774121",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 1.3936832225275635,
+          "hypothesis_as_data": "Dans raymarch, un échantillon où Density(pos) vaut exactement zéro n'ajoute pas de radiance pour des entrées finies, mais prépare quand même un rayon d'ombre et parcourt transmittance. Calculer Li seulement lorsque d != 0 devrait éviter ce "
+        },
+        "alternative": {
+          "id": "3c38f4160b22499a",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 5.24187849188098,
+          "hypothesis_as_data": "Deux pistes T3 distinctes ont été mesurées séparément et sont correctes, mais leurs moyennes (5,253313 s pour le partage de la direction d’ombre; 5,252772 s pour le contrôle d’arrêt anticipé avant Density) ne démontrent pas un gain robuste "
+        },
+        "text_truncated": false
+      },
+      {
+        "role": "Gm1",
+        "subject": "Intégration mesurée des pistes parallélisme, Density et traversée",
+        "objective": "Mesurer la combinaison du rendu parallèle par pixels de T1, de la variante Density de T2 et de la variante de traversée de T3, en partant de la meilleure source mesurée. Valider la correction et comparer selon le protocole officiel; ne présumer aucun gain additif.",
+        "records": 3,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "91429a7d2ad74de9",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.2352334225468227,
+          "hypothesis_as_data": "En partant de T1, la combinaison conserve le rendu parallèle par pixels et ajoute le pré-calcul des facteurs Density de T2 ainsi que l’omission du calcul d’éclairage/transmittance lorsque d vaut zéro, comme en T3. Les résultats mesurés des "
+        },
+        "latest": {
+          "id": "91429a7d2ad74de9",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.2352334225468227,
+          "hypothesis_as_data": "En partant de T1, la combinaison conserve le rendu parallèle par pixels et ajoute le pré-calcul des facteurs Density de T2 ainsi que l’omission du calcul d’éclairage/transmittance lorsque d vaut zéro, comme en T3. Les résultats mesurés des "
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 4,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "91429a7d2ad74de9",
+    "af82b0510bfa4f40",
+    "6ee6084606d44971",
+    "ea64c9423f774121",
+    "baseline-e1",
+    "91429a7d2ad74de9-h01",
+    "a2e0eefcabe94221",
+    "28cfe80ea031466e",
+    "3c38f4160b22499a"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "ced00c478a5b20aae26a86cf4d88e5ae65f3b88a",
+  "selected_parent_id": null
+}

@@ -1,0 +1,23 @@
+{
+  "request": {
+    "ids": [
+      "894bb9e1058c41aa"
+    ],
+    "offset": 0,
+    "operation": "source",
+    "path": "src/candidate.cpp",
+    "query": ""
+  },
+  "result": {
+    "schema": "hpc-forest-memory-v1",
+    "id": "894bb9e1058c41aa",
+    "commit": "8bf060e6f570cdc9373ea5f1dd9ab4f95c18c51a",
+    "snapshot_digest": "62fab1e2a5c257c63185fc9168a6d07c29904ce829b39021ebf13ca5df356f0f",
+    "offset_unit": "characters",
+    "path": "src/candidate.cpp",
+    "file_sha256": "1768de3dc3d16101a37c8f45bcbedbf4dc0800abd0e82bdd92ad03b206440abe",
+    "total_characters": 3832,
+    "text": "/*\n  Copyright (c) 2010-2023, Intel Corporation\n\n  SPDX-License-Identifier: BSD-3-Clause\n*/\n\n#ifdef _MSC_VER\n#define _CRT_SECURE_NO_WARNINGS\n#define NOMINMAX\n#pragma warning(disable : 4244)\n#pragma warning(disable : 4305)\n#endif\n\n/*\n  Copyright (c) 2010-2023, Intel Corporation\n\n  SPDX-License-Identifier: BSD-3-Clause\n*/\n\n#ifndef OPTIONS_DEFS_H\n#define OPTIONS_DEFS_H 1\n\n#define BINOMIAL_NUM 64\n\n#endif // OPTIONS_DEFS_H\n\n#include <algorithm>\n#include <math.h>\n#include <omp.h>\n\n// Cumulative normal distribution function\nstatic inline float CND(float X) {\n    float L = fabsf(X);\n\n    float k = 1.f / (1.f + 0.2316419f * L);\n    float k2 = k * k;\n    float k3 = k2 * k;\n    float k4 = k2 * k2;\n    float k5 = k3 * k2;\n\n    const float invSqrt2Pi = 0.39894228040f;\n    float w = (0.31938153f * k - 0.356563782f * k2 + 1.781477937f * k3 + -1.821255978f * k4 + 1.330274429f * k5);\n    w *= invSqrt2Pi * expf(-L * L * .5f);\n\n    if (X > 0.f)\n        w = 1.f - w;\n    return w;\n}\n\nvoid black_scholes_serial(float Sa[], float Xa[], float Ta[], float ra[], float va[], float result[], int count) {\n    for (int i = 0; i < count; ++i) {\n        float S = Sa[i], X = Xa[i];\n        float T = Ta[i], r = ra[i];\n        float v = va[i];\n\n        float d1 = (logf(S / X) + (r + v * v * .5f) * T) / (v * sqrtf(T));\n        float d2 = d1 - v * sqrtf(T);\n\n        result[i] = S * CND(d1) - X * expf(-r * T) * CND(d2);\n    }\n}\n\nstatic inline void binomial_put_one(float S, float X, float T, float r, float v, float& result) {\n    float V[BINOMIAL_NUM];\n\n    float dt = T / BINOMIAL_NUM;\n    float u = expf(v * sqrtf(dt));\n    float d = 1.f / u;\n    float disc = expf(r * dt);\n    float Pu = (disc - d) / (u - d);\n\n    for (int j = 0; j < BINOMIAL_NUM; ++j) {\n        float upow = powf(u, (float)(2 * j - BINOMIAL_NUM));\n        V[j] = std::max(0.f, X - S * upow);\n    }\n\n    for (int j = BINOMIAL_NUM - 1; j >= 0; --j)\n        for (int k = 0; k < j; ++k)\n            V[k] = ((1 - Pu) * V[k] + Pu * V[k + 1]) / disc;\n\n    result = V[0];\n}\n\nvoid binomial_put_serial(float Sa[], float Xa[], float Ta[], float ra[], float va[], float result[], int count) {\n    for (int i = 0; i < count; ++i)\n        binomial_put_one(Sa[i], Xa[i], Ta[i], ra[i], va[i], result[i]);\n}\n\nstatic void binomial_put_dispatch(float Sa[], float Xa[], float Ta[], float ra[], float va[], float result[], int count, int threads) {\n    if (count <= 0)\n        return;\n\n    // Keep at least 256 elements per requested worker and avoid a parallel\n    // region unless at least two workers can be used.\n    if (threads <= 1 || count < 512) {\n        binomial_put_serial(Sa, Xa, Ta, ra, va, result, count);\n        return;\n    }\n\n    const int worker_count = std::min(threads, count / 256);\n    if (worker_count <= 1) {\n        binomial_put_serial(Sa, Xa, Ta, ra, va, result, count);\n        return;\n    }\n\n    // Partition contiguous, evenly-sized ranges directly rather than using an\n    // OpenMP loop scheduler. Use the actual team size so reduced teams still\n    // cover every output element.\n    #pragma omp parallel num_threads(worker_count)\n    {\n        const int team_size = omp_get_num_threads();\n        const int worker = omp_get_thread_num();\n        const int base = count / team_size;\n        const int extra = count % team_size;\n        const int begin = worker * base + std::min(worker, extra);\n        const int end = begin + base + (worker < extra ? 1 : 0);\n\n        for (int i = begin; i < end; ++i)\n            binomial_put_one(Sa[i], Xa[i], Ta[i], ra[i], va[i], result[i]);\n    }\n}\n\nextern \"C\" void run(const void* input1, const void* input2, void* output, int n, int parameter, int threads) {\n    if (n <= 0)\n        return;\n\n    float* a = (float*)input1;\n    binomial_put_dispatch(a, a + n, a + 2 * n, a + 3 * n, a + 4 * n, (float*)output, n, threads);\n}\n",
+    "next_offset": null
+  }
+}

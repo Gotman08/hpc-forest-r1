@@ -1,0 +1,132 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n\n// Byte classes: ASCII, three continuation ranges, legal lead ranges, invalid.\nstatic const uint8_t byte_class[256] = {\n  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,\n  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,\n  3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,\n  3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,\n  12, 12, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,\n  4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,\n  5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 8, 8,\n  9, 10, 10, 10, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12\n};\n\n// State 8 is the rejecting sink. State 0 is the accepting boundary.\nstatic const uint8_t transition[8][13] = {\n  {0, 8, 8, 8, 1, 3, 2, 4, 2, 6, 5, 7, 8},\n  {8, 0, 0, 0, 8, 8, 8, 8, 8, 8, 8, 8, 8},\n  {8, 1, 1, 1, 8, 8, 8, 8, 8, 8, 8, 8, 8},\n  {8, 8, 8, 1, 8, 8, 8, 8, 8, 8, 8, 8, 8},\n  {8, 1, 1, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8},\n  {8, 2, 2, 2, 8, 8, 8, 8, 8, 8, 8, 8, 8},\n  {8, 8, 2, 2, 8, 8, 8, 8, 8, 8, 8, 8, 8},\n  {8, 1, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8}\n};\n\nstatic bool validate_utf8(const char *b, size_t length) {\n  const uint8_t *bytes = (const uint8_t *)b;\n  size_t index = 0;\n\n  for (;;) {\n    // Preserve the ASCII run fast path; use the DFA for non-ASCII bytes.\n    while (index < length && bytes[index] < 0x80) {\n      ++index;\n    }\n    if (index == length) {\n      return true;\n    }\n\n    uint8_t state = transition[0][byte_class[bytes[index++]]];\n    if (state == 8) {\n      return false;\n    }\n    while (state != 0) {\n      if (index == length) {\n        return false;\n      }\n      state = transition[state][byte_class[bytes[index++]]];\n      if (state == 8) {\n        return false;\n      }\n    }\n  }\n}\n\nextern \"C\" void run(const void *input1, const void *input2, void *output,\n                    int n, int parameter, int threads) {\n  *(uint32_t *)output = validate_utf8((const char *)input1, n);\n}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "On mixed-width input, selecting widths and checking special lead-byte bounds through the baseline's scalar branch tree may cost more control flow than a compact state DFA. This pure-scalar candidate retains ASCII run skipping and uses byte classes plus DFA transitions to test whether fewer width-specific branches help; table lookup costs may offset any benefit.",
+    "memory_lessons": [],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "The only measured comparator is baseline-e1: valid, with a 49.623 microsecond mean over three samples. No candidate variant is measured here; correctness and performance remain for official evaluation.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replaced the width-specific scalar decoder with a compact DFA whose byte-class table distinguishes valid lead ranges, continuation subranges, and invalid bytes.",
+      "Retained an ASCII run-skip path; DFA states enforce continuation counts and the restricted second-byte ranges for E0, ED, F0, and F4."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "3e2dc809a860498bb38a4209036826a6",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "225ff6fe013069295910ecdc2e0ef867192cb34d083fdd9c611038a3c74ab70f",
+  "session_id": "84bf5b1d844645aba6fb57b65acabefa",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "3af1f28c155f7128290911d0f70fbcefa141d556ceabbee8ab4f00546d656142",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 0,
+        "input_tokens": 14817,
+        "output_tokens": 9166,
+        "reasoning_output_tokens": 7250
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "e87168de8c614fc4-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [],
+          "status": "applied",
+          "summary": "Proposed one isolated pure-scalar DFA variant while retaining the existing ASCII run fast path and input/output ABI."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The candidate uses only portable byte tables and scalar control flow; it introduces no target-specific feature or additional threading."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No compiler-, hardware-, or library-specific API is used; this experiment tests a standard scalar DFA design."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Recorded the valid three-sample baseline mean as the comparator and left candidate correctness and speed claims to controller measurement."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "3e2dc809a860498bb38a4209036826a6",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "225ff6fe013069295910ecdc2e0ef867192cb34d083fdd9c611038a3c74ab70f",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "84bf5b1d844645aba6fb57b65acabefa"
+    },
+    "observed_tokens": 23983,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 23983,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

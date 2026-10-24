@@ -1,0 +1,170 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "9132ecbf4b0d97ef58f368047a3f086893fb510e6c292ce4e9289760390004b2",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "6216fdffdae04837",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "6216fdffdae04837",
+        "facts": {
+          "commit": "eb58ca1f8f681d48d9823dcf88c16252ddd27956",
+          "base_commit": "d62eae249491ce24e969aad9c1cece318ed6a5fc",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0066346327463784e-05,
+          "score": 0.6087806256365279
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "For each 128-thread CTA, replacing the modulo-based tree and its repeated CTA barriers with four warp reductions, one CTA barrier, and a warp-0 combine should reduce local synchronization and conditional work. The input loading, launch geometry, multi-stage scratch schedule, and final copy remain unchanged, so the overall timing may still be dominated by traffic or launch overhead.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace reduce0's modulo-based shared-memory tree with a warp shuffle reduction for each warp.\",\"Store one partial per warp, synchronize once per CTA, then combine the four partials in warp zero.\",\"Zero-fill out-of-range lane values and keep the existing 128-thread launch, stage schedule, scratch selection, and final copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "6216fdffdae04837-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "6216fdffdae04837",
+        "facts": {
+          "commit": null,
+          "base_commit": "d62eae249491ce24e969aad9c1cece318ed6a5fc",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "For each 128-thread CTA, replacing the modulo-based tree and its repeated CTA barriers with four warp reductions, one CTA barrier, and a warp-0 combine should reduce local synchronization and conditional work. The input loading, launch geometry, multi-stage scratch schedule, and final copy remain unchanged, so the overall timing may still be dominated by traffic or launch overhead.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace reduce0's modulo-based shared-memory tree with a warp shuffle reduction for each warp.\",\"Store one partial per warp, synchronize once per CTA, then combine the four partials in warp zero.\",\"Zero-fill out-of-range lane values and keep the existing 128-thread launch, stage schedule, scratch selection, and final copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "d62eae249491ce24e969aad9c1cece318ed6a5fc",
+          "base_commit": "d62eae249491ce24e969aad9c1cece318ed6a5fc",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 4.678656101226807e-05,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Isolate and improve the CTA-local reduction",
+        "objective": "In src/candidate.cu, isolate the CTA-local reduction: replace reduce0's modulo-based shared-memory tree with a warp-centric or permitted CUB block reduction, while keeping the 128-thread launch geometry, one input per lane, multi-stage scratch schedule, and final copy fixed. The existing warpReduceSum helper is not currently used by reduce0, so it is a natural comparison point, not a measured improvement. Handle tails safely and preserve exact signed sums. Validate all checks and compare complete-run timings; report whether the local change helps independently of launch topology.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "6216fdffdae04837",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0066346327463784e-05,
+          "hypothesis_as_data": "For each 128-thread CTA, replacing the modulo-based tree and its repeated CTA barriers with four warp reductions, one CTA barrier, and a warp-0 combine should reduce local synchronization and conditional work. The input loading, launch geom"
+        },
+        "latest": {
+          "id": "6216fdffdae04837",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.0066346327463784e-05,
+          "hypothesis_as_data": "For each 128-thread CTA, replacing the modulo-based tree and its repeated CTA barriers with four warp reductions, one CTA barrier, and a warp-0 combine should reduce local synchronization and conditional work. The input loading, launch geom"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "6216fdffdae04837",
+    "6216fdffdae04837-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "d62eae249491ce24e969aad9c1cece318ed6a5fc",
+  "selected_parent_id": null
+}

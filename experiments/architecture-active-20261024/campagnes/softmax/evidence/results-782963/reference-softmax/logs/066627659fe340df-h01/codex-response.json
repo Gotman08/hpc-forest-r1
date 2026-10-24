@@ -1,0 +1,150 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "import torch\nimport triton\nimport triton.language as tl\n\n\n@triton.jit\ndef _row_softmax_kernel(\n    X,\n    Y,\n    stride_xm: tl.constexpr,\n    stride_xn: tl.constexpr,\n    stride_ym: tl.constexpr,\n    stride_yn: tl.constexpr,\n    N: tl.constexpr,\n    BLOCK_SIZE: tl.constexpr,\n    IS_FP64: tl.constexpr,\n):\n    row = tl.program_id(0)\n    cols = tl.arange(0, BLOCK_SIZE)\n    mask = cols < N\n    values = tl.load(\n        X + row * stride_xm + cols * stride_xn,\n        mask=mask,\n        other=-float(\"inf\"),\n    )\n\n    if IS_FP64:\n        values = values.to(tl.float64)\n    else:\n        values = values.to(tl.float32)\n\n    row_max = tl.max(values, axis=0)\n    exp_values = tl.exp(values - row_max)\n    denominator = tl.sum(exp_values, axis=0)\n    result = exp_values / denominator\n    tl.store(\n        Y + row * stride_ym + cols * stride_yn,\n        result,\n        mask=mask,\n    )\n\n\ndef _torch_softmax(x):\n    x_max = x.max(dim=1)[0]\n    numerator = torch.exp(x - x_max[:, None])\n    denominator = numerator.sum(dim=1)\n    return numerator / denominator[:, None]\n\n\ndef run(x):\n    if (\n        x.device.type != \"cuda\"\n        or x.ndim != 2\n        or x.requires_grad\n        or x.shape[0] == 0\n        or x.shape[1] == 0\n        or x.dtype not in (torch.float16, torch.bfloat16, torch.float32, torch.float64)\n    ):\n        return _torch_softmax(x)\n\n    rows, width = x.shape\n    block_size = triton.next_power_of_2(width)\n    y = torch.empty_like(x)\n    _row_softmax_kernel[(rows,)](\n        x,\n        y,\n        x.stride(0),\n        x.stride(1),\n        y.stride(0),\n        y.stride(1),\n        width,\n        block_size,\n        x.dtype == torch.float64,\n        num_warps=1,\n    )\n    return y\n",
+        "path": "src/candidate.py"
+      }
+    ],
+    "hypothesis": "Test one warp for every one-row CTA. This may reduce coordination overhead, but increases per-thread work, especially for wide rows. The selected two-warp parent measured 41.616 µs; the best observed 4-warps-below-4096/2-warps-otherwise candidate measured 41.243 µs, so this configuration is only an improvement if it passes correctness and beats that measured result.",
+    "memory_lessons": [
+      {
+        "applicability": "Configuration evidence for this target and workload; all cited candidates retained one row per CTA.",
+        "claim": "The correct candidates measured 41.243 µs with four warps below 4096 elements and two otherwise, 41.616 µs with fixed two warps, and 41.669 µs with fixed four warps. These results motivate testing a contrasting fixed one-warp configuration but do not isolate warp count as the cause of the timing differences.",
+        "evidence_ids": [
+          "7035a0aa44b64d57",
+          "87a952fb6cf140e0",
+          "18a32bea3657424d"
+        ],
+        "next_experiment": "Keep the measured faster candidate unless the fixed-one-warp candidate passes correctness and improves on its official timing."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "This candidate preserves the direct fused tutorial-style sequence (masked load, max subtraction, exponential, sum, normalized masked store) and changes only the launch warp count. No new performance result is assumed; the controller determines correctness and timing.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Retain one program/CTA per complete row and the stable masked max-exp-sum-normalize computation.",
+      "Use one warp for each row as a bounded launch-configuration contrast; do not introduce multi-row CTAs or streaming loops.",
+      "Preserve existing tail masks, stride handling, dtype behavior, output layout, and fallback path."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "4fc480e60e484a97a3f62c69b28f8e7e",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "4cb0f604cb7389e2802352c4f634331c2f5c6c9cfddfeb85949e476eb0e2a77d",
+  "session_id": "4404c2b6a13c42989f9c7c7e042d7509",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "6f468e64d3ca35f41e32da70b66b50b280080a696fccfb2fed37fc7a7bce5f49",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 19863,
+        "output_tokens": 4875,
+        "reasoning_output_tokens": 3624
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "312153914191ed4adba7f5c132d54f0a335d7d445b0797c190a6ee9712c6ab2c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "066627659fe340df-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "7035a0aa44b64d57",
+            "87a952fb6cf140e0",
+            "18a32bea3657424d"
+          ],
+          "status": "applied",
+          "summary": "Proposed a bounded fixed-one-warp contrast while retaining the fused one-row mapping and stated correctness requirements."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "This experiment changes only a warp-count setting already exercised in the fixed campaign environment; no environment-dependent API or target change is proposed."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No API or instruction change is involved; the fused computation is unchanged and only the launch warp count is varied."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "7035a0aa44b64d57",
+            "87a952fb6cf140e0",
+            "18a32bea3657424d"
+          ],
+          "status": "applied",
+          "summary": "Compared the available correct timing evidence and made no claim that the unmeasured candidate is faster; it must beat the 41.243 µs observed best to qualify as an improvement."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "4fc480e60e484a97a3f62c69b28f8e7e",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "4cb0f604cb7389e2802352c4f634331c2f5c6c9cfddfeb85949e476eb0e2a77d",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "4404c2b6a13c42989f9c7c7e042d7509"
+    },
+    "observed_tokens": 24738,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 24738,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

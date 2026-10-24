@@ -1,0 +1,293 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "b1f492fee3bc3e965d63e920e7a7023034e05b0049e448b6ac2e77c25a8ae58a",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "lesson:0768d2c1eb1e4c4d:0:0",
+        "kind": "lesson",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "0768d2c1eb1e4c4d",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The serial r-k-c, serial r-k-c with SIMD, and row-parallel r-k-c variants were all valid. Their measured means were 0.076396257 s, 0.073052032 s, and 0.009476691 s respectively; these results do not isolate SIMD's effect when combined with row parallelism.",
+          "transformations": "{}",
+          "applicability": "Use these results as context for testing SIMD and row-parallel interaction; they do not predict the combined variant's timing.",
+          "next_experiment": "Measure the combined row-parallel and SIMD variant on all official sizes, check overwrite behavior and oracle tolerance, and compare repeated native n=1024 timings with the row-parallel result.",
+          "evidence_ids": [
+            "5ae94f10ed894be3",
+            "df498ee9a54544de",
+            "1db3e20bf05b4154"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      },
+      {
+        "id": "5ae94f10ed894be3",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "5ae94f10ed894be3",
+        "facts": {
+          "commit": "5595135ee89ce905564fc95d44b59b3b24184dd8",
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.076396257,
+          "score": 0.9882145495264377
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A serial r-k-c rank-1 update traverses each B row and C row contiguously, potentially improving locality and compiler vectorization across c versus the baseline r-c-k loop. Keeping k in ascending order and zeroing C first preserves the accumulation order and overwrite behavior; this isolates traversal from threading or unrolling.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace the innermost r-c-k dot-product traversal with a serial r-k-c rank-1 update, streaming contiguous B and C rows.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "df498ee9a54544de",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "df498ee9a54544de",
+        "facts": {
+          "commit": "290ccfe50371c11e3e2d67c250d03dc96766986a",
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.07305203166666667,
+          "score": 0.9887246373949314
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "An explicit OpenMP SIMD directive over the contiguous c dimension may improve the already measured serial r-k-c traversal by making vectorization across each B/C row more explicit. This keeps k ascending for each output element and uses no additional threads, isolating SIMD as a follow-up to the serial traversal result; the previous row-parallel result motivates separate thread experiments but does not establish a SIMD benefit. Clearing C first preserves overwrite behavior.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Change the r-c-k dot-product loop to a row-wise r-k-c rank-1 update, traversing B and C rows contiguously.\",\"Add an OpenMP SIMD directive to the innermost c loop while retaining ascending-k accumulation for each output element.\",\"Zero the complete output before accumulation and retain a runtime-size fallback; do not create worker threads.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "5ae94f10ed894be3-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "5ae94f10ed894be3",
+        "facts": {
+          "commit": null,
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A serial r-k-c rank-1 update traverses each B row and C row contiguously, potentially improving locality and compiler vectorization across c versus the baseline r-c-k loop. Keeping k in ascending order and zeroing C first preserves the accumulation order and overwrite behavior; this isolates traversal from threading or unrolling.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace the innermost r-c-k dot-product traversal with a serial r-k-c rank-1 update, streaming contiguous B and C rows.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "0768d2c1eb1e4c4d",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "0768d2c1eb1e4c4d",
+        "facts": {
+          "commit": "7f249223cca26e021e784429d55b2fb1b934f66d",
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.010415142,
+          "score": 0.9983767608028822
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The serial r-k-c variant was valid at a 0.076396257 s mean, and adding an explicit c-dimension SIMD directive without threads measured 0.073052032 s; row-parallel r-k-c measured 0.009476691 s. This experiment tests whether combining static row parallelism, capped by the caller's thread count, with contiguous c-dimension SIMD improves on row parallelism alone. Each output element retains ascending-k accumulation and C is cleared on every call. The combined effect remains unmeasured.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace fixed-size dispatch with runtime dimensions so the kernel handles valid sizes without specializing to the official benchmark sizes.\",\"Clear the complete output before accumulating with an r-k-c traversal, preserving ascending-k accumulation for each output element.\",\"Parallelize independent output rows with static scheduling and at most min(n, threads) workers; use a serial path when the available worker count is at most one.\",\"Apply OpenMP SIMD to the innermost contiguous c traversal as the single follow-up interaction test.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "0768d2c1eb1e4c4d-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "0768d2c1eb1e4c4d",
+        "facts": {
+          "commit": null,
+          "base_commit": "8963f0185685933ecf340b688fde66e7dcad1122",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The serial r-k-c variant was valid at a 0.076396257 s mean, and adding an explicit c-dimension SIMD directive without threads measured 0.073052032 s; row-parallel r-k-c measured 0.009476691 s. This experiment tests whether combining static row parallelism, capped by the caller's thread count, with contiguous c-dimension SIMD improves on row parallelism alone. Each output element retains ascending-k accumulation and C is cleared on every call. The combined effect remains unmeasured.",
+          "transformations": "{\"files\":[\"src/candidate.cpp\"],\"retained\":[\"Replace fixed-size dispatch with runtime dimensions so the kernel handles valid sizes without specializing to the official benchmark sizes.\",\"Clear the complete output before accumulating with an r-k-c traversal, preserving ascending-k accumulation for each output element.\",\"Parallelize independent output rows with static scheduling and at most min(n, threads) workers; use a serial path when the available worker count is at most one.\",\"Apply OpenMP SIMD to the innermost contiguous c traversal as the single follow-up interaction test.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 12,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Row-major r-k-c streaming, vectorization, and thread interaction",
+        "objective": "Use the row-wise r-k-c rank-1 update as the primary experiment: compare its contiguous B/C traversal and compiler vectorization with the original r-c-k loop, first with a simple serial variant. If search results warrant it, test row-parallel, unrolling, or other correctness-preserving variants as separately measured follow-ups; distinguish traversal gains from those added changes. Stay within the caller’s thread budget. Check overwrite behavior and the fixed oracle tolerance on all official sizes, compare repeated native n=1024 timings, and record unsuccessful variants.",
+        "records": 11,
+        "results": {
+          "trials": 4,
+          "valid": 4,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 4,
+          "distinct_programs": 4,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "1db3e20bf05b4154",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.009476690818181815,
+          "hypothesis_as_data": "The serial r-k-c traversal was previously valid and measured at a 0.076396257 s mean. This follow-up keeps its ascending-k accumulation and contiguous B/C row traversal, while distributing independent output rows across at most the caller-p"
+        },
+        "latest": {
+          "id": "0768d2c1eb1e4c4d",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.010415142,
+          "hypothesis_as_data": "The serial r-k-c variant was valid at a 0.076396257 s mean, and adding an explicit c-dimension SIMD directive without threads measured 0.073052032 s; row-parallel r-k-c measured 0.009476691 s. This experiment tests whether combining static "
+        },
+        "alternative": {
+          "id": "0768d2c1eb1e4c4d",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.010415142,
+          "hypothesis_as_data": "The serial r-k-c variant was valid at a 0.076396257 s mean, and adding an explicit c-dimension SIMD directive without threads measured 0.073052032 s; row-parallel r-k-c measured 0.009476691 s. This experiment tests whether combining static "
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "lesson:0768d2c1eb1e4c4d:0:0",
+    "5ae94f10ed894be3",
+    "df498ee9a54544de",
+    "5ae94f10ed894be3-h01",
+    "0768d2c1eb1e4c4d",
+    "0768d2c1eb1e4c4d-h01",
+    "1db3e20bf05b4154"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "7f249223cca26e021e784429d55b2fb1b934f66d",
+  "selected_parent_id": "0768d2c1eb1e4c4d"
+}

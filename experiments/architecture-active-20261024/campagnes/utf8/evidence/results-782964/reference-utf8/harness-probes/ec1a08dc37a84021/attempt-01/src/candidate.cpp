@@ -1,0 +1,67 @@
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+static bool validate_utf8(const char *b, size_t length) {
+  const unsigned char *bytes = (const unsigned char *)b;
+  for (size_t index = 0;;) {
+    unsigned char byte1;
+
+    do { // fast ASCII Path
+      if (index >= length) {
+        return true;
+      }
+      byte1 = bytes[index++];
+    } while (byte1 < 0x80);
+    if (byte1 < 0xE0) {
+      // Two-byte form.
+      if (length - index < 1) {
+        return false;
+      }
+      const unsigned char byte2 = bytes[index++];
+      const unsigned int invalid =
+          (unsigned int)(byte1 < 0xC2) |
+          (unsigned int)((byte2 & 0xC0) != 0x80);
+      if (invalid != 0) {
+        return false;
+      }
+    } else if (byte1 < 0xF0) {
+      // Three-byte form.
+      if (length - index < 2) {
+        return false;
+      }
+      const unsigned char byte2 = bytes[index++];
+      const unsigned char byte3 = bytes[index++];
+      unsigned int invalid = (unsigned int)((byte2 & 0xC0) != 0x80);
+      invalid |= (unsigned int)((byte1 == 0xE0) & (byte2 < 0xA0));
+      invalid |= (unsigned int)((byte1 == 0xED) & (byte2 >= 0xA0));
+      invalid |= (unsigned int)((byte3 & 0xC0) != 0x80);
+      if (invalid != 0) {
+        return false;
+      }
+    } else {
+      // Four-byte form.
+      if (length - index < 3) {
+        return false;
+      }
+      const unsigned char byte2 = bytes[index++];
+      const unsigned char byte3 = bytes[index++];
+      const unsigned char byte4 = bytes[index++];
+      unsigned int invalid = (unsigned int)((byte2 & 0xC0) != 0x80);
+      invalid |= (unsigned int)(byte1 > 0xF4);
+      invalid |= (unsigned int)((byte1 == 0xF0) & (byte2 < 0x90));
+      invalid |= (unsigned int)((byte1 == 0xF4) & (byte2 > 0x8F));
+      invalid |= (unsigned int)((byte3 & 0xC0) != 0x80);
+      invalid |= (unsigned int)((byte4 & 0xC0) != 0x80);
+      if (invalid != 0) {
+        return false;
+      }
+    }
+  }
+}
+#include <cstdint>
+#include <cstring>
+#include <cmath>
+#include <algorithm>
+#include <omp.h>
+extern "C" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)
+{*(uint32_t*)output=validate_utf8((const char*)input1,n);}

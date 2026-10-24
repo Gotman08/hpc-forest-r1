@@ -1,0 +1,146 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "/*\n  Copyright (c) 2010-2023, Intel Corporation\n\n  SPDX-License-Identifier: BSD-3-Clause\n*/\n\n#include <math.h>\n\n#define NOISE_PERM_SIZE 256\n\nstatic int NoisePerm[2 * NOISE_PERM_SIZE] = {\n    151, 160, 137, 91,  90,  15,  131, 13,  201, 95,  96,  53,  194, 233, 7,   225, 140, 36,  103, 30,  69,  142, 8,\n    99,  37,  240, 21,  10,  23,  190, 6,   148, 247, 120, 234, 75,  0,   26,  197, 62,  94,  252, 219, 203, 117, 35,\n    11,  32,  57,  177, 33,  88,  237, 149, 56,  87,  174, 20,  125, 136, 171, 168, 68,  175, 74,  165, 71,  134, 139,\n    48,  27,  166, 77,  146, 158, 231, 83,  111, 229, 122, 60,  211, 133, 230, 220, 105, 92,  41,  55,  46,  245, 40,\n    244, 102, 143, 54,  65,  25,  63,  161, 1,   216, 80,  73,  209, 76,  132, 187, 208, 89,  18,  169, 200, 196, 135,\n    130, 116, 188, 159, 86,  164, 100, 109, 198, 173, 186, 3,   64,  52,  217, 226, 250, 124, 123, 5,   202, 38,  147,\n    118, 126, 255, 82,  85,  212, 207, 206, 59,  227, 47,  16,  58,  17,  182, 189, 28,  42,  223, 183, 170, 213, 119,\n    248, 152, 2,   44,  154, 163, 70,  221, 153, 101, 155, 167, 43,  172, 9,   129, 22,  39,  253, 19,  98,  108, 110,\n    79,  113, 224, 232, 178, 185, 112, 104, 218, 246, 97,  228, 251, 34,  242, 193, 238, 210, 144, 12,  191, 179, 162,\n    241, 81,  51,  145, 235, 249, 14,  239, 107, 49,  192, 214, 31,  181, 199, 106, 157, 184, 84,  204, 176, 115, 121,\n    50,  45,  127, 4,   150, 254, 138, 236, 205, 93,  222, 114, 67,  29,  24,  72,  243, 141, 128, 195, 78,  66,  215,\n    61,  156, 180, 151, 160, 137, 91,  90,  15,  131, 13,  201, 95,  96,  53,  194, 233, 7,   225, 140, 36,  103, 30,\n    69,  142, 8,   99,  37,  240, 21,  10,  23,  190, 6,   148, 247, 120, 234, 75,  0,   26,  197, 62,  94,  252, 219,\n    203, 117, 35,  11,  32,  57,  177, 33,  88,  237, 149, 56,  87,  174, 20,  125, 136, 171, 168, 68,  175, 74,  165,\n    71,  134, 139, 48,  27,  166, 77,  146, 158, 231, 83,  111, 229, 122, 60,  211, 133, 230, 220, 105, 92,  41,  55,\n    46,  245, 40,  244, 102, 143, 54,  65,  25,  63,  161, 1,   216, 80,  73,  209, 76,  132, 187, 208, 89,  18,  169,\n    200, 196, 135, 130, 116, 188, 159, 86,  164, 100, 109, 198, 173, 186, 3,   64,  52,  217, 226, 250, 124, 123, 5,\n    202, 38,  147, 118, 126, 255, 82,  85,  212, 207, 206, 59,  227, 47,  16,  58,  17,  182, 189, 28,  42,  223, 183,\n    170, 213, 119, 248, 152, 2,   44,  154, 163, 70,  221, 153, 101, 155, 167, 43,  172, 9,   129, 22,  39,  253, 19,\n    98,  108, 110, 79,  113, 224, 232, 178, 185, 112, 104, 218, 246, 97,  228, 251, 34,  242, 193, 238, 210, 144, 12,\n    191, 179, 162, 241, 81,  51,  145, 235, 249, 14,  239, 107, 49,  192, 214, 31,  181, 199, 106, 157, 184, 84,  204,\n    176, 115, 121, 50,  45,  127, 4,   150, 254, 138, 236, 205, 93,  222, 114, 67,  29,  24,  72,  243, 141, 128, 195,\n    78,  66,  215, 61,  156, 180};\n\ninline float Clamp(float v, float low, float high) { return v < low ? low : ((v > high) ? high : v); }\n\ninline float SmoothStep(float low, float high, float value) {\n    float v = Clamp((value - low) / (high - low), 0.f, 1.f);\n    return v * v * (-2.f * v + 3.f);\n}\n\ninline int Floor2Int(float val) { return (int)floorf(val); }\n\n// Bits 0-1 select the two gradient axes; bits 2-3 select their signs.\nstatic const unsigned char NoiseGradSelector[16] = {\n    0, 4, 8, 12, 2, 6, 10, 14, 3, 7, 11, 15, 0, 4, 11, 15};\n\ninline float GradFromHash(int hash, float dx, float dy, float dz) {\n    unsigned char selector = NoiseGradSelector[hash & 15];\n    float u = (selector & 1) ? dy : dx;\n    float v = (selector & 2) ? dz : dy;\n    return ((selector & 4) ? -u : u) + ((selector & 8) ? -v : v);\n}\n\ninline float NoiseWeight(float t) {\n    float t3 = t * t * t;\n    float t4 = t3 * t;\n    return 6.f * t4 * t - 15.f * t4 + 10.f * t3;\n}\n\ninline float Lerp(float t, float low, float high) { return (1.f - t) * low + t * high; }\n\nstatic float Noise(float x, float y, float z) {\n    // Compute noise cell coordinates and offsets\n    int ix = Floor2Int(x), iy = Floor2Int(y), iz = Floor2Int(z);\n    float dx = x - ix, dy = y - iy, dz = z - iz;\n\n    // Compute shared permutation prefixes for the eight corner hashes\n    ix &= (NOISE_PERM_SIZE - 1);\n    iy &= (NOISE_PERM_SIZE - 1);\n    iz &= (NOISE_PERM_SIZE - 1);\n    int px0 = NoisePerm[ix];\n    int px1 = NoisePerm[ix + 1];\n    int pxy00 = NoisePerm[px0 + iy];\n    int pxy10 = NoisePerm[px1 + iy];\n    int pxy01 = NoisePerm[px0 + iy + 1];\n    int pxy11 = NoisePerm[px1 + iy + 1];\n\n    float w000 = GradFromHash(NoisePerm[pxy00 + iz], dx, dy, dz);\n    float w100 = GradFromHash(NoisePerm[pxy10 + iz], dx - 1, dy, dz);\n    float w010 = GradFromHash(NoisePerm[pxy01 + iz], dx, dy - 1, dz);\n    float w110 = GradFromHash(NoisePerm[pxy11 + iz], dx - 1, dy - 1, dz);\n    float w001 = GradFromHash(NoisePerm[pxy00 + iz + 1], dx, dy, dz - 1);\n    float w101 = GradFromHash(NoisePerm[pxy10 + iz + 1], dx - 1, dy, dz - 1);\n    float w011 = GradFromHash(NoisePerm[pxy01 + iz + 1], dx, dy - 1, dz - 1);\n    float w111 = GradFromHash(NoisePerm[pxy11 + iz + 1], dx - 1, dy - 1, dz - 1);\n\n    // Compute trilinear interpolation of weights\n    float wx = NoiseWeight(dx), wy = NoiseWeight(dy), wz = NoiseWeight(dz);\n    float x00 = Lerp(wx, w000, w100);\n    float x10 = Lerp(wx, w010, w110);\n    float x01 = Lerp(wx, w001, w101);\n    float x11 = Lerp(wx, w011, w111);\n    float y0 = Lerp(wy, x00, x10);\n    float y1 = Lerp(wy, x01, x11);\n    return Lerp(wz, y0, y1);\n}\n\nstatic float Turbulence(float x, float y, float z, int octaves) {\n    float omega = 0.6;\n\n    float sum = 0., lambda = 1., o = 1.;\n    for (int i = 0; i < octaves; ++i) {\n        sum += fabsf(o * Noise(lambda * x, lambda * y, lambda * z));\n        lambda *= 1.99f;\n        o *= omega;\n    }\n    return sum * 0.5f;\n}\n\nvoid noise_serial(float x0, float y0, float x1, float y1, int width, int height, float output[]) {\n    float dx = (x1 - x0) / width;\n    float dy = (y1 - y0) / height;\n\n    for (int j = 0; j < height; j++) {\n        for (int i = 0; i < width; ++i) {\n            float x = x0 + i * dx;\n            float y = y0 + j * dy;\n\n            int index = (j * width + i);\n            output[index] = Turbulence(x, y, 0.6f, 8);\n        }\n    }\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{const float*a=(const float*)input1;noise_serial(a[0],a[1],a[2],a[3],n,n,(float*)output);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "Replacing the comparisons used to choose gradient axes with a 16-entry selector lookup may reduce selection logic in each scalar corner evaluation, but the added table load may instead cost more. Keep the selected parent’s hash-prefix factoring, interpolation polynomial, and octave flow unchanged to isolate this gradient-selection change against the parent; the original scalar baseline remains the campaign anchor.",
+    "memory_lessons": [
+      {
+        "applicability": "The measured parent combines hash-prefix factoring with unchanged gradient selection, so its result does not predict the effect of adding a selector table.",
+        "claim": "The prefix-factored parent was correct on all 8 supplied checks and measured at 0.289468 s over three samples, versus the original baseline's 0.310933 s. This is evidence for that parent program only; it does not establish a gain from gradient-selection tables.",
+        "evidence_ids": [
+          "2f9bc29e0efa4ac4",
+          "baseline-e1"
+        ],
+        "next_experiment": "Measure the selector-table variant against the selected parent while keeping hash-prefix factoring, interpolation, and octave flow fixed."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "This candidate changes only gradient selection relative to the selected parent. The supplied parent measurement is valid and faster than baseline in its observed trial; this variant has not been measured. No failed approach is recorded in the supplied node history. Leave correctness, tolerance, and performance checks to the controller.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace GradFromHash axis-comparison logic with a 16-entry selector table encoding axis choices and sign choices.",
+      "Keep hash-prefix factoring from the selected parent unchanged.",
+      "Leave NoiseWeight, Lerp, Turbulence, and pixel iteration unchanged."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "bf3cb2913f0d47d7a7114e16e6ace81d",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "8188d37f8926f71a8a6cfbbd9c0a1b7dbb538def3a444bad5b0362142fecff56",
+  "session_id": "1c53c72ddc504cd2b73f04f536b57538",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "638c0474511d18f0898d435dda2a6de2cd99560a7c11b3d6827a5958c79ddc01",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 20834,
+        "output_tokens": 10289,
+        "reasoning_output_tokens": 6480
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a3bf11d4fa1b442f3ce3b8f9d3db6ff8be9d5741a2c919159d96937ca556300c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "fba5465da6c842be-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "2f9bc29e0efa4ac4"
+          ],
+          "status": "applied",
+          "summary": "Isolated a selector-table change while retaining the parent hash, interpolation, and octave code."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The candidate uses portable scalar C++ and no hardware-specific feature; supplied target/compiler facts suffice to frame the experiment."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No API, ISA, or compiler-specific semantic claim is needed for this scalar lookup experiment."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "2f9bc29e0efa4ac4",
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Recorded the observed parent and baseline measurements but made no speed claim about this unmeasured candidate."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "bf3cb2913f0d47d7a7114e16e6ace81d",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "8188d37f8926f71a8a6cfbbd9c0a1b7dbb538def3a444bad5b0362142fecff56",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "1c53c72ddc504cd2b73f04f536b57538"
+    },
+    "observed_tokens": 31123,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 31123,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

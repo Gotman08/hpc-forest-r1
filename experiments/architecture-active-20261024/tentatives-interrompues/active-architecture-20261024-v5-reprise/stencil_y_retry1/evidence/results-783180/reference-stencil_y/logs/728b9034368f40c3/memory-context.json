@@ -1,0 +1,170 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "fd7d2e36365aae9e1521736020f005dc329bf3ae82fa7d02de5d631bdb1f4988",
+    "tree_id": "e1:T3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "83bd78cd60884779",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "83bd78cd60884779",
+        "facts": {
+          "commit": "0043449f14fcb8f105a2dc9518a81beb1f90428b",
+          "base_commit": "ea15b1b81743ea8c06051c5a317e855f71cbcf61",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.44906669731e-06,
+          "score": 0.5094216486872327
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A 32-lane X mapping makes each input-row access contiguous across a warp, while a four-output register window reuses Y neighbors and removes the baseline kernel's shared-memory/barrier path. This may improve coalescing and avoid synchronization, but trades the baseline's shared-memory reuse for rolling global loads; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the shared-memory Y derivative with one kernel launch using 32 X lanes and four Y-output chunks per block-row group.\",\"Compute four consecutive outputs per thread from a nine-value register window, shifting the window and loading one entering value between outputs.\",\"Map each loaded Y coordinate by adding 63 below zero or subtracting 63 above 63, preserving in-range coordinate 63.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "83bd78cd60884779-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "83bd78cd60884779",
+        "facts": {
+          "commit": null,
+          "base_commit": "ea15b1b81743ea8c06051c5a317e855f71cbcf61",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A 32-lane X mapping makes each input-row access contiguous across a warp, while a four-output register window reuses Y neighbors and removes the baseline kernel's shared-memory/barrier path. This may improve coalescing and avoid synchronization, but trades the baseline's shared-memory reuse for rolling global loads; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the shared-memory Y derivative with one kernel launch using 32 X lanes and four Y-output chunks per block-row group.\",\"Compute four consecutive outputs per thread from a nine-value register window, shifting the window and loading one entering value between outputs.\",\"Map each loaded Y coordinate by adding 63 below zero or subtracting 63 above 63, preserving in-range coordinate 63.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "ea15b1b81743ea8c06051c5a317e855f71cbcf61",
+          "base_commit": "ea15b1b81743ea8c06051c5a317e855f71cbcf61",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.5815466350566667e-06,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T3",
+        "subject": "Register rolling-window multi-output-per-thread kernel",
+        "objective": "In src/candidate.cu, investigate a single kernel where each thread handles several consecutive Y outputs using a register rolling window, with warp lanes still accessing adjacent X values. Explore small output-chunk sizes to balance neighbor reuse against register pressure and occupancy. Do not use shared memory or extra launches in this track. For each neighbor coordinate q=j+d, match the supplied boundary convention: add 63 if q<0, subtract 63 if q>63, otherwise leave q unchanged. Preserve in-range index 63; do not assume endpoint planes are equal. Compute every output for varying signed inputs and preserve the supplied tolerance and buffer constraints. Validate with the oracle and compare repeated official full-run timings with the baseline.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "83bd78cd60884779",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.44906669731e-06,
+          "hypothesis_as_data": "A 32-lane X mapping makes each input-row access contiguous across a warp, while a four-output register window reuses Y neighbors and removes the baseline kernel's shared-memory/barrier path. This may improve coalescing and avoid synchroniza"
+        },
+        "latest": {
+          "id": "83bd78cd60884779",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.44906669731e-06,
+          "hypothesis_as_data": "A 32-lane X mapping makes each input-row access contiguous across a warp, while a four-output register window reuses Y neighbors and removes the baseline kernel's shared-memory/barrier path. This may improve coalescing and avoid synchroniza"
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "83bd78cd60884779",
+    "83bd78cd60884779-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "ea15b1b81743ea8c06051c5a317e855f71cbcf61",
+  "selected_parent_id": null
+}

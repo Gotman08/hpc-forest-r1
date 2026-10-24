@@ -1,0 +1,170 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "ab97c278ffa21b38a47de52087922c4d428301a22bfb9cf55d3d9a2b494afdd8",
+    "tree_id": "e1:T3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "3906be4089a1452f",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "3906be4089a1452f",
+        "facts": {
+          "commit": "b4babb086d60cbf0f03054a3e0d0f3ac71b7015b",
+          "base_commit": "0b642aee04f01ec01872d52566cd4ae0a170001d",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.017307559967066666,
+          "score": 0.9404811930875965
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A 16×16 output tile with a 16-wide K stage should reuse each staged A and B value across multiple output products compared with the naive one-output kernel. This candidate deliberately uses synchronous shared-memory staging as the control; a later asynchronous candidate can retain its tile, lane, and compute mapping so the copy mechanism is the main difference. No speedup is claimed before measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace one-thread-per-output serial dot products with a 16×16 CTA output tile and 16-wide K stages.\",\"Cooperatively stage A and B in shared memory using the same (ty, tx) lane mapping intended for the paired asynchronous candidate; synchronize before consumption and before reuse.\",\"Mask row, column, and K tails with zero-filled loads while preserving full-FP32 accumulation and alpha/beta output semantics.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "3906be4089a1452f-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "3906be4089a1452f",
+        "facts": {
+          "commit": null,
+          "base_commit": "0b642aee04f01ec01872d52566cd4ae0a170001d",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "A 16×16 output tile with a 16-wide K stage should reuse each staged A and B value across multiple output products compared with the naive one-output kernel. This candidate deliberately uses synchronous shared-memory staging as the control; a later asynchronous candidate can retain its tile, lane, and compute mapping so the copy mechanism is the main difference. No speedup is claimed before measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace one-thread-per-output serial dot products with a 16×16 CTA output tile and 16-wide K stages.\",\"Cooperatively stage A and B in shared memory using the same (ty, tx) lane mapping intended for the paired asynchronous candidate; synchronize before consumption and before reuse.\",\"Mask row, column, and K tails with zero-filled loads while preserving full-FP32 accumulation and alpha/beta output semantics.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "0b642aee04f01ec01872d52566cd4ae0a170001d",
+          "base_commit": "0b642aee04f01ec01872d52566cd4ae0a170001d",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.2734838867186667,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 3,
+    "next_offset": null
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T3",
+        "subject": "Matched synchronous/asynchronous K-stage pipeline comparison",
+        "objective": "Explore whether asynchronous global-to-shared K-stage copies improve a tiled SIMT kernel. Establish a paired synchronous-staging control with the same CTA tile, lane mapping, and compute mapping as the asynchronous version, then compare timings and correctness to isolate the pipeline effect. Handle alignment, completion, synchronization, tails, and any needed fallback for all valid inputs; preserve full-FP32 arithmetic, alpha/beta semantics, entry point, stream, and buffer limits. Use only CUDA 12.6.3-supported mechanisms, no external math libraries, reduced precision, or extra allocations; treat gains as hypotheses to measure.",
+        "records": 2,
+        "results": {
+          "trials": 1,
+          "valid": 1,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 1,
+          "distinct_programs": 1,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "3906be4089a1452f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.017307559967066666,
+          "hypothesis_as_data": "A 16×16 output tile with a 16-wide K stage should reuse each staged A and B value across multiple output products compared with the naive one-output kernel. This candidate deliberately uses synchronous shared-memory staging as the control; "
+        },
+        "latest": {
+          "id": "3906be4089a1452f",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.017307559967066666,
+          "hypothesis_as_data": "A 16×16 output tile with a 16-wide K stage should reuse each staged A and B value across multiple output products compared with the naive one-output kernel. This candidate deliberately uses synchronous shared-memory staging as the control; "
+        },
+        "alternative": null,
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "3906be4089a1452f",
+    "3906be4089a1452f-h01",
+    "baseline-e1"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "0b642aee04f01ec01872d52566cd4ae0a170001d",
+  "selected_parent_id": null
+}

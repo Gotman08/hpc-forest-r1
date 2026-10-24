@@ -1,0 +1,147 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "/*\n  Copyright (c) 2010-2023, Intel Corporation\n\n  SPDX-License-Identifier: BSD-3-Clause\n*/\n\nstatic void stencil_step(int x0, int x1, int y0, int y1, int z0, int z1, int Nx, int Ny, int Nz, const float coef[4],\n                         const float vsq[], const float Ain[], float Aout[]) {\n    int Nxy = Nx * Ny;\n\n    for (int z = z0; z < z1; ++z) {\n        for (int y = y0; y < y1; ++y) {\n            int row = z * Nxy + y * Nx;\n            const float* center = Ain + row;\n            const float* ym1 = center - Nx;\n            const float* yp1 = center + Nx;\n            const float* ym2 = center - 2 * Nx;\n            const float* yp2 = center + 2 * Nx;\n            const float* ym3 = center - 3 * Nx;\n            const float* yp3 = center + 3 * Nx;\n            const float* zm1 = center - Nxy;\n            const float* zp1 = center + Nxy;\n            const float* zm2 = center - 2 * Nxy;\n            const float* zp2 = center + 2 * Nxy;\n            const float* zm3 = center - 3 * Nxy;\n            const float* zp3 = center + 3 * Nxy;\n            const float* velocity = vsq + row;\n            float* dst = Aout + row;\n\n#if defined(_OPENMP) && _OPENMP >= 201307\n#pragma omp simd\n#endif\n            for (int x = x0; x < x1; ++x) {\n                float div = coef[0] * center[x] +\n                            coef[1] * (center[x + 1] + center[x - 1] + yp1[x] + ym1[x] + zp1[x] + zm1[x]) +\n                            coef[2] * (center[x + 2] + center[x - 2] + yp2[x] + ym2[x] + zp2[x] + zm2[x]) +\n                            coef[3] * (center[x + 3] + center[x - 3] + yp3[x] + ym3[x] + zp3[x] + zm3[x]);\n\n                dst[x] = 2 * center[x] - dst[x] + velocity[x] * div;\n            }\n        }\n    }\n}\n\nvoid loop_stencil_serial(int t0, int t1, int x0, int x1, int y0, int y1, int z0, int z1, int Nx, int Ny, int Nz,\n                         const float coef[4], const float vsq[], float Aeven[], float Aodd[]) {\n    for (int t = t0; t < t1; ++t) {\n        if ((t & 1) == 0)\n            stencil_step(x0, x1, y0, y1, z0, z1, Nx, Ny, Nz, coef, vsq, Aeven, Aodd);\n        else\n            stencil_step(x0, x1, y0, y1, z0, z1, Nx, Ny, Nz, coef, vsq, Aodd, Aeven);\n    }\n}\n#include <cstdint>\n#include <cstring>\n#include <cmath>\n#include <algorithm>\n#include <omp.h>\nextern \"C\" void run(const void* input1,const void* input2,void* output,int n,int parameter,int threads)\n{size_t s=size_t(n)*n*n;const float*a=(const float*)input1;float*c=(float*)output;memcpy(c,a,s*4);memset(c+s,0,s*4);const float co[4]={.5f,-.25f,.125f,-.0625f};loop_stencil_serial(0,6,4,n-4,4,n-4,4,n-4,n,n,n,co,(const float*)input2,c,c+s);}\n",
+        "path": "src/candidate.cpp"
+      }
+    ],
+    "hypothesis": "Earlier reported means for row-base variants are close: 0.079497 s with explicit SIMD and 0.080044 s without it. This candidate hoists row bases and enables `omp simd` only when `_OPENMP` indicates OpenMP 4.0 or later, but adds no restrict/no-alias promise. It tests whether the SIMD hint and regular row accesses suffice without that extra promise. The ordinary loop remains for unsupported configurations and arbitrary widths; no alignment or ISA is assumed. No gain is presumed.",
+    "memory_lessons": [
+      {
+        "applicability": "Use the SIMD hint as a measurable compiler aid rather than assuming it beats a compiler-vectorizable loop.",
+        "claim": "The reported means for 2023bb8ffc8349d8 and d96afbb4e38d4370 differ by about 0.55 ms (under 1%). These aggregate measurements do not establish a reproducible SIMD advantage or show per-core-budget effects.",
+        "evidence_ids": [
+          "2023bb8ffc8349d8",
+          "d96afbb4e38d4370"
+        ],
+        "next_experiment": "Compare this SIMD variant without a no-alias annotation against the no-SIMD row-base version at both core budgets, including setup costs."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Only src/candidate.cpp is changed. The recurrence expression order, timestep alternation, initialization and loop bounds remain intact. The compiler/controller should validate the fixed tolerance and measure both core budgets including setup; this proposal has no new measurement.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Hoisted the center, neighboring-row, velocity, and destination bases outside the contiguous-x loop.",
+      "Added `omp simd` only under an OpenMP 4.0-or-newer compile-time guard; no explicit alignment or vector width is assumed, and the ordinary loop retains generic tail behavior.",
+      "Preserved the stencil recurrence, summation order, full initialization, boundaries, and timestep buffer alternation."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "daa4f5688efa489ba952d1db3ec4995a",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "6f6695936604e8cd8bef4a27e2ae579858b94db9b6e6f9a95144d8e3c747f9fa",
+  "session_id": "ee3486276ded474fbd843e027019ebce",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "e711613861619fd8cb0130fdfbf8e0a1fba9d979cc90062152abb7d875bf1de0",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 23646,
+        "output_tokens": 9990,
+        "reasoning_output_tokens": 8394
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a3bf11d4fa1b442f3ce3b8f9d3db6ff8be9d5741a2c919159d96937ca556300c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "469de416c9dc42cf-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "2023bb8ffc8349d8",
+            "d96afbb4e38d4370"
+          ],
+          "status": "applied",
+          "summary": "Designed a controlled test of the explicit SIMD hint without a no-alias annotation, based on the close reported means."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Used only the compile-time OpenMP feature guard; no target ISA or row alignment assumption is made."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No target-specific intrinsic or uncertain external API is used; the pragma is guarded by the OpenMP version macro."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "2023bb8ffc8349d8",
+            "d96afbb4e38d4370"
+          ],
+          "status": "applied",
+          "summary": "Treated prior means as inconclusive and left correctness and both-budget timing to the controller."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "daa4f5688efa489ba952d1db3ec4995a",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "6f6695936604e8cd8bef4a27e2ae579858b94db9b6e6f9a95144d8e3c747f9fa",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "ee3486276ded474fbd843e027019ebce"
+    },
+    "observed_tokens": 33636,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 33636,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

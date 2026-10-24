@@ -29,6 +29,16 @@ de Mother aux jalons, branches dérivées, imports explicites et combinaisons
 intermédiaires mesurées. Les modes `local`, `steering` et `sharing` permettent
 d'isoler ces contributions. Le défaut `off` conserve l'ordonnanceur historique.
 
+La validation du moteur actif compte **878 tests réussis**, aucun échec ni saut,
+avec Ruff validé. La [campagne ROMEO du 24 octobre 2026](experiments/architecture-active-20261024/README.md)
+documente les 21 programmes du tableau, leurs arbres, les décisions de Mother,
+les coûts et les remesures appariées avec les anciens candidats. Le
+[diagnostic détaillé](experiments/architecture-active-20261024/ANALYSE.md)
+conserve les gains, les régressions et les limites observées. Le
+[classeur Excel](experiments/architecture-active-20261024/COMPARAISON-ROMEO.xlsx)
+et le [CSV principal](experiments/architecture-active-20261024/COMPARAISON.csv)
+mettent côte à côte les speedups publiés et ceux mesurés sur le même matériel.
+
 ![Architecture Forest + JEV proposée](docs/images/forest-architecture-proposee.png)
 
 *Schéma fourni par l'utilisateur : architecture de référence. La boucle active

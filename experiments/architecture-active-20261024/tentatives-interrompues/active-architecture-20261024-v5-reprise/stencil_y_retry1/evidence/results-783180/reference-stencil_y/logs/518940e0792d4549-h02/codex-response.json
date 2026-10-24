@@ -1,0 +1,150 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "#include <cuda_runtime.h>\n#include <stddef.h>\n\n// Apply the exact boundary correction; index 63 remains in range.\n__device__ __forceinline__ int wrap_y(int q)\n{\n  if (q < 0)\n    q += 63;\n  else if (q > 63)\n    q -= 63;\n  return q;\n}\n\n// Each warp computes adjacent X outputs at one fixed Y and Z.\n__global__ void derivative_y_direct(const float *A, float *C,\n                                    int n, int m, int k,\n                                    float ay, float by, float cy, float dy)\n{\n  const int i = blockIdx.x * blockDim.x + threadIdx.x;\n  const int j = blockIdx.y * blockDim.y + threadIdx.y;\n  const int z = blockIdx.z * blockDim.z + threadIdx.z;\n  if (i >= n || j >= m || z >= k)\n    return;\n\n  const size_t row_base = (static_cast<size_t>(z) * static_cast<size_t>(m))\n                        * static_cast<size_t>(n) + static_cast<size_t>(i);\n  const size_t y_stride = static_cast<size_t>(n);\n\n  const int jm1 = wrap_y(j - 1);\n  const int jp1 = wrap_y(j + 1);\n  const int jm2 = wrap_y(j - 2);\n  const int jp2 = wrap_y(j + 2);\n  const int jm3 = wrap_y(j - 3);\n  const int jp3 = wrap_y(j + 3);\n  const int jm4 = wrap_y(j - 4);\n  const int jp4 = wrap_y(j + 4);\n\n  const float fm1 = A[row_base + static_cast<size_t>(jm1) * y_stride];\n  const float fp1 = A[row_base + static_cast<size_t>(jp1) * y_stride];\n  const float fm2 = A[row_base + static_cast<size_t>(jm2) * y_stride];\n  const float fp2 = A[row_base + static_cast<size_t>(jp2) * y_stride];\n  const float fm3 = A[row_base + static_cast<size_t>(jm3) * y_stride];\n  const float fp3 = A[row_base + static_cast<size_t>(jp3) * y_stride];\n  const float fm4 = A[row_base + static_cast<size_t>(jm4) * y_stride];\n  const float fp4 = A[row_base + static_cast<size_t>(jp4) * y_stride];\n\n  C[row_base + static_cast<size_t>(j) * y_stride] =\n      ay * (fp1 - fm1)\n    + by * (fp2 - fm2)\n    + cy * (fp3 - fm3)\n    + dy * (fp4 - fm4);\n}\n\nextern \"C\" void run(const float *A, const float *B, float *C,\n                    float *scratch, int n, int m, int k,\n                    float alpha, float beta)\n{\n  if (n <= 0 || m <= 0 || k <= 0)\n    return;\n\n  const float scale = static_cast<float>(m) - 1.0f;\n  const float ay = (4.0f / 5.0f) * scale;\n  const float by = (-1.0f / 5.0f) * scale;\n  const float cy = (4.0f / 105.0f) * scale;\n  const float dy = (-1.0f / 280.0f) * scale;\n\n  // Same 512 threads per CTA as (32,8,2), but with less Y and more Z grouping.\n  const dim3 block(32, 4, 4);\n  const dim3 grid(n / 32 + (n % 32 != 0),\n                  m / 4 + (m % 4 != 0),\n                  k / 4 + (k % 4 != 0));\n  derivative_y_direct<<<grid, block>>>(A, C, n, m, k, ay, by, cy, dy);\n}\n",
+        "path": "src/candidate.cu"
+      }
+    ],
+    "hypothesis": "The measured (32,8,2) mapping is the fastest reported candidate at 3.221 µs, while (32,8,1) and (32,16,1) are both around 3.474 µs and smaller-Y trials were slower. This candidate keeps 512 threads per CTA and adjacent-X warps, but changes the grouping to (32,4,4). Halving Y grouping and doubling Z grouping may alter scheduling or locality; it may also hurt, so no speedup is assumed.",
+    "memory_lessons": [
+      {
+        "applicability": "Use as a reference when exploring alternative CTA geometry for the same direct-load stencil.",
+        "claim": "Among the observed valid trials, (32,8,2) measured 3.2206 µs; (32,8,1) and (32,16,1) measured about 3.474 µs, and the (32,2,1) trial measured 4.9312 µs. These results do not show a monotonic relationship between Y block extent and latency.",
+        "evidence_ids": [
+          "b34ab03a1d61458c",
+          "8a9a8057e0f74e53",
+          "350dab1c6845423c",
+          "a96dcf8d60ae4532"
+        ],
+        "next_experiment": "Compare the proposed (32,4,4) result with (32,8,2) using the official correctness checks and repeated full-run timings."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "This is a source-only candidate; no commands or local correctness/performance tests were run. Preserve the current experiment provenance. The controller should validate signed inputs, independent endpoint values, and repeated official timings.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace the supplied tiled kernel with one direct-global-load kernel; each thread computes exactly one output, with no shared memory or per-thread output reuse.",
+      "Use block (32,4,4) and ceil-divided grids. Since blockDim.x is 32, each warp covers adjacent X outputs at fixed Y and Z; this preserves 512 threads per CTA while changing grouping from the measured (32,8,2) mapping.",
+      "Retain the prescribed single-step neighbor correction for each of eight offsets, preserving index 63, and compute every output using the supplied coefficients without modifying inputs or relying on scratch contents."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "f75e0afce2434f30bc0d56f8ff03bf4c",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "d8a8e61109b9453b47f16969545820472859ba042bc9ffa6d1ef6622586b5d46",
+  "session_id": "88b17084a3a347fd952663a8e59aa214",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "6938aecd9f01062140a9784cc616b9d807331695072d31a378ba4e3ef27ef838",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 23692,
+        "output_tokens": 7317,
+        "reasoning_output_tokens": 5620
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "312153914191ed4adba7f5c132d54f0a335d7d445b0797c190a6ee9712c6ab2c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "518940e0792d4549-h02",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "b34ab03a1d61458c",
+            "8a9a8057e0f74e53",
+            "a96dcf8d60ae4532"
+          ],
+          "status": "applied",
+          "summary": "Compared observed mappings and proposed one contrasting CTA geometry while retaining the exact boundary rule and direct-load kernel."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Reused the campaign's supplied target/compiler context; did not run environment commands."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "This experiment changes only CUDA launch geometry and relies on no uncertain API or instruction behavior."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "b34ab03a1d61458c"
+          ],
+          "status": "applied",
+          "summary": "Compared the reported measurements without claiming a speedup; controller correctness checks and repeated official timings remain necessary."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "f75e0afce2434f30bc0d56f8ff03bf4c",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "d8a8e61109b9453b47f16969545820472859ba042bc9ffa6d1ef6622586b5d46",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "88b17084a3a347fd952663a8e59aa214"
+    },
+    "observed_tokens": 31009,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 31009,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

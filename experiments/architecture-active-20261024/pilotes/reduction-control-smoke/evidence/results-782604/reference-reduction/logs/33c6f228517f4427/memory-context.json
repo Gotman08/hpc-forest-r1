@@ -1,0 +1,289 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "9132ecbf4b0d97ef58f368047a3f086893fb510e6c292ce4e9289760390004b2",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "43a677dc48024052",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "43a677dc48024052",
+        "facts": {
+          "commit": "914b19cd468e1f872e2658bafedb05c0341325d9",
+          "base_commit": "d62eae249491ce24e969aad9c1cece318ed6a5fc",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9487359523773193e-05,
+          "score": 0.6134018113066615
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "With the fixed 128-thread CTA, each warp can reduce its lanes using the existing helper, while the final warp needs only shuffle-down offsets 2 and 1 to combine its four warp totals. This targeted final combine may reduce CTA-local work versus a general 32-lane reduction, but the measured candidates suggest that any local change may be masked by complete-run costs. The launch geometry, one-value-per-lane loading, stage schedule, scratch selection, and final copy stay fixed so the controller can test the local change independently of topology.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace reduce0's modulo-based shared-memory tree with one warp-local reduction per warp, followed by a single CTA barrier.\",\"Use the existing warpReduceSum helper for lane reductions, then combine the four warp totals using only shuffle-down offsets 2 and 1 in warp 0.\",\"Load one value per lane and use zero for out-of-range tail lanes; preserve the 128-thread launch, multi-stage scratch schedule, scratch selection, and final copy.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "43a677dc48024052-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "43a677dc48024052",
+        "facts": {
+          "commit": null,
+          "base_commit": "d62eae249491ce24e969aad9c1cece318ed6a5fc",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "With the fixed 128-thread CTA, each warp can reduce its lanes using the existing helper, while the final warp needs only shuffle-down offsets 2 and 1 to combine its four warp totals. This targeted final combine may reduce CTA-local work versus a general 32-lane reduction, but the measured candidates suggest that any local change may be masked by complete-run costs. The launch geometry, one-value-per-lane loading, stage schedule, scratch selection, and final copy stay fixed so the controller can test the local change independently of topology.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace reduce0's modulo-based shared-memory tree with one warp-local reduction per warp, followed by a single CTA barrier.\",\"Use the existing warpReduceSum helper for lane reductions, then combine the four warp totals using only shuffle-down offsets 2 and 1 in warp 0.\",\"Load one value per lane and use zero for out-of-range tail lanes; preserve the 128-thread launch, multi-stage scratch schedule, scratch selection, and final copy.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "cba5d013bacb44d8",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "cba5d013bacb44d8",
+        "facts": {
+          "commit": "a83f3b2645f2b7591bbf859f773ef5f76f2aacfd",
+          "base_commit": "914b19cd468e1f872e2658bafedb05c0341325d9",
+          "parent_id": "43a677dc48024052",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9554773171742757e-05,
+          "score": 0.612860143359496
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "On the supplied GH200/CUDA 12.6.3 target, reusing warpReduceSum for warp 0's final aggregation may let the int specialization use __reduce_add_sync instead of the current two shuffle-down additions. Only the CTA-local final combine changes; the 128-thread geometry, one-value-per-lane load, tail identity, stage schedule, scratch selection, and final copy remain fixed. The controller's complete-run timing must establish whether this instruction-level change helps independently of launch topology.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the two final shuffle-down additions with a full-warp warpReduceSum call over the four warp totals and zero-valued remaining lanes.\",\"Keep the launch geometry, per-lane input load, tail handling, scratch schedule and final copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "cba5d013bacb44d8-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "cba5d013bacb44d8",
+        "facts": {
+          "commit": null,
+          "base_commit": "914b19cd468e1f872e2658bafedb05c0341325d9",
+          "parent_id": "43a677dc48024052",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "On the supplied GH200/CUDA 12.6.3 target, reusing warpReduceSum for warp 0's final aggregation may let the int specialization use __reduce_add_sync instead of the current two shuffle-down additions. Only the CTA-local final combine changes; the 128-thread geometry, one-value-per-lane load, tail identity, stage schedule, scratch selection, and final copy remain fixed. The controller's complete-run timing must establish whether this instruction-level change helps independently of launch topology.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the two final shuffle-down additions with a full-warp warpReduceSum call over the four warp totals and zero-valued remaining lanes.\",\"Keep the launch geometry, per-lane input load, tail handling, scratch schedule and final copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "e3339368d3544fda",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "e3339368d3544fda",
+        "facts": {
+          "commit": "a08067dc48b43adaaddc3e3b5e637b5052fbdcc5",
+          "base_commit": "d62eae249491ce24e969aad9c1cece318ed6a5fc",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.972906668980916e-05,
+          "score": 0.611464120694888
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Explicitly selecting CUB's BLOCK_REDUCE_WARP_REDUCTIONS policy may perform better than the previously measured default CUB BlockReduce policy by changing how each 128-thread CTA combines its four warps. This tests a distinct CTA-local policy while keeping launch geometry, one-value-per-lane loading, stage schedule, scratch selection, and final copy fixed; only complete-run measurements can establish whether it helps.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Add the CUB BlockReduce header and instantiate BlockReduce<T, 128, cub::BLOCK_REDUCE_WARP_REDUCTIONS> for the CTA-local sum.\",\"Provide exactly one input value per lane, using zero for out-of-range tail lanes to preserve tail safety.\",\"Retain the 128-thread launch, dynamic shared-memory launch argument, multi-stage scratch schedule, scratch selection, and final copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "e3339368d3544fda-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "e3339368d3544fda",
+        "facts": {
+          "commit": null,
+          "base_commit": "d62eae249491ce24e969aad9c1cece318ed6a5fc",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Explicitly selecting CUB's BLOCK_REDUCE_WARP_REDUCTIONS policy may perform better than the previously measured default CUB BlockReduce policy by changing how each 128-thread CTA combines its four warps. This tests a distinct CTA-local policy while keeping launch geometry, one-value-per-lane loading, stage schedule, scratch selection, and final copy fixed; only complete-run measurements can establish whether it helps.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Add the CUB BlockReduce header and instantiate BlockReduce<T, 128, cub::BLOCK_REDUCE_WARP_REDUCTIONS> for the CTA-local sum.\",\"Provide exactly one input value per lane, using zero for out-of-range tail lanes to preserve tail safety.\",\"Retain the 128-thread launch, dynamic shared-memory launch argument, multi-stage scratch schedule, scratch selection, and final copy unchanged.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 14,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T1",
+        "subject": "Isolate and improve the CTA-local reduction",
+        "objective": "In src/candidate.cu, isolate the CTA-local reduction: replace reduce0's modulo-based shared-memory tree with a warp-centric or permitted CUB block reduction, while keeping the 128-thread launch geometry, one input per lane, multi-stage scratch schedule, and final copy fixed. The existing warpReduceSum helper is not currently used by reduce0, so it is a natural comparison point, not a measured improvement. Handle tails safely and preserve exact signed sums. Validate all checks and compare complete-run timings; report whether the local change helps independently of launch topology.",
+        "records": 13,
+        "results": {
+          "trials": 5,
+          "valid": 5,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 5,
+          "distinct_programs": 5,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "8b671423be1b4baf",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9215359687805176e-05,
+          "hypothesis_as_data": "Using CUB BlockReduce for each 128-thread CTA may reduce the cost of the modulo-based shared-memory tree while preserving the existing one-value-per-thread load, launch configuration, scratch-stage schedule and final copy. This contrasts wi"
+        },
+        "latest": {
+          "id": "cba5d013bacb44d8",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9554773171742757e-05,
+          "hypothesis_as_data": "On the supplied GH200/CUDA 12.6.3 target, reusing warpReduceSum for warp 0's final aggregation may let the int specialization use __reduce_add_sync instead of the current two shuffle-down additions. Only the CTA-local final combine changes;"
+        },
+        "alternative": {
+          "id": "cba5d013bacb44d8",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9554773171742757e-05,
+          "hypothesis_as_data": "On the supplied GH200/CUDA 12.6.3 target, reusing warpReduceSum for warp 0's final aggregation may let the int specialization use __reduce_add_sync instead of the current two shuffle-down additions. Only the CTA-local final combine changes;"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "43a677dc48024052",
+    "43a677dc48024052-h01",
+    "cba5d013bacb44d8",
+    "cba5d013bacb44d8-h01",
+    "e3339368d3544fda",
+    "e3339368d3544fda-h01",
+    "8b671423be1b4baf"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 64000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "8f23b533fdfce42f5eba103f9749f9c725247ad8",
+  "selected_parent_id": "8b671423be1b4baf"
+}

@@ -1,0 +1,288 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "6fb663e8c8e2cdca38921304b4fae8331cd7da0e40c170d4757ca72c7504dc31",
+    "tree_id": "e1:T3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "86851286e2ec45b0",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "86851286e2ec45b0",
+        "facts": {
+          "commit": "5581bf96bcc551d5ce9f016bd7fc73e8ac8a436f",
+          "base_commit": "fd05e962b1eba52ce2d8e1dda9344d1bc331fe5c",
+          "parent_id": "d9de9e6475e9480a",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.198720049113333e-06,
+          "score": 0.5220578788603267
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Using two y outputs per thread retains a smaller overlapping register neighborhood than the selected four-output kernel, while an eight-warp 32-by-8 CTA covers 16 output rows. This halves the y-grid CTA count versus the selected parent's 8-row tile, but the larger CTA may reduce residency. The experiment tests that launch-geometry tradeoff; oracle correctness and full-run latency remain for controller measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Assign contiguous x coordinates to lanes and have each thread compute two adjacent y outputs, loading their ten-row union once into scalar registers.\",\"Increase the block from 32-by-2 to 32-by-8 threads; each CTA covers 16 y outputs and the y-grid covers all rows with bounds checks.\",\"Preserve the existing coefficient expressions, baseline period-(my-1) halo mapping including the distinct endpoint row, input A, one kernel launch, and no additional allocation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "86851286e2ec45b0-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "86851286e2ec45b0",
+        "facts": {
+          "commit": null,
+          "base_commit": "fd05e962b1eba52ce2d8e1dda9344d1bc331fe5c",
+          "parent_id": "d9de9e6475e9480a",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Using two y outputs per thread retains a smaller overlapping register neighborhood than the selected four-output kernel, while an eight-warp 32-by-8 CTA covers 16 output rows. This halves the y-grid CTA count versus the selected parent's 8-row tile, but the larger CTA may reduce residency. The experiment tests that launch-geometry tradeoff; oracle correctness and full-run latency remain for controller measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Assign contiguous x coordinates to lanes and have each thread compute two adjacent y outputs, loading their ten-row union once into scalar registers.\",\"Increase the block from 32-by-2 to 32-by-8 threads; each CTA covers 16 y outputs and the y-grid covers all rows with bounds checks.\",\"Preserve the existing coefficient expressions, baseline period-(my-1) halo mapping including the distinct endpoint row, input A, one kernel launch, and no additional allocation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "d9de9e6475e9480a",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "d9de9e6475e9480a",
+        "facts": {
+          "commit": "fd05e962b1eba52ce2d8e1dda9344d1bc331fe5c",
+          "base_commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.3586133116233333e-06,
+          "score": 0.5098765607155855
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Assigning contiguous x coordinates to each warp should improve coalescing relative to the baseline's four-x-wide tile. Having each thread produce four consecutive y outputs lets it reuse a 12-row neighborhood in registers and removes shared memory and barriers; the extra global load requests per output and register use may offset those gains, so correctness and full-run latency need controller measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the shared-memory derivative kernel with a no-shared-memory kernel whose warp lanes cover contiguous x elements.\",\"Compute four consecutive y outputs per thread and load their 12-row union once for register reuse.\",\"Retain the baseline's exact coefficient arithmetic and period-63 halo mapping, including the distinct stored endpoint row.\",\"Launch a 32-by-2 block with an 8-output y span per block and a grid over x, y groups, and z; keep one launch and allocate no additional storage.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "d9de9e6475e9480a-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "d9de9e6475e9480a",
+        "facts": {
+          "commit": null,
+          "base_commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Assigning contiguous x coordinates to each warp should improve coalescing relative to the baseline's four-x-wide tile. Having each thread produce four consecutive y outputs lets it reuse a 12-row neighborhood in registers and removes shared memory and barriers; the extra global load requests per output and register use may offset those gains, so correctness and full-run latency need controller measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the shared-memory derivative kernel with a no-shared-memory kernel whose warp lanes cover contiguous x elements.\",\"Compute four consecutive y outputs per thread and load their 12-row union once for register reuse.\",\"Retain the baseline's exact coefficient arithmetic and period-63 halo mapping, including the distinct stored endpoint row.\",\"Launch a 32-by-2 block with an 8-output y span per block and a grid over x, y groups, and z; keep one launch and allocate no additional storage.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "94ee21b6e9dd4f08-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "94ee21b6e9dd4f08",
+        "facts": {
+          "commit": null,
+          "base_commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Protected correctness checks failed",
+        "model_interpretation": {
+          "claim": "The previous valid four-output-per-thread candidate averaged 3.359 μs versus the 3.494 μs baseline, but that single trial does not identify the cause. This contrasting two-output design retains contiguous x lanes and register reuse while reducing each thread's live input neighborhood and halving the y span per block. It may help if the larger register tile limits throughput, though the increased block count and relatively larger load neighborhood per output could instead hurt; the controller should measure correctness and full-run latency.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Replace the one-output shared-memory stencil with a no-shared-memory kernel whose warp lanes cover 32 contiguous x coordinates.\",\"Have each thread compute two adjacent y outputs, reusing the union of their ten stencil-neighbor rows in named scalar registers.\",\"Wrap neighbor row indices using period my-1, preserving the baseline endpoint halo behavior and exact coefficient arithmetic order.\",\"Launch 32-by-2 blocks over x tiles, four-output y groups, and z planes; keep one launch and allocate no additional storage.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "94ee21b6e9dd4f08",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "94ee21b6e9dd4f08",
+        "facts": {
+          "commit": "cd268011b7a523406c6c3d21f239df25c2b118a5",
+          "base_commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 1,
+            "configuration_file_count": 0,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9763201406866667e-06,
+          "score": 0.5400022929356397
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured four-output version used 12 input loads for four results per thread. Two outputs reduce the per-thread neighborhood to ten values, but increase loads per result; a 32-by-4 block keeps an 8-row output span and contiguous-x warps while testing whether the smaller per-thread working set and four-warps-per-block geometry offset that extra load work. The y-index helper also preserves the baseline's special stored endpoint row. Correctness and latency remain for controller measurement.",
+          "transformations": "{\"files\":[\"src/candidate.cu\"],\"retained\":[\"Use two consecutive y outputs per thread and retain their ten-row overlapping input neighborhood in registers.\",\"Launch 32-by-4 blocks so each CTA covers eight y outputs while each warp spans contiguous x values.\",\"Match the baseline halo mapping exactly, including leaving row my-1 distinct; guard edge coordinates.\",\"Keep coefficient expressions, A as the input, one kernel launch, and no additional allocation.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 10,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T3",
+        "subject": "Register reuse across multiple y outputs",
+        "objective": "Implement and measure register-blocked y outputs: assign contiguous x elements across warp lanes and have each thread compute multiple nearby y outputs, reusing their overlapping input neighborhood in registers rather than shared memory. Explore a small number of outputs per thread and suitable launch geometry; preserve exact coefficients and baseline halo mapping, compute every output from current A, and use no additional allocation or launch. Compare oracle correctness and full-run latency.",
+        "records": 9,
+        "results": {
+          "trials": 3,
+          "valid": 3,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 3,
+          "distinct_programs": 3,
+          "configuration_only": 0,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "94ee21b6e9dd4f08",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 2.9763201406866667e-06,
+          "hypothesis_as_data": "The measured four-output version used 12 input loads for four results per thread. Two outputs reduce the per-thread neighborhood to ten values, but increase loads per result; a 32-by-4 block keeps an 8-row output span and contiguous-x warps"
+        },
+        "latest": {
+          "id": "86851286e2ec45b0",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.198720049113333e-06,
+          "hypothesis_as_data": "Using two y outputs per thread retains a smaller overlapping register neighborhood than the selected four-output kernel, while an eight-warp 32-by-8 CTA covers 16 output rows. This halves the y-grid CTA count versus the selected parent's 8-"
+        },
+        "alternative": {
+          "id": "86851286e2ec45b0",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 3.198720049113333e-06,
+          "hypothesis_as_data": "Using two y outputs per thread retains a smaller overlapping register neighborhood than the selected four-output kernel, while an eight-warp 32-by-8 CTA covers 16 output rows. This halves the y-grid CTA count versus the selected parent's 8-"
+        },
+        "text_truncated": false
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "86851286e2ec45b0",
+    "86851286e2ec45b0-h01",
+    "d9de9e6475e9480a",
+    "d9de9e6475e9480a-h01",
+    "94ee21b6e9dd4f08-h01",
+    "94ee21b6e9dd4f08"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "9eed4bd28ac4ef71f9120cc0c1658bbc071e7e96",
+  "selected_parent_id": null
+}

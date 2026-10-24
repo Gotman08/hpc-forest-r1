@@ -1,0 +1,153 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "import torch\nimport triton\nimport triton.language as tl\n\n\n@triton.jit\ndef _streaming_softmax_kernel(\n    X,\n    Y,\n    N: tl.constexpr,\n    SX0: tl.constexpr,\n    SX1: tl.constexpr,\n    SY0: tl.constexpr,\n    SY1: tl.constexpr,\n    BLOCK: tl.constexpr,\n    ACC_TYPE: tl.constexpr,\n):\n    row = tl.program_id(0)\n    cols = tl.arange(0, BLOCK)\n    running_max = tl.full((), -float(\"inf\"), ACC_TYPE)\n    running_sum = tl.full((), 0.0, ACC_TYPE)\n\n    for base in range(0, N, BLOCK):\n        offsets = base + cols\n        mask = offsets < N\n        values = tl.load(\n            X + row * SX0 + offsets * SX1,\n            mask=mask,\n            other=-float(\"inf\"),\n        ).to(ACC_TYPE)\n        tile_max = tl.max(values, axis=0)\n        new_max = tl.maximum(running_max, tile_max)\n        tile_sum = tl.sum(tl.exp(values - new_max), axis=0)\n        running_sum = running_sum * tl.exp(running_max - new_max) + tile_sum\n        running_max = new_max\n\n    for base in range(0, N, BLOCK):\n        offsets = base + cols\n        mask = offsets < N\n        values = tl.load(\n            X + row * SX0 + offsets * SX1,\n            mask=mask,\n            other=-float(\"inf\"),\n        ).to(ACC_TYPE)\n        output = tl.exp(values - running_max) / running_sum\n        tl.store(Y + row * SY0 + offsets * SY1, output, mask=mask)\n\n\ndef run(x):\n    rows, cols = x.shape\n    ret = torch.empty_like(x)\n    acc_type = tl.float64 if x.dtype == torch.float64 else tl.float32\n    block = 1024 if cols <= 1024 else 2048\n    num_warps = 4 if cols <= 1024 else 8\n    _streaming_softmax_kernel[(rows,)](\n        x,\n        ret,\n        cols,\n        x.stride(0),\n        x.stride(1),\n        ret.stride(0),\n        ret.stride(1),\n        block,\n        acc_type,\n        num_warps=num_warps,\n    )\n    return ret\n",
+        "path": "src/candidate.py"
+      }
+    ],
+    "hypothesis": "The best measured streaming variant averaged 56.096 µs using 4 warps and 1024-element tiles for widths up to 1024, otherwise 2048-element tiles. This experiment retains that tile policy but uses 8 warps only for wider rows. More warps may reduce per-thread tile work, though scheduling and reduction overhead could outweigh that benefit. The candidate awaits official correctness and timing; compare its result to the measured 4-warp variant.",
+    "memory_lessons": [
+      {
+        "applicability": "For this streaming kernel and target, tile sizes up through 1024 were progressively faster in the supplied measurements; the mixed 1024/2048 policy was faster still. This motivates testing a contrasting warp count without assuming it will improve performance.",
+        "claim": "Measured means were about 106.05 µs (128), 69.73 µs (256), 59.74 µs (512), 57.54 µs (1024), and 56.10 µs for the mixed 1024/2048 policy. The reported variants passed the supplied correctness cases.",
+        "evidence_ids": [
+          "dffb0dea1f304972",
+          "22383847f36e4e69",
+          "66b06aaca4904b57",
+          "75a8bbda3db643d5",
+          "619063e5341f46b5"
+        ],
+        "next_experiment": "Keep the mixed tile policy and measure whether 8 warps for widths above 1024 improves on its 4-warp result."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "The source implements the requested single-CTA-per-row streaming reduction, masked tile tails, stride-aware loads and stores, and float64 accumulation for float64 inputs. The prior related 4-warp variants were measured valid; this candidate itself awaits controller validation and timing.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replaced the eager tensor-operation sequence with one Triton CTA per row and a numerically stable running maximum and rescaled sum over tiles.",
+      "Reread the tiles to write normalized output while retaining masked tails and input/output strides.",
+      "Kept the measured 1024-element tile for widths up to 1024 and 2048-element tile for wider rows; use 8 warps only for wider rows to test that launch configuration against the prior 4-warp variant.",
+      "Use float64 accumulation for float64 input and float32 accumulation otherwise."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "fdf694215afc490f92a592234e6031fb",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "547857499f3f4d9f170bdeb846d0ae1f0e57966dd385464f3ddb1ead6f91ecde",
+  "session_id": "4404c2b6a13c42989f9c7c7e042d7509",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "c80bdad67d2a7785b3ac4efb1824bb84aaa31f0c182d080514e7e8846cee7e15",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6400,
+        "input_tokens": 19646,
+        "output_tokens": 5131,
+        "reasoning_output_tokens": 3772
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "6ef39c989c114d87-h02",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "619063e5341f46b5",
+            "75a8bbda3db643d5"
+          ],
+          "status": "applied",
+          "summary": "Used the best measured mixed-tile streaming variant as the comparison point and varied warp count only for wider rows."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The target is frozen by the supplied campaign context, and this experiment does not depend on new hardware or software facts."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The candidate uses the existing Triton kernel and launch pattern; no uncertain API or architecture feature was introduced."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "619063e5341f46b5",
+            "75a8bbda3db643d5",
+            "66b06aaca4904b57",
+            "22383847f36e4e69"
+          ],
+          "status": "applied",
+          "summary": "Compared only supplied measured variants and left correctness and speed conclusions for this candidate to the controller."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "fdf694215afc490f92a592234e6031fb",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "547857499f3f4d9f170bdeb846d0ae1f0e57966dd385464f3ddb1ead6f91ecde",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "4404c2b6a13c42989f9c7c7e042d7509"
+    },
+    "observed_tokens": 24777,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 24777,
+    "tool_events": [],
+    "tool_runtime_errors": [],
+    "turn_failure_messages": []
+  }
+}

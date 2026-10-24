@@ -1,0 +1,134 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float ax = 0.0f;\n    float ay = 0.0f;\n    float az = 0.0f;\n\n    // Chaque thread parcourt toutes les particules en mémoire globale.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float invDist3 = invDist * invDist * invDist;\n\n        // La masse de la cible s'annule entre la force et la division par p.mass.\n        float acceleration = G * in[j].mass * invDist3;\n        ax += acceleration * dx;\n        ay += acceleration * dy;\n        az += acceleration * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += ax * dt;\n    p.vy += ay * dt;\n    p.vz += az * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "Remplacer, pour chaque interaction, sqrtf et la division par le calcul explicite d'une puissance inverse à partir de rsqrtf, puis accumuler directement l'accélération en annulant algébriquement la masse cible. Cela peut réduire le travail arithmétique tout en conservant le mapping, les accès globaux, le softening, le branchement d'auto-interaction et l'ordre d'intégration. Le contrôleur doit vérifier les effets numériques et le temps; aucun gain n'est présumé.",
+    "memory_lessons": [],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "La branche d'auto-interaction est conservée afin de limiter cette expérience aux changements arithmétiques. Le candidat garde G=1.0f, softening=0.001f, les mises à jour Euler et la copie exacte de la masse. Le baseline-e1 fourni est correct sur 11 cas; ses trois mesures totalisent une moyenne d'environ 1.850 ms. Il n'y a pas encore de mesure de ce candidat.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Remplacer sqrtf(distSq) et la division par distSq*dist par rsqrtf(distSq) puis trois multiplications float32 pour former invDist3.",
+      "Annuler algébriquement la masse cible et accumuler directement l'accélération pondérée par la masse source, supprimant la division finale par la masse cible.",
+      "Conserver la branche i==j, le mapping un thread par sortie, les accès globaux, le layout, G, le softening et l'ordre d'intégration."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "39ca12ed1ea64ab3a37f3ae830755648",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "bdf941049d7356aede419c3dd325cacfe9656aa1b1197221c3063276847376c5",
+  "session_id": "ba8fdfd6fbf3447aa1657a7a2ac1ca91",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "52288714a8700fe302b3936381ecc8e872c3a4e7c9950ef25f0e19fd3cf29f93",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 6656,
+        "input_tokens": 13026,
+        "output_tokens": 3405,
+        "reasoning_output_tokens": 2282
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "f21c70702916afcd833009623e5967e2d9419decc5c93fc1c783a3dc7b9202db",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "253c00e28c904a54-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [],
+          "status": "applied",
+          "summary": "Proposé une seule expérience arithmétique combinant rsqrtf explicite et accumulation directe de l'accélération, sans changer mapping ou stratégie mémoire."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Utilisé les faits fournis pour la cible GH200 et NVRTC CUDA 12.6.3; aucune capacité matérielle non vérifiée n'est supposée."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [
+            "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-best-practices-guide/index.html"
+          ],
+          "status": "applied",
+          "summary": "Réutilisé la référence CUDA 12.6.3 fournie, qui mentionne rsqrtf comme formulation explicite à évaluer; cela ne constitue pas une garantie de performance."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Rapporté les faits du baseline uniquement; la correction et les performances du candidat restent à mesurer par le contrôleur."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "39ca12ed1ea64ab3a37f3ae830755648",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "bdf941049d7356aede419c3dd325cacfe9656aa1b1197221c3063276847376c5",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "ba8fdfd6fbf3447aa1657a7a2ac1ca91"
+    },
+    "observed_tokens": 16431,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 16431,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

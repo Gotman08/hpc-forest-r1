@@ -1,0 +1,119 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..8e1f8d3 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 256,
++  "items_per_block": 1,
++  "shared_memory_bytes": 0
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..a71d194 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,52 +1,72 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
++    const int tid = threadIdx.x;
++    const int stride = blockDim.x;
++    const int i = static_cast<int>(blockIdx.x);
+     if (i >= n) return;
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+ 
++    __shared__ Particle target;
++    __shared__ float partial_fx[256];
++    __shared__ float partial_fy[256];
++    __shared__ float partial_fz[256];
++
++    if (tid == 0) target = in[i];
++    __syncthreads();
++
+     float fx = 0.0f;
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    for (int j = tid; j < n;) {
++        if (j != i) {
++            float dx = in[j].x - target.x;
++            float dy = in[j].y - target.y;
++            float dz = in[j].z - target.z;
+ 
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++            float distSq = dx * dx + dy * dy + dz * dz + softening;
++            float dist = sqrtf(distSq);
++            float f = (G * target.mass * in[j].mass) / (distSq * dist);
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++            fx += f * dx;
++            fy += f * dy;
++            fz += f * dz;
++        }
++        if (n - j <= stride) break;
++        j += stride;
++    }
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++    partial_fx[tid] = fx;
++    partial_fy[tid] = fy;
++    partial_fz[tid] = fz;
++    __syncthreads();
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++    for (int offset = stride >> 1; offset > 0; offset >>= 1) {
++        if (tid < offset) {
++            partial_fx[tid] += partial_fx[tid + offset];
++            partial_fy[tid] += partial_fy[tid + offset];
++            partial_fz[tid] += partial_fz[tid + offset];
++        }
++        __syncthreads();
+     }
+ 
+-    // Intégration d'Euler explicite
+-    Particle p = in[i];
+-    p.vx += (fx / p.mass) * dt;
+-    p.vy += (fy / p.mass) * dt;
+-    p.vz += (fz / p.mass) * dt;
++    if (tid == 0) {
++        Particle p = target;
++        p.vx += (partial_fx[0] / p.mass) * dt;
++        p.vy += (partial_fy[0] / p.mass) * dt;
++        p.vz += (partial_fz[0] / p.mass) * dt;
+ 
+-    p.x += p.vx * dt;
+-    p.y += p.vy * dt;
+-    p.z += p.vz * dt;
++        p.x += p.vx * dt;
++        p.y += p.vy * dt;
++        p.z += p.vz * dt;
+ 
+-    out[i] = p;
++        out[i] = p;
++    }
+ }
+-

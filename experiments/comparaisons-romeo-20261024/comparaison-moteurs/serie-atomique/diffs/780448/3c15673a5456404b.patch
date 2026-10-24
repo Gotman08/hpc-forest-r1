@@ -1,0 +1,23 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index e4a2c31..c62b0cd 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -47,6 +47,7 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+         __syncthreads();
+ 
+         if (active) {
++#pragma unroll 4
+             for (int offset = 0; offset < tile_count; ++offset) {
+                 const int j = base + offset;
+                 if (i == j) continue;
+@@ -57,8 +58,8 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+                 const float dz = source.z - target.z;
+ 
+                 const float distSq = dx * dx + dy * dy + dz * dz + softening;
+-                const float dist = sqrtf(distSq);
+-                const float f = (G * target.mass * source.mass) / (distSq * dist);
++                const float inverseDistance = rsqrtf(distSq);
++                const float f = (G * target.mass * source.mass) * inverseDistance * inverseDistance * inverseDistance;
+ 
+                 fx += f * dx;
+                 fy += f * dy;

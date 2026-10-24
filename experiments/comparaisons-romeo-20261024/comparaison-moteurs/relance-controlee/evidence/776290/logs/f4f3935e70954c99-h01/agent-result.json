@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    #pragma unroll 64\n    for (int j = 0; j < n; ++j) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq);\n        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "The correct unroll-32 candidate was slightly faster than unroll-16. Unroll-64 may reduce loop overhead further, but the gain could be within noise or reverse; it requires fresh validation and measurement.",
+  "notes": "Only src/nbody_kernel.cu changes; launch.json remains unchanged. Unroll-32 measured 0.001795054 s and was correct. This unroll-64 candidate is unmeasured.",
+  "sources_kept": [
+    "3f23558b5b9e4387"
+  ],
+  "transformations": [
+    "Increase source-loop unrolling from 32 to 64 while preserving the baseline force arithmetic, accumulation order, and launch configuration."
+  ]
+}

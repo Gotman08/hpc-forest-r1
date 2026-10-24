@@ -1,0 +1,142 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "{\n  \"block\": 128,\n  \"items_per_block\": 256,\n  \"shared_memory_bytes\": 0\n}\n",
+        "path": "src/launch.json"
+      },
+      {
+        "content": "// Two adjacent targets per thread: block=128 and items_per_block=256 in\n// src/launch.json, so each block covers 128 * targets_per_thread targets.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    constexpr unsigned int targets_per_thread = 2;\n    const unsigned int thread_index = blockIdx.x * blockDim.x + threadIdx.x;\n    const unsigned int i0u = thread_index * targets_per_thread;\n    if (i0u >= (unsigned int)n) return;\n\n    const int i0 = (int)i0u;\n    const bool valid1 = i0u + 1u < (unsigned int)n;\n    const int i1 = valid1 ? (int)(i0u + 1u) : 0;\n\n    Particle p0 = in[i0];\n    Particle p1;\n    if (valid1) p1 = in[i1];\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx0 = 0.0f;\n    float fy0 = 0.0f;\n    float fz0 = 0.0f;\n    float fx1 = 0.0f;\n    float fy1 = 0.0f;\n    float fz1 = 0.0f;\n\n    for (int j = 0; j < n; j++) {\n        const float sx = in[j].x;\n        const float sy = in[j].y;\n        const float sz = in[j].z;\n        const float source_mass = in[j].mass;\n\n        if (i0 != j) {\n            const float dx0 = sx - p0.x;\n            const float dy0 = sy - p0.y;\n            const float dz0 = sz - p0.z;\n            const float distSq0 = dx0 * dx0 + dy0 * dy0 + dz0 * dz0 + softening;\n            const float dist0 = sqrtf(distSq0);\n            const float f0 = (G * p0.mass * source_mass) / (distSq0 * dist0);\n            fx0 += f0 * dx0;\n            fy0 += f0 * dy0;\n            fz0 += f0 * dz0;\n        }\n\n        if (valid1 && i1 != j) {\n            const float dx1 = sx - p1.x;\n            const float dy1 = sy - p1.y;\n            const float dz1 = sz - p1.z;\n            const float distSq1 = dx1 * dx1 + dy1 * dy1 + dz1 * dz1 + softening;\n            const float dist1 = sqrtf(distSq1);\n            const float f1 = (G * p1.mass * source_mass) / (distSq1 * dist1);\n            fx1 += f1 * dx1;\n            fy1 += f1 * dy1;\n            fz1 += f1 * dz1;\n        }\n    }\n\n    p0.vx += (fx0 / p0.mass) * dt;\n    p0.vy += (fy0 / p0.mass) * dt;\n    p0.vz += (fz0 / p0.mass) * dt;\n    p0.x += p0.vx * dt;\n    p0.y += p0.vy * dt;\n    p0.z += p0.vz * dt;\n    out[i0] = p0;\n\n    if (valid1) {\n        p1.vx += (fx1 / p1.mass) * dt;\n        p1.vy += (fy1 / p1.mass) * dt;\n        p1.vz += (fz1 / p1.mass) * dt;\n        p1.x += p1.vx * dt;\n        p1.y += p1.vy * dt;\n        p1.z += p1.vz * dt;\n        out[i1] = p1;\n    }\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "Associer deux cibles consécutives à chaque thread avec block=128 et items_per_block=256 permet de charger une fois les coordonnées et la masse de chaque source par itération et de les réutiliser pour deux accumulateurs en registres, sans mémoire partagée ni synchronisation. Cette cartographie contiguë diffère des deux cibles séparées de blockDim.x dans l’expérience précédente; elle peut toutefois dégrader la coalescence des accès aux cibles ou réduire le parallélisme, donc aucun gain n’est présumé.",
+    "memory_lessons": [],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Le tuilage est lié explicitement à la configuration: targets_per_thread=2, block=128 et items_per_block=256. Les expériences disponibles étaient correctes, mais leurs moyennes agrégées étaient 1,853567 ms au baseline, 2,601002 ms pour deux cibles/thread et 4,238943 ms pour quatre cibles/thread; elles ne fournissent pas de mesures séparées par taille. Ce candidat n’a pas encore été validé ni mesuré; les résultats des trois tailles doivent venir du contrôleur.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Configurer block=128, items_per_block=256 et targets_per_thread=2; chaque thread traite deux indices consécutifs et chaque bloc couvre 256 cibles.",
+      "Charger les coordonnées et la masse de chaque source une fois par itération, puis les employer dans deux accumulateurs distincts en registres; préserver les opérations flottantes et sqrtf.",
+      "Contrôler séparément la cible de queue et l’auto-interaction pour chaque accumulateur, puis écrire exactement une fois chaque cible valide en conservant sa masse."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "ea9096f9f92645b88be85896a5fec02f",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "074eb0371ffeefadee7a09b23c25123b0df423743380d49cb60046d826bb3d89",
+  "session_id": "1dc3f464d69e401a8c9b934b526be9eb",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "d17e223a715594d8562f39a19f6d6b0a917450e06ab6776b52b0cd5ed46ed7dd",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 0,
+        "input_tokens": 20406,
+        "output_tokens": 9458,
+        "reasoning_output_tokens": 7653
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "6692b42f364f244e850912e9c63f2dee9aebd6f764e9e9359da90f2665abed6a",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "74a2d6c63a1b4bd6-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "baseline-e1",
+            "bdca09b7758b4bc8",
+            "60d4032491464ad3"
+          ],
+          "status": "applied",
+          "summary": "Proposé une seule cartographie nouvelle, par paires contiguës, en conservant l’ordre de calcul et en exposant ses risques sans annoncer de gain."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Réutilisé les faits fournis sur la cible GH200, NVRTC CUDA 12.6.3 et la configuration de lancement; aucune capacité matérielle additionnelle n’est requise par cette proposition."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "Aucune API ou instruction propre à une version n’est introduite; la performance de cette cartographie reste une hypothèse à mesurer."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "bdca09b7758b4bc8",
+            "60d4032491464ad3"
+          ],
+          "status": "applied",
+          "summary": "Distingue les moyennes historiques agrégées des résultats attendus du candidat; aucune validation ou mesure nouvelle n’est revendiquée."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "ea9096f9f92645b88be85896a5fec02f",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "074eb0371ffeefadee7a09b23c25123b0df423743380d49cb60046d826bb3d89",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "1dc3f464d69e401a8c9b934b526be9eb"
+    },
+    "observed_tokens": 29864,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 29864,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

@@ -1,0 +1,14 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index dd817e5..8213897 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -21,6 +21,9 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     float fz = 0.0f;
+ 
+     // Lanes cover disjoint source indices; the loop also handles source tails.
++    // Unroll four iterations to reduce loop-control overhead while retaining
++    // the same per-lane accumulation order.
++    #pragma unroll 4
+     for (int j = lane; j < n; j += 32) {
+         if (j == i) continue;
+ 

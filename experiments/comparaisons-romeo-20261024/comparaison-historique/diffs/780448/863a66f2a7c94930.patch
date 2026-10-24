@@ -1,0 +1,71 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..03da118 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -11,37 +11,47 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     int i = blockIdx.x * blockDim.x + threadIdx.x;
+     if (i >= n) return;
+ 
+-    const float G = 1.0f;
+     const float softening = 0.001f;
+ 
+     float fx = 0.0f;
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
++    // Chaque thread conserve son parcours séquentiel des particules sources.
+     for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++        // Évite notamment que l'auto-interaction d'une masse extrême produise
++        // un coefficient infini ensuite multiplié par un déplacement nul.
++        if (i == j) continue;
+ 
+         float dx = in[j].x - in[i].x;
+         float dy = in[j].y - in[i].y;
+         float dz = in[j].z - in[i].z;
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        // Opérations arrondies séparément pour isoler l'effet des FMA,
++        // en conservant l'ordre des axes.
++        float distSq = __fmul_rn(dx, dx);
++        distSq = __fadd_rn(distSq, __fmul_rn(dy, dy));
++        distSq = __fadd_rn(distSq, __fmul_rn(dz, dz));
++        distSq = __fadd_rn(distSq, softening);
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++        float invDist = rsqrtf(distSq);
++        float invDist3 = (invDist * invDist) * invDist;
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++        // La masse cible s'annule entre la force et la division par p.mass
++        // lors de l'intégration; il reste l'accélération due à la source j.
++        float f = in[j].mass * invDist3;
++
++        // Accumulation sans FMA, avec le même ordre j croissant.
++        fx = __fadd_rn(fx, __fmul_rn(f, dx));
++        fy = __fadd_rn(fy, __fmul_rn(f, dy));
++        fz = __fadd_rn(fz, __fmul_rn(f, dz));
+     }
+ 
+-    // Intégration d'Euler explicite
++    // Intégration d'Euler explicite de l'accélération directement accumulée.
+     Particle p = in[i];
+-    p.vx += (fx / p.mass) * dt;
+-    p.vy += (fy / p.mass) * dt;
+-    p.vz += (fz / p.mass) * dt;
++    p.vx += fx * dt;
++    p.vy += fy * dt;
++    p.vz += fz * dt;
+ 
+     p.x += p.vx * dt;
+     p.y += p.vy * dt;
+@@ -49,4 +59,3 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     out[i] = p;
+ }
+-

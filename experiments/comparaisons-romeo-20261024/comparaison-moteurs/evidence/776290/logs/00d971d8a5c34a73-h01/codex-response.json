@@ -1,0 +1,134 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale\n    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue; // Divergence de branche inutile dans la boucle\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float invDist3 = invDist * invDist * invDist;\n\n        // With positive target mass, accumulate acceleration directly rather than\n        // multiplying each source term by the target mass and dividing afterward.\n        float f = (G * in[j].mass) * invDist3;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += fx * dt;\n    p.vy += fy * dt;\n    p.vz += fz * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "Replacing sqrt-plus-division with an explicit reciprocal-square-root cube, while algebraically cancelling the positive target mass from the force/acceleration calculation, may reduce hot-loop arithmetic. The controller must determine whether the changed FP32 rounding passes the FP64 oracle and whether it improves timing.",
+    "memory_lessons": [],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "One arithmetic candidate only; the one-target-per-thread mapping and launch configuration are unchanged. The self-interaction guard remains because its contribution is normally zero but evaluating it could produce nonfinite intermediates for extreme masses. No speedup or correctness outcome is claimed before controller evaluation.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace sqrtf(distSq) and division by distSq * dist with rsqrtf(distSq) and its cube.",
+      "Accumulate acceleration using source mass only, algebraically cancelling the positive target mass and eliminating the final target-mass division.",
+      "Preserve the self-interaction guard and baseline thread mapping and launch configuration."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "940a844b6b66466e82f4569e33c8996c",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "94a0ef7748ba5d81c8cb89a17d0db3e221df13579f3e142d6ed9c39b004b5e8d",
+  "session_id": "ea99a47fcd7f495d840489d5d54bd8a3",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "4479fb96a46403a54ca3bf8513b60556e9bca2d7eda0d955b2e31ca144a85b35",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 12672,
+        "input_tokens": 12786,
+        "output_tokens": 4086,
+        "reasoning_output_tokens": 3106
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "6692b42f364f244e850912e9c63f2dee9aebd6f764e9e9359da90f2665abed6a",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T2",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "00d971d8a5c34a73-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Proposed one bounded hot-loop arithmetic candidate and left correctness and speed evaluation to the controller."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Used the supplied GH200 and NVRTC CUDA 12.6.3 target facts; made no hardware-specific mapping or launch changes."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No documentation request was needed to formulate this candidate; the controller will compile and evaluate the CUDA intrinsic on the specified target."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Used the measured baseline as context but made no performance claim because this candidate has not been measured."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "940a844b6b66466e82f4569e33c8996c",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "94a0ef7748ba5d81c8cb89a17d0db3e221df13579f3e142d6ed9c39b004b5e8d",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "ea99a47fcd7f495d840489d5d54bd8a3"
+    },
+    "observed_tokens": 16872,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 16872,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

@@ -1,0 +1,86 @@
+diff --git a/src/launch.json b/src/launch.json
+index 83ad1a9..be9f275 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+ {
+-  "block": 256,
+-  "items_per_block": 1024,
++  "block": 128,
++  "items_per_block": 384,
+   "shared_memory_bytes": 0
+ }
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index 08f2070..188b9f2 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -4,31 +4,27 @@ struct Particle {
+     float mass;
+ };
+ 
+-// Each thread handles four targets spaced by blockDim.x. This lets it reuse
+-// each streamed source particle while keeping the source path in registers.
++// Each thread handles three targets spaced by blockDim.x and reuses each
++// streamed source particle across their force accumulations.
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    const long long base = static_cast<long long>(blockIdx.x) * blockDim.x * 4LL + threadIdx.x;
++    const long long base = static_cast<long long>(blockIdx.x) * blockDim.x * 3LL + threadIdx.x;
+     const long long i0 = base;
+     const long long i1 = base + blockDim.x;
+     const long long i2 = base + 2LL * blockDim.x;
+-    const long long i3 = base + 3LL * blockDim.x;
+ 
+     const bool valid0 = i0 < n;
+     const bool valid1 = i1 < n;
+     const bool valid2 = i2 < n;
+-    const bool valid3 = i3 < n;
+-    if (!valid0 && !valid1 && !valid2 && !valid3) return;
++    if (!valid0 && !valid1 && !valid2) return;
+ 
+-    Particle p0, p1, p2, p3;
++    Particle p0, p1, p2;
+     if (valid0) p0 = in[i0];
+     if (valid1) p1 = in[i1];
+     if (valid2) p2 = in[i2];
+-    if (valid3) p3 = in[i3];
+ 
+     float fx0 = 0.0f, fy0 = 0.0f, fz0 = 0.0f;
+     float fx1 = 0.0f, fy1 = 0.0f, fz1 = 0.0f;
+     float fx2 = 0.0f, fy2 = 0.0f, fz2 = 0.0f;
+-    float fx3 = 0.0f, fy3 = 0.0f, fz3 = 0.0f;
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+@@ -74,18 +70,6 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+             fy2 += f * dy;
+             fz2 += f * dz;
+         }
+-
+-        if (valid3 && i3 != j) {
+-            const float dx = sx - p3.x;
+-            const float dy = sy - p3.y;
+-            const float dz = sz - p3.z;
+-            const float distSq = dx * dx + dy * dy + dz * dz + softening;
+-            const float dist = sqrtf(distSq);
+-            const float f = (G * p3.mass * sm) / (distSq * dist);
+-            fx3 += f * dx;
+-            fy3 += f * dy;
+-            fz3 += f * dz;
+-        }
+     }
+ 
+     if (valid0) {
+@@ -115,13 +99,4 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+         p2.z += p2.vz * dt;
+         out[i2] = p2;
+     }
+-    if (valid3) {
+-        p3.vx += (fx3 / p3.mass) * dt;
+-        p3.vy += (fy3 / p3.mass) * dt;
+-        p3.vz += (fz3 / p3.mass) * dt;
+-        p3.x += p3.vx * dt;
+-        p3.y += p3.vy * dt;
+-        p3.z += p3.vz * dt;
+-        out[i3] = p3;
+-    }
+ }

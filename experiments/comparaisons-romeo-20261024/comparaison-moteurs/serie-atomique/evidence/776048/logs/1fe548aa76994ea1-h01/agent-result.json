@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 512,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "// AoS n-body kernel: each thread computes two targets and reuses source fields.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int i0 = blockIdx.x * (blockDim.x * 2) + threadIdx.x;\n    const int i1 = i0 + blockDim.x;\n    const bool valid0 = i0 < n;\n    const bool valid1 = i1 < n;\n    if (!valid0 && !valid1) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    Particle p0;\n    Particle p1;\n    if (valid0) p0 = in[i0];\n    if (valid1) p1 = in[i1];\n\n    float fx0 = 0.0f;\n    float fy0 = 0.0f;\n    float fz0 = 0.0f;\n    float fx1 = 0.0f;\n    float fy1 = 0.0f;\n    float fz1 = 0.0f;\n\n    for (int j = 0; j < n; j++) {\n        const float source_x = in[j].x;\n        const float source_y = in[j].y;\n        const float source_z = in[j].z;\n        const float source_mass = in[j].mass;\n\n        if (valid0 && i0 != j) {\n            const float dx = source_x - p0.x;\n            const float dy = source_y - p0.y;\n            const float dz = source_z - p0.z;\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * p0.mass * source_mass) / (distSq * dist);\n            fx0 += f * dx;\n            fy0 += f * dy;\n            fz0 += f * dz;\n        }\n\n        if (valid1 && i1 != j) {\n            const float dx = source_x - p1.x;\n            const float dy = source_y - p1.y;\n            const float dz = source_z - p1.z;\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * p1.mass * source_mass) / (distSq * dist);\n            fx1 += f * dx;\n            fy1 += f * dy;\n            fz1 += f * dz;\n        }\n    }\n\n    if (valid0) {\n        p0.vx += (fx0 / p0.mass) * dt;\n        p0.vy += (fy0 / p0.mass) * dt;\n        p0.vz += (fz0 / p0.mass) * dt;\n        p0.x += p0.vx * dt;\n        p0.y += p0.vy * dt;\n        p0.z += p0.vz * dt;\n        out[i0] = p0;\n    }\n\n    if (valid1) {\n        p1.vx += (fx1 / p1.mass) * dt;\n        p1.vy += (fy1 / p1.mass) * dt;\n        p1.vz += (fz1 / p1.mass) * dt;\n        p1.x += p1.vx * dt;\n        p1.y += p1.vy * dt;\n        p1.z += p1.vz * dt;\n        out[i1] = p1;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Traiter deux cibles par thread avec un bloc de 256 threads pourrait amortir les chargements des champs de chaque source tout en conservant davantage de threads par bloc que le précédent essai à 128 threads. Le tile de 512 cibles réduit aussi le nombre de blocs, mais le travail et les accumulateurs supplémentaires par thread peuvent limiter le parallélisme; le résultat doit être mesuré.",
+  "notes": "Le mapping associe à chaque bloc un tile de 2 * blockDim.x cibles; les gardes distinctes assurent une sortie pour chaque cible valide, y compris dans le dernier tile incomplet. Les mesures antérieures sont des résultats de recherche, pas une confirmation; ce candidat attend l’évaluation officielle.",
+  "sources_kept": [],
+  "transformations": [
+    "Configurer block=256 et items_per_block=512 pour faire traiter à chaque thread les cibles i0 et i0 + blockDim.x, en accord avec le tile de la grille calculée par le contrôleur.",
+    "Charger dans des scalaires les coordonnées et la masse de chaque source une seule fois dans la boucle, puis réutiliser ces valeurs pour deux accumulateurs indépendants.",
+    "Garder les exclusions individuelles des interactions avec soi-même, les gardes de validité et une écriture de sortie par cible valide, avec le calcul sqrtf et l’ordre d’intégration d’origine."
+  ]
+}

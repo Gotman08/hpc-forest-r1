@@ -1,0 +1,149 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Skip the self interaction by traversing the two ranges around i.\n    #pragma unroll 4\n    for (int j = 0; j < i; ++j) {\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float inverseDistance = rsqrtf(distSq);\n        float f = (G * in[i].mass * in[j].mass) * inverseDistance * inverseDistance * inverseDistance;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    #pragma unroll 4\n    for (int j = i + 1; j < n; ++j) {\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float inverseDistance = rsqrtf(distSq);\n        float f = (G * in[i].mass * in[j].mass) * inverseDistance * inverseDistance * inverseDistance;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "Prior search measurements found split ranges with rsqrt at 0.001025174 s and rsqrt with factor-four unrolling at 0.001009364 s. This candidate combines split ranges and factor-four unrolling to test whether unrolling offsets loop-control costs while retaining the rsqrt arithmetic. The change may instead increase instruction or control overhead; these measurements do not establish a cause or a confirmed speedup.",
+    "memory_lessons": [
+      {
+        "applicability": "These are search measurements of distinct valid candidates, not independent confirmation or proof of a causal performance difference.",
+        "claim": "Split ranges with rsqrt measured 0.001025174 s, while rsqrt with factor-four unrolling measured 0.001009364 s in the recorded search runs.",
+        "evidence_ids": [
+          "f7b049e78ea14fc7",
+          "7f81c093820b4441"
+        ],
+        "next_experiment": "Measure split ranges with factor-four unrolling and the same rsqrt arithmetic under the official protocol."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Only the kernel source is changed; launch configuration, particle layout, and one-target-per-thread mapping are preserved. The self interaction is omitted by the split ranges, including for n=1, rather than evaluated as a zero-displacement term. This candidate has not been controller-validated or timed; correctness checks should include coincident positions, extreme mass, GPU tolerance, and FP64 checks before scored-size timing.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace the conditional single source loop with two ranges, [0, i) and (i, n), so j=i is never evaluated.",
+      "Apply factor-four unrolling to both ranges and use rsqrtf-based inverse-distance cubed arithmetic, retaining target-mass multiplication and final force-per-target-mass division.",
+      "Preserve one target per thread, the existing launch configuration, and no shared-memory tiling or multi-target coarsening."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "e7ae41a781ad41e499357d329582d1f9",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "bf733a23382b4d67bd72618a6329befb56cd400a5d1adca300a8d9b6e1372051",
+  "session_id": "bd4eb8bb1d38489bbad5765e53cb020c",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "bf7dae33151e99ab2c885592e43a68d736e0080210c884eed4db8af4057d0892",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4352,
+        "input_tokens": 23822,
+        "output_tokens": 6092,
+        "reasoning_output_tokens": 4810
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "fd180002914c485c-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "f7b049e78ea14fc7",
+            "7f81c093820b4441"
+          ],
+          "status": "applied",
+          "summary": "Selected a bounded combination of split source ranges, factor-four unrolling, and the previously measured rsqrt arithmetic; stated the performance assumption without claiming a speedup."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The source-level change uses the supplied CUDA kernel and leaves launch settings unchanged; no additional hardware or compiler fact is needed for this experiment."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [
+            "7f81c093820b4441"
+          ],
+          "status": "not_needed",
+          "summary": "The prior measured candidate already used the rsqrt arithmetic and unroll directive, so no unresolved API or compatibility question requires documentation."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "f7b049e78ea14fc7",
+            "7f81c093820b4441"
+          ],
+          "status": "applied",
+          "summary": "Compared recorded search means and validity while treating them as unconfirmed evidence; requested full correctness checks and official timing."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "e7ae41a781ad41e499357d329582d1f9",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "bf733a23382b4d67bd72618a6329befb56cd400a5d1adca300a8d9b6e1372051",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "bd4eb8bb1d38489bbad5765e53cb020c"
+    },
+    "observed_tokens": 29914,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 29914,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

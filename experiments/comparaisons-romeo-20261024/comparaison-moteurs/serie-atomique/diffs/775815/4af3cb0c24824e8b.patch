@@ -1,0 +1,35 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index af1b606..a269158 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -8,7 +8,7 @@ struct SourceParticle {
+     float x, y, z, mass;
+ };
+ 
+-// Une cible par thread; chaque bloc réutilise une tuile de sources en mémoire partagée.
++// Each block reuses a shared tile of sources for its target particles.
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+     extern __shared__ SourceParticle tile[];
+ 
+@@ -48,14 +48,14 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+                 const int j = tile_start + lane;
+                 if (i == j) continue;
+ 
+-                float dx = tile[lane].x - target.x;
+-                float dy = tile[lane].y - target.y;
+-                float dz = tile[lane].z - target.z;
++                const float dx = tile[lane].x - target.x;
++                const float dy = tile[lane].y - target.y;
++                const float dz = tile[lane].z - target.z;
+ 
+-                float distSq = dx * dx + dy * dy + dz * dz + softening;
+-                float dist = sqrtf(distSq);
+-
+-                float f = (G * target.mass * tile[lane].mass) / (distSq * dist);
++                const float distSq = dx * dx + dy * dy + dz * dz + softening;
++                const float invDist = rsqrtf(distSq);
++                const float invDistCubed = (invDist * invDist) * invDist;
++                const float f = ((G * target.mass) * tile[lane].mass) * invDistCubed;
+ 
+                 fx += f * dx;
+                 fy += f * dy;

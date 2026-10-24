@@ -1,0 +1,17 @@
+{
+  "files": [
+    {
+      "content": "// Structure \"Array of Structures\" (AoS).\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // The two ranges omit j == i without evaluating a self-interaction.\n    #pragma unroll 2\n    for (int j = 0; j < i; j++) {\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float f = (G * in[i].mass * in[j].mass) * invDist * invDist * invDist;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    #pragma unroll 2\n    for (int j = i + 1; j < n; j++) {\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float f = (G * in[i].mass * in[j].mass) * invDist * invDist * invDist;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Split source ranges with rsqrtf and factor-four unrolling produced the best recorded mean (0.00089948 s), while the corresponding factor-eight candidate measured 0.00101347 s. Testing factor-two unrolling holds the split-range and arithmetic choices fixed while probing whether less unrolling reduces code or register overhead without giving up useful loop-control savings. These search measurements do not establish causality or predict this candidate's result.",
+  "notes": "Only the CUDA kernel is changed. The launch configuration, one-target-per-thread mapping, target-mass arithmetic, and ascending interaction order are retained. The controller must validate all correctness cases and measure all scored sizes; no result is presumed.",
+  "sources_kept": [],
+  "transformations": [
+    "Replace the conditional all-source loop with ascending ranges [0, i) and (i, n), so the self-interaction is never evaluated.",
+    "Use rsqrtf(distSq) and multiply by its cube in each interaction, retaining target-mass multiplication and final per-target-mass division.",
+    "Apply #pragma unroll 2 to both split source loops to test a lower unroll factor than the previously measured factor-four and factor-eight variants.",
+    "Preserve one target per thread, the existing integration arithmetic, and the launch configuration; add no shared-memory tiling or multi-target coarsening."
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 256,\n  \"shared_memory_bytes\": 7168\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Each CTA stages source particles in shared-memory chunks. Each active\n// thread still owns exactly one target and accumulates its output locally.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    extern __shared__ Particle source_tile[];\n\n    const int i = blockIdx.x * blockDim.x + threadIdx.x;\n    const bool active = i < n;\n    Particle target;\n    if (active) {\n        target = in[i];\n    }\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int tile_begin = 0; tile_begin < n; tile_begin += blockDim.x) {\n        const int source_index = tile_begin + threadIdx.x;\n        if (source_index < n) {\n            source_tile[threadIdx.x] = in[source_index];\n        }\n        __syncthreads();\n\n        int tile_size = n - tile_begin;\n        if (tile_size > blockDim.x) {\n            tile_size = blockDim.x;\n        }\n\n        if (active) {\n            for (int k = 0; k < tile_size; ++k) {\n                const int j = tile_begin + k;\n                if (i == j) continue;\n\n                const Particle source = source_tile[k];\n                float dx = source.x - target.x;\n                float dy = source.y - target.y;\n                float dz = source.z - target.z;\n\n                float distSq = dx * dx + dy * dy + dz * dz + softening;\n                float dist = sqrtf(distSq);\n\n                float f = (G * target.mass * source.mass) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n    }\n\n    if (!active) return;\n\n    Particle p = target;\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Staging each source chunk once in shared memory allows the CTA's 256 target threads to reuse those source values, potentially reducing repeated global-memory traffic while keeping one target and one accumulated output per thread. The controller must measure whether that reuse benefits the official sizes.",
+  "notes": "The launch reserves 256 * 7 * sizeof(float) = 7168 bytes for one source tile. Inactive tail threads still participate in both barriers, partial source tiles are bounded by tile_size, and self-interactions are excluded by global source index. No candidate correctness or speed result is claimed; the controller should run the full suite and official timing metric.",
+  "sources_kept": [],
+  "transformations": [
+    "Use a 256-particle dynamic shared-memory source tile per CTA, matching the 256-thread block.",
+    "Cooperatively load each source chunk, synchronize before reuse, and synchronize before overwriting the tile.",
+    "Keep one target and force accumulator per thread; handle tail threads without bypassing barriers and bound the final partial tile.",
+    "Exclude self-interactions using the global source index and reserve 7168 bytes of dynamic shared memory in the launch configuration."
+  ]
+}

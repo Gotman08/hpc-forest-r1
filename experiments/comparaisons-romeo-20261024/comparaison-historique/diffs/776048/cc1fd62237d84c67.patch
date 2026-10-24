@@ -1,0 +1,57 @@
+diff --git a/src/launch.json b/src/launch.json
+index a6e380c..80f4e07 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+ {
+   "block": 128,
+   "items_per_block": 128,
+-  "shared_memory_bytes": 14336
++  "shared_memory_bytes": 8192
+ }
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index c7f3883..a00ae18 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -4,6 +4,10 @@ struct Particle {
+     float mass;
+ };
+ 
++struct SourceParticle {
++    float x, y, z, mass;
++};
++
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+     constexpr int source_tile_size = 512;
+ 
+@@ -21,7 +25,7 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    extern __shared__ Particle source_tile[];
++    extern __shared__ SourceParticle source_tile[];
+ 
+     int base = 0;
+     while (base < n) {
+@@ -31,7 +35,11 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+         }
+ 
+         for (int k = threadIdx.x; k < tile_count; k += blockDim.x) {
+-            source_tile[k] = in[base + k];
++            const Particle source = in[base + k];
++            source_tile[k].x = source.x;
++            source_tile[k].y = source.y;
++            source_tile[k].z = source.z;
++            source_tile[k].mass = source.mass;
+         }
+         __syncthreads();
+ 
+@@ -39,7 +47,7 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+             for (int k = 0; k < tile_count; ++k) {
+                 const int j = base + k;
+                 if (i != j) {
+-                    const Particle source = source_tile[k];
++                    const SourceParticle source = source_tile[k];
+                     const float dx = source.x - target.x;
+                     const float dy = source.y - target.y;
+                     const float dz = source.z - target.z;

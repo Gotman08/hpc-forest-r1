@@ -1,0 +1,37 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..5b90513 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 256,
++  "items_per_block": 128,
++  "shared_memory_bytes": 0
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..56a09b9 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -8,8 +8,10 @@ struct Particle {
+ 
+ // Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    if (i >= n) return;
++    const unsigned int i = static_cast<unsigned int>(blockIdx.x) *
++                            static_cast<unsigned int>(blockDim.x) +
++                            static_cast<unsigned int>(threadIdx.x);
++    if (i >= static_cast<unsigned int>(n)) return;
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+@@ -49,4 +51,3 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     out[i] = p;
+ }
+-

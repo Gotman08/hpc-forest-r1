@@ -1,0 +1,130 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..1bf00c9 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 256,
++  "items_per_block": 256,
++  "shared_memory_bytes": 4096
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..1a23841 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,15 +1,25 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
++struct SourceParticle {
++    float x, y, z, mass;
++};
++
++// Chaque thread conserve une cible et parcourt les sources par tuiles partagées.
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    if (i >= n) return;
++    extern __shared__ SourceParticle tile[];
++
++    const int tid = threadIdx.x;
++    const int i = blockIdx.x * blockDim.x + tid;
++    const bool active = i < n;
++
++    Particle target;
++    if (active) {
++        target = in[i];
++    }
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+@@ -18,35 +28,56 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    int tile_start = 0;
++    while (tile_start < n) {
++        const int remaining = n - tile_start;
++        const int tile_count = remaining < blockDim.x ? remaining : blockDim.x;
++        const int source_index = tile_start + tid;
+ 
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++        if (tid < tile_count) {
++            const Particle source = in[source_index];
++            tile[tid].x = source.x;
++            tile[tid].y = source.y;
++            tile[tid].z = source.z;
++            tile[tid].mass = source.mass;
++        }
++        __syncthreads();
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        if (active) {
++            for (int lane = 0; lane < tile_count; ++lane) {
++                const int j = tile_start + lane;
++                if (i == j) continue;
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++                float dx = tile[lane].x - target.x;
++                float dy = tile[lane].y - target.y;
++                float dz = tile[lane].z - target.z;
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++                float distSq = dx * dx + dy * dy + dz * dz + softening;
++                float dist = sqrtf(distSq);
++
++                float f = (G * target.mass * tile[lane].mass) / (distSq * dist);
++
++                fx += f * dx;
++                fy += f * dy;
++                fz += f * dz;
++            }
++        }
++        __syncthreads();
++
++        if (remaining <= blockDim.x) break;
++        tile_start += blockDim.x;
+     }
+ 
+-    // Intégration d'Euler explicite
+-    Particle p = in[i];
+-    p.vx += (fx / p.mass) * dt;
+-    p.vy += (fy / p.mass) * dt;
+-    p.vz += (fz / p.mass) * dt;
++    if (active) {
++        Particle p = target;
++        p.vx += (fx / p.mass) * dt;
++        p.vy += (fy / p.mass) * dt;
++        p.vz += (fz / p.mass) * dt;
+ 
+-    p.x += p.vx * dt;
+-    p.y += p.vy * dt;
+-    p.z += p.vz * dt;
++        p.x += p.vx * dt;
++        p.y += p.vy * dt;
++        p.z += p.vz * dt;
+ 
+-    out[i] = p;
++        out[i] = p;
++    }
+ }
+-

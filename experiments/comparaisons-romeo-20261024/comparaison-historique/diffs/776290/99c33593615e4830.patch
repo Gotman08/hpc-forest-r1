@@ -1,0 +1,36 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..70cc759 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 128,
++  "items_per_block": 256,
++  "shared_memory_bytes": 0
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index 9e7bffa..5c56d7c 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -8,13 +8,12 @@ struct Particle {
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+     const int lane = threadIdx.x & 31;
+     const int warp = threadIdx.x >> 5;
+-    const int active_warps = blockDim.x / 64;
++    const int active_warps = blockDim.x / 32;
+ 
+-    // Avec le bloc courant de 256 threads, quatre warps couvrent ses 256 cibles.
+-    // Les autres warps n'ont aucune cible et peuvent sortir sans participer aux shuffles.
++    // Avec 128 threads, les quatre warps du bloc couvrent 256 cibles.
+     if (warp >= active_warps) return;
+ 
+-    const int warp_base = blockIdx.x * blockDim.x + warp * 64;
++    const int warp_base = blockIdx.x * blockDim.x * 2 + warp * 64;
+     if (warp_base >= n) return;
+ 
+     const int i0 = warp_base + lane;

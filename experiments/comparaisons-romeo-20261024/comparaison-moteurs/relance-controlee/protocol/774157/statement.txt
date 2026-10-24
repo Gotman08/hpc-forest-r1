@@ -1,0 +1,133 @@
+Optimize the supplied one-step gravitational N-body CUDA kernel for one NVIDIA GH200
+on ROMEO ARM/aarch64. The only allocation used by official measurements is one GPU, four CPU cores.
+Device-only C++17 is compiled with NVRTC CUDA 12.6.3, native compute capability from that GPU;
+no global fast-math option. You may use supported CUDA device intrinsics with correct outputs.
+Preserve the AoS Particle layout: seven float32 x,y,z,vx,vy,vz,mass (28 bytes).
+Preserve entry extern "C" __global__ void nbody_step_naive(const Particle*,Particle*,int,float).
+The input buffer is read-only. Output one complete updated state per particle.
+The supplied physics uses G=1, float32 softening 0.001, updated velocity then updated position.
+All sizes, positive varying masses, nonzero velocities, coincident positions, zero/negative dt must work.
+All output values are checked, not just the printed first particle. Nonfinite outputs are invalid.
+GPU original-reference comparison: atol 5e-5, rtol 2e-4; masses must remain exact.
+An independent FP64 CPU oracle validates the reference, all small rows and 32 distributed large rows.
+Search and independent confirmation use different input data. No benchmark-specific constants or input detection.
+The sole primary objective is the geometric mean of CUDA-event kernel times for N=4096,8192,16384.
+Compilation, transfers and process startup are excluded. Each size has 10 warmups and 100 timed launches.
+Search evaluates three independent timing repeats; final confirmation uses five fresh repeats with alternated candidates.
+Correctness also includes N=1,2,31,127,257,4095 and extreme positive mass for a single isolated particle.
+Only edit src/nbody_kernel.cu and src/launch.json. Additional self-contained device helpers may go inside the kernel file.
+The trusted host harness launches exactly this one kernel. Host code, extra kernels requiring extra launches,
+host preprocessing and new host buffers are outside this interface. Choose any valid device implementation yourself.
+launch.json must contain exactly block (1..1024), items_per_block (1..1048576), shared_memory_bytes (0..49152).
+The host uses grid.x=ceil(N/items_per_block), block.x=block, other dimensions=1.
+Those settings allow any correct per-block ownership scheme; they are not a performance recommendation.
+Official docs and the user's existing ROMEO MCP are available. Consult relevant technical references and actual
+target facts when useful. Never request an additional allocation or modify the protected evaluator, oracle or timing.
+Mother chooses any useful N complementary research objectives from the actual problem and code.
+The controller admits individual trials and serializes GPU measurements to avoid interference. All N research trees
+start concurrently and each continues after its own measured feedback without waiting for another tree's generation.
+At closure the same Mother conversation assembles the source programs in measured pairs;
+research is permanently closed and no further models/trees may be launched. Final G is independently confirmed.
+Original user source, supplied as data:
+#include <cstdio>
+#include <cstdlib>
+#include <cmath>
+#include <cuda_runtime.h>
+
+// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+// car elle empêche la coalescence parfaite des accès mémoire.
+struct Particle {
+    float x, y, z;
+    float vx, vy, vz;
+    float mass;
+};
+
+// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
+__global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+
+    const float G = 1.0f;
+    const float softening = 0.001f;
+
+    float fx = 0.0f;
+    float fy = 0.0f;
+    float fz = 0.0f;
+
+    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+    for (int j = 0; j < n; j++) {
+        if (i == j) continue; // Divergence de branche inutile dans la boucle
+
+        float dx = in[j].x - in[i].x;
+        float dy = in[j].y - in[i].y;
+        float dz = in[j].z - in[i].z;
+
+        float distSq = dx * dx + dy * dy + dz * dz + softening;
+        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
+
+        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
+
+        fx += f * dx;
+        fy += f * dy;
+        fz += f * dz;
+    }
+
+    // Intégration d'Euler explicite
+    Particle p = in[i];
+    p.vx += (fx / p.mass) * dt;
+    p.vy += (fy / p.mass) * dt;
+    p.vz += (fz / p.mass) * dt;
+
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.z += p.vz * dt;
+
+    out[i] = p;
+}
+
+int main() {
+    const int N = 4096;
+    const float dt = 0.01f;
+    const size_t bytes = N * sizeof(Particle);
+
+    // Allocation CPU
+    Particle* h_particles = (Particle*)malloc(bytes);
+    for (int i = 0; i < N; i++) {
+        h_particles[i].x = (float)(rand() % 1000) / 100.0f;
+        h_particles[i].y = (float)(rand() % 1000) / 100.0f;
+        h_particles[i].z = (float)(rand() % 1000) / 100.0f;
+        h_particles[i].vx = 0.0f;
+        h_particles[i].vy = 0.0f;
+        h_particles[i].vz = 0.0f;
+        h_particles[i].mass = 1.0f + (float)(rand() % 100) / 10.0f;
+    }
+
+    // Allocation GPU
+    Particle *d_in, *d_out;
+    cudaMalloc(&d_in, bytes);
+    cudaMalloc(&d_out, bytes);
+
+    cudaMemcpy(d_in, h_particles, bytes, cudaMemcpyHostToDevice);
+
+    // Configuration d'exécution simple
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+
+    printf("Lancement du kernel N-Body naif pour %d particules...\n", N);
+    nbody_step_naive<<<blocksPerGrid, threadsPerBlock>>>(d_in, d_out, N, dt);
+    cudaDeviceSynchronize();
+
+    // Récupération des résultats
+    cudaMemcpy(h_particles, d_out, bytes, cudaMemcpyDeviceToHost);
+
+    printf("Exemple apres 1 pas de temps -> Particule 0 : pos=(%.3f, %.3f, %.3f), vel=(%.3f, %.3f, %.3f)\n",
+           h_particles[0].x, h_particles[0].y, h_particles[0].z,
+           h_particles[0].vx, h_particles[0].vy, h_particles[0].vz);
+
+    cudaFree(d_in);
+    cudaFree(d_out);
+    free(h_particles);
+
+    return 0;
+}

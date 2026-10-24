@@ -1,0 +1,64 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..2846a44 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,12 +1,11 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
++// Structure "Array of Structures" : intuitive but not ideal for GPU memory coalescing.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
++// Naive CUDA N-body step: one output particle per thread.
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+     int i = blockIdx.x * blockDim.x + threadIdx.x;
+     if (i >= n) return;
+@@ -18,26 +17,33 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+     for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++        if (i == j) continue;
+ 
+         float dx = in[j].x - in[i].x;
+         float dy = in[j].y - in[i].y;
+         float dz = in[j].z - in[i].z;
+ 
+         float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        float invDist = rsqrtf(distSq);
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++        // One Newton refinement improves rsqrtf accuracy without global fast math.
++        // rsqrtf(infinity) is zero; skip refinement to avoid infinity * zero.
++        if (invDist != 0.0f) {
++            float invDistSq = invDist * invDist;
++            float correction = fmaf(-0.5f * distSq, invDistSq, 1.5f);
++            invDist *= correction;
++        }
++
++        float invDist3 = (invDist * invDist) * invDist;
++        float f = (G * in[i].mass * in[j].mass) * invDist3;
+ 
+         fx += f * dx;
+         fy += f * dy;
+         fz += f * dz;
+     }
+ 
+-    // Intégration d'Euler explicite
++    // Explicit Euler integration; preserve the original target-mass division.
+     Particle p = in[i];
+     p.vx += (fx / p.mass) * dt;
+     p.vy += (fy / p.mass) * dt;
+@@ -49,4 +55,3 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     out[i] = p;
+ }
+-

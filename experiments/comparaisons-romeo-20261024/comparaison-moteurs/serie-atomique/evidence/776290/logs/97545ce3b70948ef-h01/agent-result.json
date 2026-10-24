@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 256,\n  \"shared_memory_bytes\": 4096\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int i = blockIdx.x * blockDim.x + threadIdx.x;\n    const bool active = i < n;\n\n    Particle target;\n    if (active) {\n        target = in[i];\n    }\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    extern __shared__ float shared_source[];\n    float* source_x = shared_source;\n    float* source_y = source_x + blockDim.x;\n    float* source_z = source_y + blockDim.x;\n    float* source_mass = source_z + blockDim.x;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int tile_base = 0; tile_base < n; tile_base += blockDim.x) {\n        const int source_index = tile_base + threadIdx.x;\n        if (source_index < n) {\n            source_x[threadIdx.x] = in[source_index].x;\n            source_y[threadIdx.x] = in[source_index].y;\n            source_z[threadIdx.x] = in[source_index].z;\n            source_mass[threadIdx.x] = in[source_index].mass;\n        }\n\n        __syncthreads();\n\n        int tile_count = n - tile_base;\n        if (tile_count > blockDim.x) {\n            tile_count = blockDim.x;\n        }\n\n        if (active) {\n            for (int k = 0; k < tile_count; ++k) {\n                if (i == tile_base + k) continue;\n\n                const float dx = source_x[k] - target.x;\n                const float dy = source_y[k] - target.y;\n                const float dz = source_z[k] - target.z;\n\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * target.mass * source_mass[k]) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n\n        __syncthreads();\n    }\n\n    if (active) {\n        target.vx += (fx / target.mass) * dt;\n        target.vy += (fy / target.mass) * dt;\n        target.vz += (fz / target.mass) * dt;\n\n        target.x += target.vx * dt;\n        target.y += target.vy * dt;\n        target.z += target.vz * dt;\n\n        out[i] = target;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Keeping a 256-thread CTA and 256-source tile while staging only x, y, z, and mass reduces dynamic shared-memory use from the previously measured full-Particle tile configuration without reducing source reuse per CTA. The measurements for the earlier 128-thread compact tile and 256-thread full-Particle tile do not isolate those factors; this candidate tests a 256-thread compact tile.",
+  "notes": "The source tile loads are cooperative, all CTA threads reach both barriers including inactive tail threads, and the final partial tile is bounded. Each valid target thread retains one accumulator and writes one output; self-interactions are skipped by global source index. Controller correctness and timing results are not yet available.",
+  "sources_kept": [],
+  "transformations": [
+    "Keep a 256-thread CTA with a matching 256-source tile, and set the dynamic shared-memory allocation to 4096 bytes for four floats per source.",
+    "Cooperatively stage only source x, y, z, and mass; synchronize before tile consumption and before shared-memory reuse.",
+    "Preserve one target and force accumulator per active thread, bound the final partial tile, skip self-interactions using global source indices, and write every valid target exactly once."
+  ]
+}

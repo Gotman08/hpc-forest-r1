@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    // Accumulate acceleration directly; the target mass cancels from force / mass.\n    float ax = 0.0f;\n    float ay = 0.0f;\n    float az = 0.0f;\n\n    for (int j = 0; j < n; j++) {\n        // Keep self-interaction excluded before evaluating the distance scale.\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n\n        // One Newton refinement improves rsqrtf accuracy. Skip it when the\n        // reciprocal is zero (for example, if distSq overflowed to infinity).\n        if (invDist != 0.0f) {\n            float scaledInvDist = distSq * invDist;\n            invDist *= 1.5f - 0.5f * scaledInvDist * invDist;\n        }\n\n        float accelerationScale = G * in[j].mass * invDist * invDist * invDist;\n\n        ax += accelerationScale * dx;\n        ay += accelerationScale * dy;\n        az += accelerationScale * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += ax * dt;\n    p.vy += ay * dt;\n    p.vz += az * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Remplacer le calcul sqrtf, cube puis division par rsqrtf et un raffinement de Newton pour réduire le coût du facteur inverse de distance au cube. Le raffinement vise à limiter l’écart numérique; il ne constitue pas une validation de la tolérance, qui revient au contrôleur.",
+  "notes": "La masse cible était déjà annulée dans la source fournie; cette version conserve cette simplification, l’exclusion de soi avant le calcul de distance et la copie exacte de la masse. Les deux tentatives précédentes avaient chacune un échec sur le cas de taille 16384 (écart maximal rapporté d’environ 3,1e-4); il faut donc exiger la réussite de tous les contrôles numériques avant d’interpréter les temps. Aucune performance ni correction de cette variante n’est présumée.",
+  "sources_kept": [],
+  "transformations": [
+    "Conserver l’annulation de la masse cible et remplacer le calcul sqrtf/cube/division par rsqrtf, un raffinement de Newton et la formation du cube inverse.",
+    "Préserver l’exclusion de soi avant le calcul de distance et la copie inchangée de la masse dans Particle."
+  ]
+}

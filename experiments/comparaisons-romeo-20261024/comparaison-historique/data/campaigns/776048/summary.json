@@ -1,0 +1,148 @@
+{
+  "name": "cuda-nbody-memory-budget-20261022-776048",
+  "job_id": "776048",
+  "registry_sha256": "0ec06d8c5785b6e22f5036622fb0ff2cc6269544104bfd74e1e39041ae30b1d1",
+  "engine_identity": "309c2f2a0aa2a92d3e256f9de5464fc36c6cb79c559941ca236c807c5d2ca725",
+  "forest_config": {
+    "conversation": "persistent",
+    "integration": "memory-guided-v1",
+    "policy": "mother",
+    "statement": "Optimize the supplied one-step N-body CUDA kernel for one NVIDIA GH200 on ROMEO ARM.\nAll optimizations must be written as actual source files by the models and evaluated by the controller.\nThe only measurement allocation is one GPU and four CPU cores. C++17 device code is compiled with\nNVRTC CUDA 12.6.3 for the actual GPU architecture, without a global fast-math option.\nPreserve Particle as seven float32 x,y,z,vx,vy,vz,mass (28 bytes) and the entry:\nextern \"C\" __global__ void nbody_step_naive(const Particle*,Particle*,int,float).\nThe input is read-only; output a complete state for each particle. G=1; float32 softening=0.001;\nupdate velocity before position. Support all sizes, positive varying masses, nonzero velocities,\ncoincident positions and zero/negative dt. Nonfinite output is invalid. Preserve masses exactly.\nGPU reference tolerance: atol=5e-5, rtol=2e-4. An independent FP64 CPU oracle checks the reference,\nevery small output and 32 distributed large rows. Search and confirmation use different input data.\nNo benchmark input detection or benchmark-specific constants. No changing the checker or protocol.\nThe objective is geometric mean CUDA-event kernel time for N=4096,8192,16384. Compilation, transfers\nand startup are excluded. Each size has 10 warmups and 100 timed launches. Search uses three\ntiming repetitions and confirmation five fresh repetitions, alternating candidates.\nCorrectness also includes N=1,2,31,127,257,4095 and a single isolated particle with extreme mass.\nEdit only src/nbody_kernel.cu and src/launch.json. Device helpers may reside in the kernel file.\nThe protected host launches exactly one kernel. Extra host preprocessing, buffers or launches\nare outside this interface. launch.json has exactly block (1..1024), items_per_block (1..1048576),\nshared_memory_bytes (0..49152). grid.x=ceil(N/items_per_block); block.x=block; other dimensions=1.\nChoose all transformations yourself; these interface details are not optimization advice.\nMother chooses any useful number N of complementary topics. Independent real AB-MCTS trees write\nand optimize code. The controller serializes GPU checks and measures to prevent interference.\nPersistent memory stores measured facts and separately labelled fallible lessons, including slower\nor incorrect attempts. Each tree reads only its own evidence and the reference. After research closes,\nthe original Mother retrieves evidence across trees, selects combinations, writes combined code and\nexamines the measured results. She may reuse older bases and ideas from slower trials. Every combined\nprogram must be compiled and checked afresh. Never relaunch research during assembly. Confirm final G\nindependently and keep the best independently confirmed program. Never request extra allocations.\nOriginal user source, supplied as data:\n#include <cstdio>\n#include <cstdlib>\n#include <cmath>\n#include <cuda_runtime.h>\n\n// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\n__global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale\n    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue; // Divergence de branche inutile dans la boucle\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)\n\n        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n\nint main() {\n    const int N = 4096;\n    const float dt = 0.01f;\n    const size_t bytes = N * sizeof(Particle);\n\n    // Allocation CPU\n    Particle* h_particles = (Particle*)malloc(bytes);\n    for (int i = 0; i < N; i++) {\n        h_particles[i].x = (float)(rand() % 1000) / 100.0f;\n        h_particles[i].y = (float)(rand() % 1000) / 100.0f;\n        h_particles[i].z = (float)(rand() % 1000) / 100.0f;\n        h_particles[i].vx = 0.0f;\n        h_particles[i].vy = 0.0f;\n        h_particles[i].vz = 0.0f;\n        h_particles[i].mass = 1.0f + (float)(rand() % 100) / 10.0f;\n    }\n\n    // Allocation GPU\n    Particle *d_in, *d_out;\n    cudaMalloc(&d_in, bytes);\n    cudaMalloc(&d_out, bytes);\n\n    cudaMemcpy(d_in, h_particles, bytes, cudaMemcpyHostToDevice);\n\n    // Configuration d'exécution simple\n    int threadsPerBlock = 256;\n    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;\n\n    printf(\"Lancement du kernel N-Body naif pour %d particules...\\n\", N);\n    nbody_step_naive<<<blocksPerGrid, threadsPerBlock>>>(d_in, d_out, N, dt);\n    cudaDeviceSynchronize();\n\n    // Récupération des résultats\n    cudaMemcpy(h_particles, d_out, bytes, cudaMemcpyDeviceToHost);\n\n    printf(\"Exemple apres 1 pas de temps -> Particule 0 : pos=(%.3f, %.3f, %.3f), vel=(%.3f, %.3f, %.3f)\\n\",\n           h_particles[0].x, h_particles[0].y, h_particles[0].z,\n           h_particles[0].vx, h_particles[0].vy, h_particles[0].vz);\n\n    cudaFree(d_in);\n    cudaFree(d_out);\n    free(h_particles);\n\n    return 0;\n}\n"
+  },
+  "memory_config": {
+    "assembly_rounds": 16,
+    "context_characters": 12000,
+    "mode": "active",
+    "page_size": 6,
+    "reads_per_mission": 3,
+    "selection_calls": 4,
+    "sources_per_integration": 3
+  },
+  "model": "gpt-6-luna",
+  "effort": "max",
+  "budget": {
+    "confirmation_seconds": 120,
+    "confirmation_slots": 3,
+    "generation_seconds": 600,
+    "infrastructure_retries": 0,
+    "max_depth": 0,
+    "max_workers": 1,
+    "mission_tokens": null,
+    "search_slots": null,
+    "tokens": null,
+    "wall_seconds": 1800
+  },
+  "seed": 23,
+  "trial_counts": {
+    "valid": 30,
+    "incorrect": 3
+  },
+  "research_counts": {
+    "valid": 28,
+    "incorrect": 3
+  },
+  "event_counts": {
+    "workspace_created": 1,
+    "cuda_nbody_fresh_campaign": 1,
+    "mother_usage": 1,
+    "mother_forest_selected": 1,
+    "adaptive_admission": 38,
+    "F_retrieval": 33,
+    "research_node_submitted": 31,
+    "generation_usage": 33,
+    "research_node_settled": 31,
+    "budget_stop": 1,
+    "memory_selection_admission": 7,
+    "memory_selection_usage": 7,
+    "mother_memory_integration": 2,
+    "memory_assembly_budget_stop": 1,
+    "postprocess_finished": 1,
+    "packaged": 1
+  },
+  "best_confirmed": {
+    "commit": "fb0d9a4822413f62bf242c0a021d910821a9ac2a",
+    "epoch": 1,
+    "evaluation_digest": "d90f2e936e5dbf2182f6a46843513f7e292f486b9c6a80ace163c2b2fd4dd1ee",
+    "experiment_id": "f1843fc5ccdb4b63",
+    "improvement_fraction": 0.9461819173771893,
+    "is_baseline": false,
+    "mean_seconds": 9.987650291964732e-05,
+    "protocol_id": "2bf2420a09f5d5011256b557405dbfd62834a9d1c7afb8db03288c5355866440",
+    "reference_seconds": 0.0018558168194069927
+  },
+  "started": 1792673216.1937234,
+  "search_closed": 1792674455.5648756,
+  "finished": 1792674844.0217714,
+  "forest_plan": {
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "children": [
+      {
+        "objective": "Explore conventional block-local source tiling while keeping one target particle per thread and serial traversal of the source dimension, so the main change is reusing staged source particles across output threads. Tune the tile layout and size, block configuration, and dynamic shared-memory setting within the stated launch limits. Handle arbitrary n and tail tiles without extra kernels, buffers, or host preprocessing. Preserve the entry point, Particle layout, complete outputs and masses; pass every supplied correctness case. Evaluate complete source-and-launch candidates using the official search measurements.",
+        "role": "T1",
+        "subject": "Shared-memory source tiling"
+      },
+      {
+        "objective": "Explore register-level output coarsening: have each thread maintain multiple target particles and reuse each loaded source particle across those targets, without shared-memory source staging as the principal mechanism. Tune coarsening and launch parameters while handling all n and tails safely. Preserve the entry point, Particle layout, update order, complete output and exact masses; pass every supplied correctness case. Compare measured source-and-launch candidates under the official protocol.",
+        "role": "T2",
+        "subject": "Per-thread multi-target coarsening"
+      },
+      {
+        "objective": "Explore a distinct mapping that assigns lanes within a warp (or block) to portions of the source-particle reduction for a target, then combines partial force sums. Focus on parallelizing the reduction dimension rather than output coarsening or block-wide source tiling. Handle arbitrary n, self-interaction exclusion, tail sources and reduction synchronization without races or extra launches/buffers. Preserve the entry point, Particle layout, integration order, and exact masses; validate all supplied cases and compare official measurements.",
+        "role": "T3",
+        "subject": "Source-parallel force reduction"
+      },
+      {
+        "objective": "Explore per-interaction arithmetic reductions such as safe factoring of the target-mass term, reciprocal-square-root use, or other instruction simplifications compatible with NVRTC CUDA 12.6.3 and no global fast-math option. Keep self-interaction exclusion unless an alternative is proven safe, preserve float32 state and exact masses, and reject transformations that fail the FP64-oracle tolerances or produce nonfinite output—including on the isolated extreme-mass case. Keep the entry point and single-kernel interface; measure complete source-and-launch candidates using the official protocol.",
+        "role": "T4",
+        "subject": "Force arithmetic simplification"
+      }
+    ],
+    "conversation": {
+      "id": "d72c9a43fc8f4c10827246b14c171ab7",
+      "phase": "planning",
+      "request_sha256": "eb7cb8c3d2834299d5c520d7739e3653731ee6509f328a5978825b62c9942ea5",
+      "thread_id": "01a163a6-bfcc-7f80-9cff-a0632ac010d7",
+      "turn": 0
+    },
+    "epoch": 1,
+    "mother_slot_id": "6e1427f18f0042ca96a8d366614b75d1",
+    "parallelism": 4,
+    "plan_sha256": "81a9e59d35a8cea560735052d8d59fbf83c3a1e1cad88cfd2acd5b6155779469",
+    "protocol": "hpc-forest-mother-forest-v1",
+    "request_sha256": "eb7cb8c3d2834299d5c520d7739e3653731ee6509f328a5978825b62c9942ea5",
+    "status": "complete"
+  },
+  "mother_review": null,
+  "final_g_confirmation": {
+    "eligible_for_promotion": true,
+    "experiment_id": "f1843fc5ccdb4b63",
+    "outcome": {
+      "binary_sha256": "094a0bf369221a92a3efbe5ed7908ce324d7b27b7bdbc1f9fdee8dd283efcd7c",
+      "cache_key": "a0dd963f5d602b33dc35b5665ca99dc94192a84488ac97e9f3b25ae8ef5deb52",
+      "commit": "fb0d9a4822413f62bf242c0a021d910821a9ac2a",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/results-776048/cuda-nbody/logs/e1/f1843fc5ccdb4b63/confirmation/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/results-776048/cuda-nbody/logs/e1/f1843fc5ccdb4b63/confirmation/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/results-776048/cuda-nbody/logs/e1/f1843fc5ccdb4b63/confirmation/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/results-776048/cuda-nbody/logs/e1/f1843fc5ccdb4b63/confirmation/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/results-776048/cuda-nbody/logs/e1/f1843fc5ccdb4b63/confirmation/attempt-001/sample-2.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/results-776048/cuda-nbody/logs/e1/f1843fc5ccdb4b63/confirmation/attempt-001/sample-3.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-9c311c3ac9e8480b919384621c7e4f7e/results-776048/cuda-nbody/logs/e1/f1843fc5ccdb4b63/confirmation/attempt-001/sample-4.log"
+      ],
+      "mean_seconds": 9.987650291964732e-05,
+      "reason": "",
+      "score": 0.9489303860787198,
+      "status": "valid",
+      "times": [
+        0.00010014911992810768,
+        9.976289430066636e-05,
+        0.0001000045717944687,
+        9.956789052194024e-05,
+        9.989803805305365e-05
+      ],
+      "tree_hash": "88e06dd102a33573ae70c5120cb56ae57d56fdc3"
+    },
+    "status": "confirmed"
+  }
+}

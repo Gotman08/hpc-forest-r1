@@ -1,0 +1,133 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..65d2c0e 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 256,
++  "items_per_block": 4,
++  "shared_memory_bytes": 0
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..d296b06 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,52 +1,84 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    if (i >= n) return;
++    const int tid = threadIdx.x;
++    const int target_in_block = tid / 64;
++    const int warp_in_target = (tid / 32) & 1;
++    const int lane = tid & 31;
++    const long long i = static_cast<long long>(blockIdx.x) * 4LL + target_in_block;
++    const bool valid_target = i < static_cast<long long>(n);
++
++    Particle target = {};
++    if (valid_target) {
++        target = in[i];
++    }
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+-
+     float fx = 0.0f;
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    if (valid_target) {
++        for (long long j = warp_in_target * 32 + lane; j < n; j += 64) {
++            if (j == i) continue;
+ 
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++            const Particle source = in[j];
++            const float dx = source.x - target.x;
++            const float dy = source.y - target.y;
++            const float dz = source.z - target.z;
++            const float distSq = dx * dx + dy * dy + dz * dz + softening;
++            const float dist = sqrtf(distSq);
++            const float f = (G * target.mass * source.mass) / (distSq * dist);
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++            fx += f * dx;
++            fy += f * dy;
++            fz += f * dz;
++        }
++    }
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++    fx += __shfl_down_sync(0xffffffffu, fx, 16);
++    fy += __shfl_down_sync(0xffffffffu, fy, 16);
++    fz += __shfl_down_sync(0xffffffffu, fz, 16);
++    fx += __shfl_down_sync(0xffffffffu, fx, 8);
++    fy += __shfl_down_sync(0xffffffffu, fy, 8);
++    fz += __shfl_down_sync(0xffffffffu, fz, 8);
++    fx += __shfl_down_sync(0xffffffffu, fx, 4);
++    fy += __shfl_down_sync(0xffffffffu, fy, 4);
++    fz += __shfl_down_sync(0xffffffffu, fz, 4);
++    fx += __shfl_down_sync(0xffffffffu, fx, 2);
++    fy += __shfl_down_sync(0xffffffffu, fy, 2);
++    fz += __shfl_down_sync(0xffffffffu, fz, 2);
++    fx += __shfl_down_sync(0xffffffffu, fx, 1);
++    fy += __shfl_down_sync(0xffffffffu, fy, 1);
++    fz += __shfl_down_sync(0xffffffffu, fz, 1);
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++    __shared__ float partial[4][2][3];
++    if (lane == 0) {
++        partial[target_in_block][warp_in_target][0] = fx;
++        partial[target_in_block][warp_in_target][1] = fy;
++        partial[target_in_block][warp_in_target][2] = fz;
+     }
++    __syncthreads();
+ 
+-    // Intégration d'Euler explicite
+-    Particle p = in[i];
+-    p.vx += (fx / p.mass) * dt;
+-    p.vy += (fy / p.mass) * dt;
+-    p.vz += (fz / p.mass) * dt;
++    if (lane == 0 && warp_in_target == 0 && valid_target) {
++        const float total_x = partial[target_in_block][0][0] + partial[target_in_block][1][0];
++        const float total_y = partial[target_in_block][0][1] + partial[target_in_block][1][1];
++        const float total_z = partial[target_in_block][0][2] + partial[target_in_block][1][2];
+ 
+-    p.x += p.vx * dt;
+-    p.y += p.vy * dt;
+-    p.z += p.vz * dt;
++        Particle p = target;
++        p.vx += (total_x / p.mass) * dt;
++        p.vy += (total_y / p.mass) * dt;
++        p.vz += (total_z / p.mass) * dt;
+ 
+-    out[i] = p;
+-}
++        p.x += p.vx * dt;
++        p.y += p.vy * dt;
++        p.z += p.vz * dt;
+ 
++        out[i] = p;
++    }
++}

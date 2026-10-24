@@ -1,0 +1,1049 @@
+[
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 1,
+    "id": "ee59d2d9f6dc422b",
+    "role": "T1",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757538.6965644,
+    "elapsed_seconds": 155.90889501571655,
+    "evaluated_at": 1792757658.3243093,
+    "measured_elapsed_seconds": 275.53663992881775,
+    "seconds": 0.001010591703438277,
+    "score": 0.6450646577055725,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": 44.976780535939575,
+    "best_research_before_seconds": 0.0018366640725164514,
+    "best_research_after_seconds": 0.001010591703438277,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "03fb0ded35a37573b8e3bd028082c1b60498a2ec",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "e1ab8ea40bca0477",
+    "patch": "diffs/776048/ee59d2d9f6dc422b.patch",
+    "hypothesis": "Avec 256 threads et une tuile de 256 Particle (7 168 octets), chaque bloc peut réutiliser les sources chargées en mémoire partagée entre ses cibles, ce qui pourrait réduire les relectures globales inter-warp. Les barrières et le calcul séquentiel des sources peuvent toutefois annuler ce bénéfice; le résultat reste à mesurer.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Remplacer les lectures globales de toutes les sources par des tuiles coopératives en mémoire partagée dynamique.",
+        "Conserver 256 threads par bloc et régler la tuile à 256 Particle, soit 7 168 octets de mémoire partagée.",
+        "Faire participer les threads inactifs aux synchronisations et ne lire que les éléments valides des tuiles terminales.",
+        "Charger la cible une fois et conserver l'ordre de calcul des interactions, l'exclusion i == j et le traitement des particules coïncidentes via le même adoucissement."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 2,
+    "id": "7f202149e3894459",
+    "role": "T2",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757538.726955,
+    "elapsed_seconds": 155.9392855167389,
+    "evaluated_at": 1792757723.1525028,
+    "measured_elapsed_seconds": 340.36483335494995,
+    "seconds": 0.0011131126556144656,
+    "score": 0.6226451158153339,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": 39.394869629623294,
+    "best_research_before_seconds": 0.001010591703438277,
+    "best_research_after_seconds": 0.001010591703438277,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "73ceddfaf30a687a24657b1a60739a706918a26f",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "e40b7b7e604c76f6",
+    "patch": "diffs/776048/7f202149e3894459.patch",
+    "hypothesis": "Chaque warp peut charger un segment de sources une fois, puis le diffuser séquentiellement aux threads cibles avec des shuffles. La réutilisation des quatre champs nécessaires pourrait réduire le coût des chargements globaux répétés, au prix d’instructions shuffle supplémentaires; aucun gain n’est présumé avant mesure.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Remplacer le retour anticipé des threads dont l’index dépasse n par un prédicat de destination valide, afin qu’ils participent aux shuffles du warp.",
+        "Charger par lane les champs x, y, z et mass d’un segment de sources, puis diffuser chaque source à toutes les lanes avec __shfl_sync.",
+        "Parcourir les sources dans l’ordre des indices et ignorer l’auto-interaction; arrêter uniformément les échanges au dernier segment incomplet.",
+        "Garder l’intégration et l’écriture de sortie protégées par la validité de la destination."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 3,
+    "id": "527046c0d5534746",
+    "role": "T3",
+    "status": "incorrect",
+    "reason": "Protected correctness checks failed",
+    "created": 1792757538.7568583,
+    "elapsed_seconds": 155.96918892860413,
+    "evaluated_at": 1792757896.9614754,
+    "measured_elapsed_seconds": 514.1738059520721,
+    "seconds": null,
+    "score": 0.0,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.001010591703438277,
+    "best_research_after_seconds": 0.001010591703438277,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "921b006adba6a059b2c2ce47d2dbbcbdff9a2ac8",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "6b8152a74cad00e8",
+    "patch": "diffs/776048/527046c0d5534746.patch",
+    "hypothesis": "Remplacer le calcul sqrtf, cube puis division par rsqrtf et un raffinement de Newton pour réduire le coût du facteur inverse de distance au cube. Le raffinement vise à limiter l’écart numérique; il ne constitue pas une validation de la tolérance, qui revient au contrôleur.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Conserver l’annulation de la masse cible et remplacer le calcul sqrtf/cube/division par rsqrtf, un raffinement de Newton et la formation du cube inverse.",
+        "Préserver l’exclusion de soi avant le calcul de distance et la copie inchangée de la masse dans Particle."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 4,
+    "id": "0f2dfb784d8d42b0",
+    "role": "T4",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757538.7837546,
+    "elapsed_seconds": 155.99608516693115,
+    "evaluated_at": 1792757689.5574696,
+    "measured_elapsed_seconds": 306.7698001861572,
+    "seconds": 0.004220541632105524,
+    "score": 0.30321969602501325,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": -129.79387985320977,
+    "best_research_before_seconds": 0.001010591703438277,
+    "best_research_after_seconds": 0.001010591703438277,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "c38976ec32399ff49a407d488abf0dadb6986127",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "b4363200694e5e9d",
+    "patch": "diffs/776048/0f2dfb784d8d42b0.patch",
+    "hypothesis": "Chaque thread traite quatre cibles espacées de blockDim.x et charge une seule fois les coordonnées et la masse de chaque source pour les réutiliser dans les quatre calculs. Cela peut réduire les instructions de chargement répétées, au prix de davantage de registres par thread et de moins de threads actifs. Le résultat reste à mesurer.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configurer block=128 et items_per_block=512 pour correspondre à quatre cibles par thread et aligner le tile sur la grille calculée par le contrôleur.",
+        "Dans la boucle des sources, charger une fois leurs champs x, y, z et mass, puis réutiliser ces valeurs pour quatre accumulateurs de cible indépendants.",
+        "Garder une sortie et les gardes de validité propres à chaque cible, y compris dans le tile incomplet, en conservant sqrtf et l'ordre des opérations d'origine."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 5,
+    "id": "b3f7172206a040f1",
+    "role": "T1",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757658.3368049,
+    "elapsed_seconds": 275.54913544654846,
+    "evaluated_at": 1792757754.1289387,
+    "measured_elapsed_seconds": 371.34126925468445,
+    "seconds": 0.0009948332400994111,
+    "score": 0.6486547115312852,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": 45.83477430707459,
+    "best_research_before_seconds": 0.001010591703438277,
+    "best_research_after_seconds": 0.0009948332400994111,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "2feb5109d050d733c0800342975d3bcf4dfc1ff9",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "d1b8e70a8c58a7c3",
+    "patch": "diffs/776048/b3f7172206a040f1.patch",
+    "hypothesis": "Un bloc de 128 threads charge des tuiles de 128 sources (3 584 octets partagés) et les réutilise pour ses cibles. Comparé au candidat mesuré à 256 threads, ce réglage réduit la mémoire partagée par bloc, mais peut multiplier les tuiles et les barrières; son effet sur les trois tailles officielles doit être mesuré.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Régler le bloc à 128 threads et la tuile source à 128 Particle; réserver 3 584 octets de mémoire partagée dynamique.",
+        "Charger coopérativement chaque tuile, synchroniser avant son utilisation et après celle-ci, et borner la dernière tuile à n.",
+        "Garder les threads sans cible aux synchronisations afin d’éviter toute barrière divergente.",
+        "Charger chaque cible une fois, conserver l’ordre des sources, l’exclusion i == j, l’adoucissement et la mise à jour d’Euler."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 6,
+    "id": "48a9dbbe207f464c",
+    "role": "T4",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757689.5702214,
+    "elapsed_seconds": 306.7825520038605,
+    "evaluated_at": 1792757787.793734,
+    "measured_elapsed_seconds": 405.0060646533966,
+    "seconds": 0.0025829482112981797,
+    "score": 0.41557131136652553,
+    "base_search_seconds": 0.004220541632105524,
+    "gain_vs_base_pct": 38.800551292995756,
+    "best_research_before_seconds": 0.0009948332400994111,
+    "best_research_after_seconds": 0.0009948332400994111,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "f45c0d195bb21090592d91ffc39f084701d0f9cc",
+    "base_commit": "c38976ec32399ff49a407d488abf0dadb6986127",
+    "variant_id": "9c92c8ced6b18803",
+    "patch": "diffs/776048/48a9dbbe207f464c.patch",
+    "hypothesis": "Avec block=128 et items_per_block=256, chaque thread calcule deux cibles et réutilise les champs de chaque source pour ces deux interactions. Par rapport au parent à quatre cibles par thread, ce facteur réduit peut diminuer le travail et les registres par thread, au prix de davantage de blocs. Le compromis reste à mesurer sur les tailles officielles.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configurer block=128 et items_per_block=256 pour mapper deux cibles par thread et garder le tile du bloc égal à la taille annoncée au contrôleur.",
+        "Dans la boucle des sources, charger une fois x, y, z et mass et réutiliser ces champs pour deux accumulateurs indépendants.",
+        "Conserver les gardes par cible, le calcul avec sqrtf et une écriture pour chaque cible valide, y compris en fin de grille."
+      ]
+    },
+    "parent_id": "0f2dfb784d8d42b0",
+    "sources": [],
+    "source_commits": [],
+    "depth": 2
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 7,
+    "id": "7cb6054219d04953",
+    "role": "T2",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757723.1670704,
+    "elapsed_seconds": 340.37940096855164,
+    "evaluated_at": 1792757870.595208,
+    "measured_elapsed_seconds": 487.8075385093689,
+    "seconds": 0.0018837927076915885,
+    "score": 0.4936662837442635,
+    "base_search_seconds": 0.0011131126556144656,
+    "gain_vs_base_pct": -69.23648277556313,
+    "best_research_before_seconds": 0.0009948332400994111,
+    "best_research_after_seconds": 0.0009948332400994111,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "34734df16ecc19238adf3d0bc9c5e5e1955e9932",
+    "base_commit": "73ceddfaf30a687a24657b1a60739a706918a26f",
+    "variant_id": "fb7371e4308a1aac",
+    "patch": "diffs/776048/7cb6054219d04953.patch",
+    "hypothesis": "Traiter deux particules cibles par lane réutilise les mêmes champs source diffusés par shuffle pour deux accumulations. Avec 512 éléments par bloc, cela devrait réduire d’environ moitié le nombre de warps et les chargements/diffusions de sources pour couvrir une même taille; les registres supplémentaires et la double accumulation peuvent toutefois annuler ce bénéfice.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Régler le travail par bloc à 512 éléments et attribuer à chaque lane deux cibles adjacentes couvrant sans chevauchement les indices valides.",
+        "Charger un seul segment de sources par lane, puis diffuser x, y, z et mass par shuffle; réutiliser ces champs dans les deux accumulations cibles.",
+        "Conserver la participation de tous les lanes aux échanges, y compris pour les cibles invalides et le segment source final incomplet; n’effectuer aucun retour anticipé.",
+        "Intégrer et écrire chaque cible séparément uniquement lorsqu’elle est valide."
+      ]
+    },
+    "parent_id": "7f202149e3894459",
+    "sources": [],
+    "source_commits": [],
+    "depth": 2
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 8,
+    "id": "891743f03e11463b",
+    "role": "T1",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757754.1431239,
+    "elapsed_seconds": 371.35545444488525,
+    "evaluated_at": 1792757843.983773,
+    "measured_elapsed_seconds": 461.19610357284546,
+    "seconds": 0.0009636165834275914,
+    "score": 0.6558857122473916,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": 47.53441318709303,
+    "best_research_before_seconds": 0.0009948332400994111,
+    "best_research_after_seconds": 0.0009636165834275914,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "facfa679fb201393d2659d6f04f47c7c961ed8e2",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "b31032666f249568",
+    "patch": "diffs/776048/891743f03e11463b.patch",
+    "hypothesis": "Avec 128 threads par bloc et une tuile de 256 sources (7 168 octets partagés), chaque thread charge jusqu’à deux sources. Par rapport au candidat 128/128, cela pourrait réduire le nombre de tuiles et de barrières sans augmenter le nombre de cibles par bloc; l’effet sur les trois tailles officielles reste à mesurer.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configurer 128 threads par bloc et une tuile de 256 Particle en mémoire partagée dynamique, soit 7 168 octets.",
+        "Faire charger les sources coopérativement, avec deux éléments au plus par thread et un bornage explicite de la tuile terminale.",
+        "Garder les threads sans cible dans toutes les barrières et ne retourner qu’après la dernière synchronisation.",
+        "Conserver l’ordre des interactions, l’exclusion i == j, l’adoucissement et la mise à jour d’Euler; conserver Particle et l’interface du kernel."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 9,
+    "id": "1fe548aa76994ea1",
+    "role": "T4",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757787.8069751,
+    "elapsed_seconds": 405.01930570602417,
+    "evaluated_at": 1792757914.9555695,
+    "measured_elapsed_seconds": 532.1679000854492,
+    "seconds": 0.0027030614989716098,
+    "score": 0.4045760131519178,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": -47.172340299992335,
+    "best_research_before_seconds": 0.0009636165834275914,
+    "best_research_after_seconds": 0.0009636165834275914,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "c9cdff6ef575fc631c7be2b0d56a40e5d62499b4",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "0571f0858b142d15",
+    "patch": "diffs/776048/1fe548aa76994ea1.patch",
+    "hypothesis": "Traiter deux cibles par thread avec un bloc de 256 threads pourrait amortir les chargements des champs de chaque source tout en conservant davantage de threads par bloc que le précédent essai à 128 threads. Le tile de 512 cibles réduit aussi le nombre de blocs, mais le travail et les accumulateurs supplémentaires par thread peuvent limiter le parallélisme; le résultat doit être mesuré.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configurer block=256 et items_per_block=512 pour faire traiter à chaque thread les cibles i0 et i0 + blockDim.x, en accord avec le tile de la grille calculée par le contrôleur.",
+        "Charger dans des scalaires les coordonnées et la masse de chaque source une seule fois dans la boucle, puis réutiliser ces valeurs pour deux accumulateurs indépendants.",
+        "Garder les exclusions individuelles des interactions avec soi-même, les gardes de validité et une écriture de sortie par cible valide, avec le calcul sqrtf et l’ordre d’intégration d’origine."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 10,
+    "id": "87f49c37da994ca1",
+    "role": "T1",
+    "status": "incorrect",
+    "reason": "Protected correctness checks failed",
+    "created": 1792757843.9971657,
+    "elapsed_seconds": 461.20949625968933,
+    "evaluated_at": 1792758107.826408,
+    "measured_elapsed_seconds": 725.038738489151,
+    "seconds": null,
+    "score": 0.0,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.0009636165834275914,
+    "best_research_after_seconds": 0.0009636165834275914,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "a1e7adeafcfc0aa9079fb623a0092e968a088959",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "b5b84debb760453a",
+    "patch": "diffs/776048/87f49c37da994ca1.patch",
+    "hypothesis": "Passer de 128 à 256 threads par bloc tout en conservant des tuiles de 512 Particle et 14 336 octets de mémoire partagée peut réduire le nombre de blocs et de synchronisations globales. Le travail par bloc double aussi, ce qui pourrait limiter l’occupation; l’effet doit être mesuré sur les trois tailles officielles.",
+    "transformations": {
+      "files": [
+        "src/launch.json"
+      ],
+      "retained": [
+        "Régler le lancement à 256 threads par bloc, avec une tuile de 512 Particle et 14 336 octets de mémoire partagée.",
+        "Laisser le kernel et l’interface inchangés; le chargement coopératif, le bornage des tuiles terminales et les synchronisations restent identiques."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 11,
+    "id": "c15bc6e5094d48bf",
+    "role": "T2",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757870.6104367,
+    "elapsed_seconds": 487.82276725769043,
+    "evaluated_at": 1792758055.9443424,
+    "measured_elapsed_seconds": 673.1566729545593,
+    "seconds": 0.0008916003302059151,
+    "score": 0.6731987085576302,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": 51.455448846216335,
+    "best_research_before_seconds": 0.0009636165834275914,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "2129b5e4be277f2e0124a955cf4072efe48fcf0e",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "f51c607960cc726a",
+    "patch": "diffs/776048/c15bc6e5094d48bf.patch",
+    "hypothesis": "Séparer les tuiles complètes du segment final permet d’éviter le contrôle de borne pour chaque source dans la boucle principale, notamment pour les tailles multiples de 32, tout en gardant une diffusion par shuffle correcte pour la fin incomplète.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Charger les champs de source par lane du warp et diffuser x, y, z et mass à chaque lane cible avec __shfl_sync.",
+        "Traiter les tuiles complètes dans une boucle déroulée sans vérification de borne par source.",
+        "Traiter le dernier segment incomplet dans un chemin à nombre d’échanges uniforme pour tous les lanes.",
+        "Ne pas faire de retour anticipé pour les cibles invalides; protéger l’accumulation et l’écriture avec targetValid."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 12,
+    "id": "d02c3bc452244f32",
+    "role": "T3",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757896.9840167,
+    "elapsed_seconds": 514.1963472366333,
+    "evaluated_at": 1792758216.2331882,
+    "measured_elapsed_seconds": 833.4455187320709,
+    "seconds": 0.0012731972194135223,
+    "score": 0.5905935667557126,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": 30.67881936248209,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "2f1032087581bacf1866d1c268653a05a5ceca61",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "75b629cbb421797d",
+    "patch": "diffs/776048/d02c3bc452244f32.patch",
+    "hypothesis": "Le candidat antérieur combinant annulation de la masse cible et rsqrtf raffiné a échoué un contrôle à n=16384. J’isole donc le calcul par rsqrtf : deux itérations de Newton visent à réduire l’erreur d’approximation, tandis que l’accumulation de force et la division finale par la masse restent dans l’ordre de référence. Le contrôleur devra confirmer correction et mesurer les temps; aucun gain n’est présumé.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Remplacer sqrtf et la division par le cube de la distance par rsqrtf, deux raffinements de Newton et la formation de l’inverse du cube.",
+        "Conserver l’accumulation de force suivie de la division finale par la masse cible pour isoler le changement du calcul de distance.",
+        "Garder l’exclusion de soi avant les calculs d’interaction et copier la particule d’entrée afin de préserver exactement sa masse."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 13,
+    "id": "e70620425ba048e1",
+    "role": "T4",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757914.9687674,
+    "elapsed_seconds": 532.181097984314,
+    "evaluated_at": 1792757986.9563358,
+    "measured_elapsed_seconds": 604.1686663627625,
+    "seconds": 0.003365159178538981,
+    "score": 0.35308083029230153,
+    "base_search_seconds": 0.0025829482112981797,
+    "gain_vs_base_pct": -30.283648886930827,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "b1153128a72ef6237440107ff381f1f836616870",
+    "base_commit": "f45c0d195bb21090592d91ffc39f084701d0f9cc",
+    "variant_id": "9c27f88f820d0408",
+    "patch": "diffs/776048/e70620425ba048e1.patch",
+    "hypothesis": "Avec block=128 et items_per_block=384, chaque thread calcule trois cibles en chargeant une seule fois les champs de chaque source pour les réutiliser. Ce facteur intermédiaire par rapport aux essais à deux et quatre cibles pourrait équilibrer réduction des chargements, pression sur les registres et parallélisme; cette configuration doit être mesurée sur les tailles officielles.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Régler launch.json à block=128 et items_per_block=384 pour faire correspondre le tile du contrôleur à trois cibles par thread.",
+        "Calculer trois indices cibles espacés de blockDim.x et traiter chaque cible uniquement si elle est dans les bornes.",
+        "Charger une fois par source ses coordonnées et sa masse, puis les réutiliser pour trois accumulateurs indépendants; préserver l’exclusion des auto-interactions, sqrtf, l’intégration et une écriture de sortie par cible active."
+      ]
+    },
+    "parent_id": "48a9dbbe207f464c",
+    "sources": [],
+    "source_commits": [],
+    "depth": 3
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 14,
+    "id": "b599b3b7be404951",
+    "role": "T4",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757986.9726942,
+    "elapsed_seconds": 604.1850247383118,
+    "evaluated_at": 1792758101.55341,
+    "measured_elapsed_seconds": 718.7657406330109,
+    "seconds": 0.003534792912803022,
+    "score": 0.3419303324100274,
+    "base_search_seconds": 0.0027030614989716098,
+    "gain_vs_base_pct": -30.769977455113317,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "fd4a8246c6b4e4148660937b8a546c1eb354543e",
+    "base_commit": "c9cdff6ef575fc631c7be2b0d56a40e5d62499b4",
+    "variant_id": "d8ae9324bc8f37a9",
+    "patch": "diffs/776048/b599b3b7be404951.patch",
+    "hypothesis": "À trois cibles par thread, passer de block=128 à block=256 (items_per_block=768) pourrait offrir davantage de threads par bloc tout en réutilisant les champs de chaque source sur trois cibles. Les accumulateurs supplémentaires peuvent toutefois augmenter la pression sur les registres et réduire le parallélisme; le compromis reste à mesurer sur les tailles officielles.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configurer block=256 et items_per_block=768 afin de mapper trois cibles espacées de blockDim.x et d'aligner le tile avec la grille calculée par le contrôleur.",
+        "Charger une seule fois les coordonnées et la masse de chaque source dans la boucle, puis réutiliser ces champs pour trois accumulateurs distincts.",
+        "Conserver les gardes et exclusions par cible, le calcul sqrtf, l'ordre d'intégration existant et une écriture pour chaque cible valide, y compris dans les tiles incomplets."
+      ]
+    },
+    "parent_id": "1fe548aa76994ea1",
+    "sources": [],
+    "source_commits": [],
+    "depth": 2
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 15,
+    "id": "e572c8a8f7b64df3",
+    "role": "T2",
+    "status": "valid",
+    "reason": "",
+    "created": 1792758055.9583259,
+    "elapsed_seconds": 673.1706564426422,
+    "evaluated_at": 1792758188.9274893,
+    "measured_elapsed_seconds": 806.1398198604584,
+    "seconds": 0.0016584475231351753,
+    "score": 0.5254951157500951,
+    "base_search_seconds": 0.0018837927076915885,
+    "gain_vs_base_pct": 11.962313243719503,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "793caec769f2c6ab5833c64bbfaeb2528c51f358",
+    "base_commit": "34734df16ecc19238adf3d0bc9c5e5e1955e9932",
+    "variant_id": "6f2c608937115199",
+    "patch": "diffs/776048/e572c8a8f7b64df3.patch",
+    "hypothesis": "Séparer les segments complets du segment final permet d’éliminer les vérifications de borne par source sur le chemin principal, notamment pour les tailles multiples de 32, tout en conservant le même ordre d’interaction et la participation de toutes les lanes aux shuffles. Le gain éventuel reste à mesurer.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Conserver deux cibles par lane et les shuffles existants pour diffuser les champs sources.",
+        "Traiter les tuiles de 32 sources complètes sans test de borne par source.",
+        "Traiter séparément la queue partielle, avec des échanges uniformes et un arrêt uniforme au premier indice source invalide.",
+        "Ne jamais retourner avant les échanges warp; conditionner les accumulations et écritures à la validité de la cible."
+      ]
+    },
+    "parent_id": "7cb6054219d04953",
+    "sources": [],
+    "source_commits": [],
+    "depth": 3
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 16,
+    "id": "05508f91618c404d",
+    "role": "T4",
+    "status": "valid",
+    "reason": "",
+    "created": 1792758101.5678022,
+    "elapsed_seconds": 718.7801327705383,
+    "evaluated_at": 1792758171.7799177,
+    "measured_elapsed_seconds": 788.9922482967377,
+    "seconds": 0.0025707304257961243,
+    "score": 0.4167233210504847,
+    "base_search_seconds": 0.0025829482112981797,
+    "gain_vs_base_pct": 0.473017052707958,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "lancement seul",
+    "changed_paths": [
+      "src/launch.json"
+    ],
+    "commit": "2fbe5371662854a01048dd7ebdffd7ae6b512d65",
+    "base_commit": "f45c0d195bb21090592d91ffc39f084701d0f9cc",
+    "variant_id": "82065d579bb2e7d7",
+    "patch": "diffs/776048/05508f91618c404d.patch",
+    "hypothesis": "Avec le noyau existant à deux cibles par thread, block=64 et items_per_block=128 conservent la réutilisation des champs source tout en doublant le nombre de blocs par rapport au parent block=128/items_per_block=256. Cela pourrait exposer davantage de blocs au GPU, mais augmente le coût d’ordonnancement; la mesure dira si ce compromis aide sur les tailles officielles.",
+    "transformations": {
+      "files": [
+        "src/launch.json"
+      ],
+      "retained": [
+        "Configurer block=64 et items_per_block=128 pour conserver deux cibles par thread et aligner le tile avec la grille calculée par le contrôleur.",
+        "Conserver le noyau existant, ses gardes sur chaque cible et ses écritures pour toutes les cibles valides."
+      ]
+    },
+    "parent_id": "48a9dbbe207f464c",
+    "sources": [],
+    "source_commits": [],
+    "depth": 3
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 17,
+    "id": "5c553d6c3b404918",
+    "role": "T1",
+    "status": "valid",
+    "reason": "",
+    "created": 1792758107.8437467,
+    "elapsed_seconds": 725.0560772418976,
+    "evaluated_at": 1792758206.616722,
+    "measured_elapsed_seconds": 823.8290526866913,
+    "seconds": 0.0009933085387287682,
+    "score": 0.649004186548752,
+    "base_search_seconds": null,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "b4278934bd6f12d6b7fce430d7adaec2af9e9e7a",
+    "base_commit": "a1e7adeafcfc0aa9079fb623a0092e968a088959",
+    "variant_id": "7561146b5e29e3df",
+    "patch": "diffs/776048/5c553d6c3b404918.patch",
+    "hypothesis": "À 256 threads par bloc, une tuile de 256 sources réduit l’allocation dynamique à 7 168 octets (contre 14 336) et charge au plus une source par thread. Aligner la taille de tuile sur le bloc, plutôt que 256 threads avec une tuile de 512, pourrait aussi améliorer le traitement des tailles terminales. Le coût des synchronisations et l’effet de doubler les threads par rapport au candidat 128/256 restent à mesurer.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configurer 256 threads et une tuile de 256 Particle avec 7 168 octets de mémoire partagée dynamique.",
+        "Fixer TILE_SIZE à 256 pour aligner la taille de tuile du kernel sur la configuration de lancement.",
+        "Conserver le chargement coopératif, le bornage explicite des tuiles terminales, toutes les synchronisations et le calcul d’interaction existant."
+      ]
+    },
+    "parent_id": "87f49c37da994ca1",
+    "sources": [],
+    "source_commits": [],
+    "depth": 2
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 18,
+    "id": "c8c91898aaea4e7c",
+    "role": "T4",
+    "status": "valid",
+    "reason": "",
+    "created": 1792758171.7938607,
+    "elapsed_seconds": 789.0061912536621,
+    "evaluated_at": 1792758297.819504,
+    "measured_elapsed_seconds": 915.031834602356,
+    "seconds": 0.003389548832776347,
+    "score": 0.3514330751157089,
+    "base_search_seconds": 0.003534792912803022,
+    "gain_vs_base_pct": 4.108984135975858,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "lancement seul",
+    "changed_paths": [
+      "src/launch.json"
+    ],
+    "commit": "a49c04f950c6e9e1f826ff7269fe16abb9d377e1",
+    "base_commit": "fd4a8246c6b4e4148660937b8a546c1eb354543e",
+    "variant_id": "a4addbd0b2f0e7c5",
+    "patch": "diffs/776048/c8c91898aaea4e7c.patch",
+    "hypothesis": "Garder trois cibles par thread conserve la réutilisation des champs source. Réduire block de 256 à 64, avec items_per_block=192 pour couvrir exactement trois cibles par thread, pourrait améliorer le compromis entre taille des blocs et parallélisme; les blocs plus nombreux peuvent aussi accroître le coût d’ordonnancement. Le candidat doit être mesuré avant toute conclusion.",
+    "transformations": {
+      "files": [
+        "src/launch.json"
+      ],
+      "retained": [
+        "Configurer block=64 et items_per_block=192 afin de conserver trois cibles par thread et d’aligner le tile sur la grille calculée par le contrôleur.",
+        "Laisser le noyau inchangé : ses gardes par cible et ses écritures séparées couvrent également les tiles incomplets."
+      ]
+    },
+    "parent_id": "b599b3b7be404951",
+    "sources": [],
+    "source_commits": [],
+    "depth": 3
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 19,
+    "id": "9de5dc1f8b9a4eb0",
+    "role": "T2",
+    "status": "valid",
+    "reason": "",
+    "created": 1792758188.9451146,
+    "elapsed_seconds": 806.157445192337,
+    "evaluated_at": 1792758395.5777917,
+    "measured_elapsed_seconds": 1012.7901222705841,
+    "seconds": 0.0009773347247280881,
+    "score": 0.6526882933691757,
+    "base_search_seconds": 0.0011131126556144656,
+    "gain_vs_base_pct": 12.198040351218964,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "f6d8bfd5631be2318574ae6835a0a9f14f8c450a",
+    "base_commit": "73ceddfaf30a687a24657b1a60739a706918a26f",
+    "variant_id": "aee4c65159ffa5d2",
+    "patch": "diffs/776048/9de5dc1f8b9a4eb0.patch",
+    "hypothesis": "Précharger par lane les champs du prochain segment avant les shuffles et calculs du segment courant pourrait masquer une partie de la latence des chargements globaux. Le coût des registres et les accès de la queue partielle peuvent annuler ce bénéfice; aucune accélération n'est présumée avant mesure.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Précharger les quatre champs source du premier segment puis ceux du segment suivant avant de traiter le segment courant.",
+        "Garder une borne uniforme pour les shuffles du dernier segment partiel; toutes les lanes participent et aucun retour anticipé n'est introduit.",
+        "Conserver l'accumulation et l'écriture conditionnées par la validité de la cible."
+      ]
+    },
+    "parent_id": "7f202149e3894459",
+    "sources": [],
+    "source_commits": [],
+    "depth": 2
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 20,
+    "id": "645de581d96d4755",
+    "role": "T1",
+    "status": "incorrect",
+    "reason": "Protected correctness checks failed",
+    "created": 1792758206.6327693,
+    "elapsed_seconds": 823.8450999259949,
+    "evaluated_at": 1792758398.2191694,
+    "measured_elapsed_seconds": 1015.4314999580383,
+    "seconds": null,
+    "score": 0.0,
+    "base_search_seconds": 0.0009948332400994111,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "1378744fc6a4776c1bc77ea1771948495c17e2c1",
+    "base_commit": "2feb5109d050d733c0800342975d3bcf4dfc1ff9",
+    "variant_id": "3f28fabc87317c3c",
+    "patch": "diffs/776048/645de581d96d4755.patch",
+    "hypothesis": "À partir des fichiers remis (128 threads et tuiles de 384 sources), passer à 512 sources par tuile demande 14 336 octets partagés et devrait réduire le nombre de passages et de barrières pour les grands n, sans changer le nombre de cibles par bloc. Le chargement par thread augmente et l’occupation peut en pâtir; l’effet sur les trois tailles officielles reste à mesurer.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Conserver 128 threads par bloc et augmenter la taille de tuile source de 384 à 512 Particle.",
+        "Configurer 14 336 octets de mémoire partagée dynamique et synchroniser après le chargement coopératif et après la consommation de chaque tuile.",
+        "Conserver le bornage de la tuile terminale, les threads sans cible aux barrières, l’exclusion i == j, l’adoucissement, l’ordre des interactions, la structure Particle et l’interface du kernel."
+      ]
+    },
+    "parent_id": "b3f7172206a040f1",
+    "sources": [],
+    "source_commits": [],
+    "depth": 2
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 21,
+    "id": "254ee8e4c27d450e",
+    "role": "T4",
+    "status": "valid",
+    "reason": "",
+    "created": 1792758297.836335,
+    "elapsed_seconds": 915.048665523529,
+    "evaluated_at": 1792758489.0912595,
+    "measured_elapsed_seconds": 1106.3035900592804,
+    "seconds": 0.0025705016226605882,
+    "score": 0.416744955726624,
+    "base_search_seconds": 0.0018366640725164514,
+    "gain_vs_base_pct": -39.95491397284703,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "2ba4bd1ab525180728362e7612cb04549cea20b4",
+    "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+    "variant_id": "96244e12f729b0b5",
+    "patch": "diffs/776048/254ee8e4c27d450e.patch",
+    "hypothesis": "Avec block=128 et items_per_block=256, chaque thread peut calculer deux cibles tout en réutilisant dans ses registres les coordonnées et la masse de chaque source. Cela réduit les chargements de champs source par cible, mais le surcroît d’accumulateurs peut accroître la pression sur les registres. Les gardes séparées doivent préserver la couverture des tiles incomplets sans omettre de sortie.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configurer block=128 et items_per_block=256, soit deux cibles par thread et un tile cohérent avec la grille contrôleur.",
+        "Charger une fois les coordonnées et la masse de chaque source, puis les réutiliser pour deux accumulateurs indépendants.",
+        "Garder les exclusions d’auto-interaction et les gardes de validité par cible; écrire chaque cible valide, y compris dans un tile incomplet."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 22,
+    "id": "38d2651539844d5b",
+    "role": "T1",
+    "status": "valid",
+    "reason": "",
+    "created": 1792758398.2552164,
+    "elapsed_seconds": 1015.4675469398499,
+    "evaluated_at": 1792758531.2679856,
+    "measured_elapsed_seconds": 1148.4803161621094,
+    "seconds": 0.0009616713076844,
+    "score": 0.6563416542246714,
+    "base_search_seconds": 0.0009636165834275914,
+    "gain_vs_base_pct": 0.2018723812610257,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "9058468acbd904d3dfc77cb5c8a51e192802304f",
+    "base_commit": "facfa679fb201393d2659d6f04f47c7c961ed8e2",
+    "variant_id": "912d337e813c8225",
+    "patch": "diffs/776048/38d2651539844d5b.patch",
+    "hypothesis": "Conserver 128 threads par bloc et doubler la tuile de sources de 256 à 512 (14 336 octets partagés) pourrait réduire de moitié le nombre de passages et de synchronisations pour les grandes tailles officielles. Le chargement coopératif traite jusqu’à quatre sources par thread; l’empreinte partagée accrue peut toutefois réduire l’occupation. Le contrôleur doit mesurer ce candidat sur les trois tailles officielles.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Conserver 128 threads par bloc et régler la taille de tuile à 512 Particle, avec 14 336 octets de mémoire partagée dynamique.",
+        "Charger chaque tuile en coopération avec un pas de blockDim.x; borner tile_count à n pour traiter la dernière tuile.",
+        "Maintenir tous les threads aux deux barrières par tuile, y compris ceux sans cible.",
+        "Préserver l’ordre des interactions, l’exclusion i == j, l’adoucissement, la formule de force, l’intégration, la structure Particle et l’interface du kernel."
+      ]
+    },
+    "parent_id": "891743f03e11463b",
+    "sources": [],
+    "source_commits": [],
+    "depth": 2
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 23,
+    "id": "fd41c25e396b42c2",
+    "role": "G",
+    "status": "valid",
+    "reason": "",
+    "created": 1792758667.51656,
+    "elapsed_seconds": 1284.728890657425,
+    "evaluated_at": 1792758758.7651703,
+    "measured_elapsed_seconds": 1375.9775009155273,
+    "seconds": 0.000687351400536535,
+    "score": 0.7276754410284452,
+    "base_search_seconds": 0.0008916003302059151,
+    "gain_vs_base_pct": 22.908126292663976,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "1ec283ca77208862916cb989cbadf44500c2d7fc",
+    "base_commit": "2129b5e4be277f2e0124a955cf4072efe48fcf0e",
+    "variant_id": "96b1ce36544ca745",
+    "patch": "diffs/776048/fd41c25e396b42c2.patch",
+    "hypothesis": "Retaining the measured warp-shuffle kernel while replacing per-interaction sqrt/division with a refined reciprocal-square-root inverse-cube calculation may reduce arithmetic cost. The transformation is unmeasured in combination and must pass all correctness and performance checks.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Retain warp-level source broadcast, complete-tile and tail handling, and target validity guards from the measured base.",
+        "Use rsqrtf with two Newton refinements to form the inverse distance cubed in both interaction paths, replacing sqrtf and division.",
+        "Preserve the target-mass force accumulation, self-interaction exclusion, integration order, particle layout, and launch configuration."
+      ]
+    },
+    "parent_id": null,
+    "sources": [
+      "c15bc6e5094d48bf"
+    ],
+    "source_commits": [
+      "2129b5e4be277f2e0124a955cf4072efe48fcf0e"
+    ],
+    "depth": 1
+  },
+  {
+    "condition": "776048",
+    "job_id": "780691",
+    "ordinal": 24,
+    "id": "873f902b4e9c4cd7",
+    "role": "G",
+    "status": "valid",
+    "reason": "",
+    "created": 1792758809.8454344,
+    "elapsed_seconds": 1427.057765007019,
+    "evaluated_at": 1792758880.9404461,
+    "measured_elapsed_seconds": 1498.1527767181396,
+    "seconds": 0.0006378183363329082,
+    "score": 0.7422417172771516,
+    "base_search_seconds": 0.000687351400536535,
+    "gain_vs_base_pct": 7.20636695654685,
+    "best_research_before_seconds": 0.0008916003302059151,
+    "best_research_after_seconds": 0.0008916003302059151,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "a8059c34af8f8f3081e0430be9c3947b813c6184",
+    "base_commit": "1ec283ca77208862916cb989cbadf44500c2d7fc",
+    "variant_id": "3887ff02a9cb527f",
+    "patch": "diffs/776048/873f902b4e9c4cd7.patch",
+    "hypothesis": "One Newton refinement of rsqrtf may retain adequate accuracy while reducing per-interaction work relative to the measured two-refinement kernel. This variant is unmeasured; correctness and speed remain controller decisions.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Keep the measured warp-shuffle source broadcast, complete-tile and tail handling, target guards, force accumulation, and integration.",
+        "Reduce inverseDistanceCubed from two Newton refinements of rsqrtf to one.",
+        "Keep the target-mass division, self-interaction exclusion, particle layout, and launch configuration unchanged."
+      ]
+    },
+    "parent_id": null,
+    "sources": [
+      "fd41c25e396b42c2"
+    ],
+    "source_commits": [
+      "1ec283ca77208862916cb989cbadf44500c2d7fc"
+    ],
+    "depth": 1
+  }
+]

@@ -1,0 +1,215 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "6a93a881f67a24c1bf6ada028275c9df8d80e2b4d74096c6b9ffd928412c5eab",
+    "tree_id": "e1:T3"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "2437d99c0c3b4b21-h02",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "2437d99c0c3b4b21",
+        "facts": {
+          "commit": null,
+          "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Protected correctness checks failed",
+        "model_interpretation": {
+          "claim": "Conserver rsqrtf et isoler une seule réassociation de la formule par paire : calculer invDist² et masse·invDist indépendamment, puis les combiner. Le nombre total de multiplications reste similaire, mais la chaîne dépendante menant au facteur d'accélération peut être plus courte. La réassociation change l'arrondi; la correction stricte, notamment pour la masse extrême, doit donc être vérifiée par le contrôleur.",
+          "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Conserver rsqrtf(distSq), mais réorganiser invDist³ × masse en deux produits indépendants (invDist × invDist et masse × invDist), suivis de leur combinaison en un facteur commun pour les trois composantes.\",\"Supprimer le facteur G=1.0f explicite; aucune hypothèse de gain d'instructions n'est faite car le compilateur pouvait déjà l'éliminer. Ne pas modifier l'accumulation, l'intégration ou les options fast-math.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:2437d99c0c3b4b21:1:0",
+        "kind": "lesson",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "2437d99c0c3b4b21",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Le programme de référence utilisant rsqrtf et sa factorisation actuelle est valide sur les 11 cas fournis; cela ne garantit pas la validité d'un ordre différent des produits.",
+          "transformations": "{}",
+          "applicability": "Pour les variantes de facteur d'accélération utilisant rsqrtf, les entrées de validation comprennent des cas sensibles aux erreurs numériques et doivent être rejouées après toute réassociation.",
+          "next_experiment": "Comparer cette association aux temps officiels des trois tailles uniquement si elle passe tous les cas et l'oracle FP64.",
+          "evidence_ids": [
+            "baseline-e1"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      },
+      {
+        "id": "7e1c37e44c544dcb",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "7e1c37e44c544dcb",
+        "facts": {
+          "commit": "3d68698cddcbf1351ce458bae135e5ab836599a4",
+          "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0016487412064376528,
+          "score": 0.5292415515173169
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Remplacer sqrtf(distSq) et la construction du dénominateur distSq * dist par rsqrtf(distSq) / distSq, factorisé comme invDistCubed. Cela pourrait réduire le coût arithmétique par interaction. Pour limiter les changements d’arrondi et isoler cette transformation, conserver le calcul de force, l’ordre d’accumulation, la division finale par la masse cible, l’intégration et le lancement. Aucun gain ni résultat de correction n’est présumé avant l’évaluation officielle.",
+          "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Remplacer sqrtf(distSq) et la multiplication distSq * dist du dénominateur par rsqrtf(distSq), puis former invDistCubed = invDist / distSq.\",\"Calculer le coefficient avec les masses dans leur expression de force d’origine et conserver fx/fy/fz ainsi que la division finale par la masse cible.\",\"Ne pas modifier launch.json, l’intégration, les options fast-math ou le protocole.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "7e1c37e44c544dcb-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "7e1c37e44c544dcb",
+        "facts": {
+          "commit": null,
+          "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Remplacer sqrtf(distSq) et la construction du dénominateur distSq * dist par rsqrtf(distSq) / distSq, factorisé comme invDistCubed. Cela pourrait réduire le coût arithmétique par interaction. Pour limiter les changements d’arrondi et isoler cette transformation, conserver le calcul de force, l’ordre d’accumulation, la division finale par la masse cible, l’intégration et le lancement. Aucun gain ni résultat de correction n’est présumé avant l’évaluation officielle.",
+          "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Remplacer sqrtf(distSq) et la multiplication distSq * dist du dénominateur par rsqrtf(distSq), puis former invDistCubed = invDist / distSq.\",\"Calculer le coefficient avec les masses dans leur expression de force d’origine et conserver fx/fy/fz ainsi que la division finale par la masse cible.\",\"Ne pas modifier launch.json, l’intégration, les options fast-math ou le protocole.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "lesson:7e1c37e44c544dcb:0:0",
+        "kind": "lesson",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "7e1c37e44c544dcb",
+        "facts": {
+          "commit": null,
+          "base_commit": null,
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": null,
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "La baseline est correcte sur les 11 cas observés. Une variante antérieure combinant rsqrtf, une reformulation de la force en accélération directe et l’annulation de la masse cible a échoué sur un cas quadruple (n=16384). Cela ne permet pas d’attribuer l’échec à une seule transformation.",
+          "transformations": "{}",
+          "applicability": "Lors d’un nouvel essai avec rsqrtf, conserver l’accumulation de force et la division finale par la masse cible permet d’isoler davantage le changement du facteur de distance.",
+          "next_experiment": "Faire vérifier cette variante par le contrôleur sur tous les cas, puis comparer ses temps aux mesures de baseline par taille.",
+          "evidence_ids": [
+            "baseline-e1",
+            "2437d99c0c3b4b21"
+          ]
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      },
+      {
+        "id": "2437d99c0c3b4b21-h01",
+        "kind": "development",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "2437d99c0c3b4b21",
+        "facts": {
+          "commit": null,
+          "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Protected correctness checks failed",
+        "model_interpretation": {
+          "claim": "Remplacer sqrtf puis la division par distSq*dist par rsqrtf et invDist^3, et accumuler directement l'accélération par interaction en annulant la masse de la particule cible. Cela devrait réduire le coût arithmétique par paire sans activer fast-math; la réassociation et l'approximation de rsqrtf doivent être validées par le contrôleur contre les tolérances GPU et l'oracle FP64.",
+          "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Remplacer sqrtf(distSq) et la division par distSq*dist par rsqrtf(distSq) et le produit invDist^3.\",\"Calculer la contribution d'accélération directement à partir de la masse source, puis retirer la division finale par la masse cible en utilisant son annulation algébrique.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 9,
+    "next_offset": 6
+  },
+  "evidence_ids": [
+    "2437d99c0c3b4b21-h02",
+    "lesson:2437d99c0c3b4b21:1:0",
+    "7e1c37e44c544dcb",
+    "7e1c37e44c544dcb-h01",
+    "lesson:7e1c37e44c544dcb:0:0",
+    "2437d99c0c3b4b21-h01"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "2c79ec0411582b02065b049c8257bd6529c45caf",
+  "selected_parent_id": "2437d99c0c3b4b21"
+}

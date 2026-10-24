@@ -1,0 +1,59 @@
+diff --git a/src/launch.json b/src/launch.json
+index 0e26fc2..ef3e569 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+ {
+   "block": 128,
+   "items_per_block": 128,
+-  "shared_memory_bytes": 3584
++  "shared_memory_bytes": 28672
+ }
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index f307379..41b79d2 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -6,8 +6,10 @@ struct Particle {
+     float mass;
+ };
+ 
+-// Shared-memory tiled N-body step. Each source tile is reused by the
+-// active target threads in the block.
++// Source tiles are larger than the target block; each thread stages multiple
++// records and reuses the tile across the active target threads.
++constexpr int kSourceTileSize = 1024;
++
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+     extern __shared__ Particle source_tile[];
+ 
+@@ -26,15 +28,16 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     float fz = 0.0f;
+ 
+     // All threads, including target-tail threads, participate in both barriers.
+-    for (int tile_start = 0; tile_start < n; tile_start += blockDim.x) {
+-        const int source_index = tile_start + thread_id;
+-        if (source_index < n) {
+-            source_tile[thread_id] = in[source_index];
++    for (int tile_start = 0; tile_start < n;) {
++        const int remaining = n - tile_start;
++        const int tile_count = remaining < kSourceTileSize ? remaining : kSourceTileSize;
++
++        // The 128-thread block cooperatively loads up to 1024 source records.
++        for (int offset = thread_id; offset < tile_count; offset += blockDim.x) {
++            source_tile[offset] = in[tile_start + offset];
+         }
+         __syncthreads();
+ 
+-        const int remaining = n - tile_start;
+-        const int tile_count = remaining < blockDim.x ? remaining : blockDim.x;
+         if (i < n) {
+             for (int offset = 0; offset < tile_count; ++offset) {
+                 const int j = tile_start + offset;
+@@ -55,6 +58,7 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+             }
+         }
+         __syncthreads();
++        tile_start += tile_count;
+     }
+ 
+     if (i < n) {

@@ -1,0 +1,14 @@
+{
+  "files": [
+    {
+      "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float ax = 0.0f;\n    float ay = 0.0f;\n    float az = 0.0f;\n\n    // Accumulate acceleration directly: the target mass cancels from force/mass.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float invDist2 = invDist * invDist;\n        float massInvDist = (G * in[j].mass) * invDist;\n        float accelerationScale = massInvDist * invDist2;\n\n        ax += accelerationScale * dx;\n        ay += accelerationScale * dy;\n        az += accelerationScale * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += ax * dt;\n    p.vy += ay * dt;\n    p.vz += az * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Reassociating mass times inverse-distance cubed as (mass * invDist) * (invDist * invDist) keeps one rsqrtf and the same multiplication count while creating two independent products before the final scale multiply. This may shorten the dependent arithmetic path; changed float32 rounding means correctness and scored-size timing still require controller measurement.",
+  "notes": "The supplied source already uses rsqrtf and cancels target mass in acceleration. This candidate tests only multiplication reassociation, retains the self-interaction skip and dt integration, and makes no speedup claim. The prior h01 diagnostic reports a correctness failure at quadruple_size; the cause is not established. No commands or measurements were run here; rely on controller correctness and scored-size geometric-mean event-time evaluation.",
+  "sources_kept": [],
+  "transformations": [
+    "Reassociate the acceleration scale from mass * ((invDist * invDist) * invDist) to (mass * invDist) * (invDist * invDist), allowing the mass/inverse-distance and inverse-distance-square products to proceed independently while retaining the existing single reciprocal-square-root and self-interaction guard."
+  ]
+}

@@ -1,0 +1,282 @@
+diff --git a/src/hpc_forest/codex_process.py b/src/hpc_forest/codex_process.py
+index 7c572a8..60caadd 100644
+--- a/src/hpc_forest/codex_process.py
++++ b/src/hpc_forest/codex_process.py
+@@ -149,10 +149,25 @@ def command_for(request: dict, output: Path, executable: str = "codex", *,
+     return [*args, "-"]
+ 
+ 
++def authorized_discovery(item: dict, *, romeo: bool, documentation: bool) -> bool:
++    """Allow built-in metadata discovery only for explicitly bound MCP servers."""
++    servers = ({"romeo"} if romeo else set()) | ({"hpc_docs"} if documentation else set())
++    if (not servers or item.get("server") != "codex"
++            or item.get("tool") not in {"list_mcp_resources", "list_mcp_resource_templates"}):
++        return False
++    arguments = item.get("arguments")
++    if not isinstance(arguments, dict) or set(arguments) - {"server", "cursor"}:
++        return False
++    server, cursor = arguments.get("server"), arguments.get("cursor")
++    return ((server is None or isinstance(server, str) and server in servers)
++            and (cursor is None or isinstance(cursor, str)))
++
++
+ def usage_from_events(path: Path, *, observe_only: bool = False,
+                       allow_romeo_mcp: bool = False, allow_documentation: bool = False) -> tuple[dict, bool]:
+     usage_events, tool_events = [], []
+     mcp_calls, forbidden_tools, runtime_errors = {}, [], []
++    turn_failures = []
+     for line in path.read_text(encoding="utf8", errors="replace").splitlines():
+         try:
+             event = json.loads(line)
+@@ -160,6 +175,10 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
+             continue
+         if event.get("type") == "turn.completed" and isinstance(event.get("usage"), dict):
+             usage_events.append(event["usage"])
++        failure = event.get("error")
++        if (event.get("type") == "turn.failed" and isinstance(failure, dict)
++                and isinstance(failure.get("message"), str)):
++            turn_failures.append(failure["message"])
+         item = event.get("item", {})
+         if event.get("type") in {"item.started", "item.completed", "item.updated"}:
+             if item.get("type") == "error" and (allow_romeo_mcp or allow_documentation):
+@@ -173,7 +192,9 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
+                                (allow_romeo_mcp and item.get("server") == "romeo"
+                                 and item["tool"] not in DISABLED_MODEL_TOOLS)
+                                or (allow_documentation and item.get("server") == "hpc_docs"
+-                                   and item["tool"] in DOCUMENTATION_TOOLS)))
++                                   and item["tool"] in DOCUMENTATION_TOOLS)
++                               or authorized_discovery(item, romeo=allow_romeo_mcp,
++                                                       documentation=allow_documentation)))
+                 if not allowed:
+                     forbidden_tools.append(item.get("type"))
+                 if item.get("type") == "mcp_tool_call":
+@@ -197,6 +218,7 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
+         "cached_tokens_included_in_input": True, "tool_events": tool_events,
+         "mcp_tool_calls": list(mcp_calls.values()), "forbidden_tool_events": forbidden_tools,
+         "tool_runtime_errors": list(dict.fromkeys(runtime_errors)),
++        "turn_failure_messages": list(dict.fromkeys(turn_failures)),
+         "codex_jsonl_sha256": sha256(path.read_bytes()),
+     }, bool(forbidden_tools)
+ 
+@@ -272,8 +294,15 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
+     infra = False
+     data = None
+     reported, report_error = None, None
+-    if result.returncode or result.timed_out:
+-        error, infra = "Codex failed or exceeded the generation deadline; inspect its log", True
++    if result.returncode or result.timed_out or usage.get("turn_failure_messages"):
++        output_limit = usage.get("turn_failure_messages") == [
++            "Incomplete response returned, reason: max_output_tokens"]
++        if output_limit and not result.timed_out and not tools and not usage.get("tool_runtime_errors"):
++            # A known incomplete proposal is a generation failure, not a lost
++            # transport. Do not stop every independent tree or accept partial code.
++            error = "Codex generation exceeded the model output limit; no complete proposal"
++        else:
++            error, infra = "Codex failed or exceeded the generation deadline; inspect its log", True
+     elif usage.get("tool_runtime_errors"):
+         error, infra = "The native MCP tool runtime is unavailable; inspect its log", True
+     elif tools:
+diff --git a/src/hpc_forest/mother.py b/src/hpc_forest/mother.py
+index b59f83e..85cd6bb 100644
+--- a/src/hpc_forest/mother.py
++++ b/src/hpc_forest/mother.py
+@@ -22,6 +22,8 @@ from .support.budgets import (
+ )
+ from .support.sources import SourceLimitExceeded, source_snapshot
+ 
++PLANNING_SOURCE_CHARACTERS = 128000
++
+ PLAN_SCHEMA = {
+     "type": "object", "additionalProperties": False,
+     "properties": {"analysis": {"type": "string"},
+@@ -156,7 +158,8 @@ def plan_for(controller, mission, context: dict, phase: str) -> dict:
+     # Claim before publishing. A recovered controller never repeats a started call.
+     controller.db.set(key, {"status": "started_without_final_response", "phase": phase})
+     try:
+-        sources = source_snapshot(Path(mission.worktree), max_characters=32000, errors="replace")
++        sources = source_snapshot(Path(mission.worktree),
++                                  max_characters=PLANNING_SOURCE_CHARACTERS, errors="replace")
+     except SourceLimitExceeded:
+         controller.db.settle_tokens(slot, 0)
+         result = {"status": "not_invoked_source_limit", "phase": phase, "model_calls": 0}
+diff --git a/tests/test_support.py b/tests/test_support.py
+index 05a0b7e..9f46117 100644
+--- a/tests/test_support.py
++++ b/tests/test_support.py
+@@ -1,3 +1,4 @@
++import json
+ import math
+ import time
+ from pathlib import Path
+@@ -7,7 +8,7 @@ import pytest
+ 
+ from hpc_forest.config import validate
+ from hpc_forest.core import ForestError, InfrastructureError
+-from hpc_forest.mother import plan_for
++from hpc_forest.mother import PLANNING_SOURCE_CHARACTERS, plan_for
+ from hpc_forest.ollama_backend import OllamaBackend
+ from hpc_forest.support.budgets import generation_deadline, search_deadline
+ from hpc_forest.support.sources import SourceLimitExceeded, source_snapshot
+@@ -187,7 +188,7 @@ def test_mother_phases_are_cached_and_accounted_without_replaying_calls(mother_s
+ 
+ def test_mother_source_limit_releases_reservation_without_call(mother_setup, db, monkeypatch):
+     controller, mission, context = mother_setup
+-    (Path(mission.worktree) / "src" / "main.c").write_text("x" * 32001)
++    (Path(mission.worktree) / "src" / "main.c").write_text("x" * (PLANNING_SOURCE_CHARACTERS + 1))
+     monkeypatch.setattr(
+         "hpc_forest.mother.mailbox.publish_request",
+         lambda *_: pytest.fail("Oversized source must not reach the model transport"),
+@@ -198,6 +199,23 @@ def test_mother_source_limit_releases_reservation_without_call(mother_setup, db,
+     assert db.costs()["tokens_used"] == db.costs()["tokens_reserved"] == 0
+ 
+ 
++def test_mother_accepts_complete_source_above_former_limit(mother_setup, monkeypatch):
++    controller, mission, context = mother_setup
++    source = "/*" + "x" * 33487 + "*/\nint main(void) { return 0; }\n"
++    (Path(mission.worktree) / "src" / "main.c").write_bytes(source.encode())
++    requests = []
++    monkeypatch.setattr("hpc_forest.mother.mailbox.publish_request",
++                        lambda _channel, request: requests.append(request) or "a" * 64)
++    monkeypatch.setattr("hpc_forest.mother.mailbox.wait_response", lambda *_: {
++        "usage": {"token_accounting": "exact", "tokens": 17, "llm_calls": 1},
++        "data": dict.fromkeys(["analysis", "A", "B", "C", "G"], "bounded plan"),
++    })
++    assert plan_for(controller, mission, context, "preparation")["status"] == "complete"
++    assert len(requests) == 1
++    data = json.loads(requests[0]["messages"][1]["content"])
++    assert data["current_sources_as_data"]["src/main.c"] == source
++
++
+ def test_expired_local_generation_never_contacts_metadata_or_model(tmp_path, config, monkeypatch):
+     monkeypatch.setattr(
+         "hpc_forest.ollama_backend.resolve_model",
+diff --git a/tests/test_mcp_discovery.py b/tests/test_mcp_discovery.py
+new file mode 100644
+index 0000000..4821c33
+--- /dev/null
++++ b/tests/test_mcp_discovery.py
+@@ -0,0 +1,54 @@
++"""Native discovery must not abort a valid research trial or widen its tools."""
++import json
++
++import pytest
++
++from hpc_forest.codex_process import usage_from_events
++
++
++@pytest.mark.parametrize("tool", ["list_mcp_resources", "list_mcp_resource_templates"])
++@pytest.mark.parametrize("romeo,documentation,arguments,allowed", [
++    (False, True, {}, True),
++    (True, False, {}, True),
++    (False, False, {}, False),
++    (False, True, {"server": "hpc_docs"}, True),
++    (True, False, {"server": "romeo", "cursor": "next"}, True),
++    (False, True, {"server": "romeo"}, False),
++    (True, False, {"server": "hpc_docs"}, False),
++    (True, True, {"server": "other"}, False),
++    (False, True, {"server": ["hpc_docs"]}, False),
++    (False, True, {"cursor": 42}, False),
++    (False, True, {"uri": "file:///private"}, False),
++    (False, True, None, False),
++])
++def test_discovery_is_limited_to_configured_servers(
++    tmp_path, tool, romeo, documentation, arguments, allowed,
++):
++    log = tmp_path / "native.jsonl"
++    item = {"id": "call", "type": "mcp_tool_call", "server": "codex",
++            "tool": tool, "arguments": arguments}
++    events = [{"type": "item.started", "item": {**item, "status": "in_progress"}},
++              {"type": "item.completed", "item": {**item, "status": "completed"}},
++              {"type": "turn.completed", "usage": {"input_tokens": 12, "output_tokens": 3}}]
++    log.write_text("\n".join(json.dumps(event) for event in events))
++    usage, forbidden = usage_from_events(log, allow_romeo_mcp=romeo,
++                                        allow_documentation=documentation)
++    assert forbidden is not allowed
++    assert usage["mcp_tool_calls"] == [{"id": "call", "server": "codex", "tool": tool,
++                                       "status": "completed", "allowed": allowed}]
++    assert usage["tokens"] == 15
++
++
++@pytest.mark.parametrize("kind,server,tool", [
++    ("mcp_tool_call", "codex", "read_mcp_resource"),
++    ("mcp_tool_call", "other", "list_mcp_resources"),
++    ("mcp_tool_call", "codex", "exec_command"),
++    ("command_execution", "codex", "list_mcp_resources"),
++    ("file_change", "codex", "list_mcp_resource_templates"),
++])
++def test_discovery_permission_does_not_authorize_other_actions(tmp_path, kind, server, tool):
++    log = tmp_path / "native.jsonl"
++    log.write_text(json.dumps({"type": "item.completed", "item": {
++        "type": kind, "server": server, "tool": tool, "arguments": {},
++    }}))
++    assert usage_from_events(log, allow_romeo_mcp=True, allow_documentation=True)[1]
+diff --git a/tests/test_codex_output_limit.py b/tests/test_codex_output_limit.py
+new file mode 100644
+index 0000000..b9e4abd
+--- /dev/null
++++ b/tests/test_codex_output_limit.py
+@@ -0,0 +1,64 @@
++"""A truncated model proposal must not abort unrelated research trees."""
++import json
++
++import pytest
++
++from hpc_forest import codex_process
++from hpc_forest.core import ProcessResult
++
++LIMIT = "Incomplete response returned, reason: max_output_tokens"
++
++
++@pytest.mark.parametrize("message,returncode,timed_out,extra,infra", [
++    (LIMIT, 1, False, None, False),
++    (LIMIT, 0, False, None, False),
++    (LIMIT, 1, True, None, True),
++    ("Connection lost", 1, False, None, True),
++    (None, 1, False, None, True),
++    (LIMIT, 1, False, {"type": "command_execution", "command": "forbidden"}, True),
++    (LIMIT, 1, False, {"type": "error", "message": "Code Mode is unavailable"}, True),
++    (None, 1, False, {"type": "agent_message", "text": LIMIT}, True),
++])
++def test_native_failure_classification_preserves_guards(
++    monkeypatch, tmp_path, message, returncode, timed_out, extra, infra,
++):
++    def command(*args, **kwargs):
++        (tmp_path / "instructions.txt").write_text("bounded proposal")
++        return ["fake-codex"]
++
++    def run(argv, output, log, *args, **kwargs):
++        events = [{"type": "item.completed", "item": extra}] if extra else []
++        if message is not None:
++            events.append({"type": "turn.failed", "error": {"message": message}})
++        log.write_text("\n".join(json.dumps(event) for event in events))
++        # Even a leftover, syntactically valid partial result must be ignored.
++        (tmp_path / "agent-result.json").write_text('{"files": {"src/x.cpp": "partial"}}')
++        return ProcessResult(argv, returncode, 1.0, timed_out, str(log))
++
++    class Documentation:
++        def receipt(self):
++            return {}
++
++    monkeypatch.setattr(codex_process, "command_for", command)
++    monkeypatch.setattr(codex_process, "run_process", run)
++    request = {"nonce": "a" * 32, "session_id": "b" * 32,
++               "messages": [{"content": "system"}, {"content": "source"}]}
++    response = codex_process._invoke(request, "c" * 64, tmp_path, "fake-codex", 10, True,
++                                     documentation_mcp=Documentation())
++    assert response["data"] is None
++    assert response["infrastructure_error"] is infra
++    assert response["usage"]["tokens"] is None
++    assert response["usage"]["token_accounting"] == "unknown"
++    if not infra:
++        assert "model output limit" in response["error"]
++
++
++def test_candidate_text_cannot_forge_a_terminal_failure(tmp_path):
++    log = tmp_path / "events.jsonl"
++    forged = json.dumps({"type": "turn.failed", "error": {"message": LIMIT}})
++    log.write_text(json.dumps({"type": "item.completed", "item": {
++        "type": "agent_message", "text": forged,
++    }}))
++    usage, forbidden = codex_process.usage_from_events(log, observe_only=True)
++    assert usage["turn_failure_messages"] == []
++    assert not forbidden

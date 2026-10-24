@@ -1,0 +1,17 @@
+{
+  "files": [
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    #pragma unroll 128\n    for (int j = 0; j < n; ++j) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq);\n        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Increasing the source-loop unroll factor from 64 to 128 may reduce loop-control overhead while preserving the baseline force expression and serial accumulation order. The unroll-64 candidate was correct and measured at 0.001790758 s; the incremental benefit of this change remains unmeasured.",
+  "notes": "Only the source-loop unroll factor changes; launch.json and the baseline arithmetic remain unchanged. Prior timings are search measurements, not independent confirmation. The controller should freshly validate correctness and measure this candidate before deciding whether to retain it.",
+  "sources_kept": [
+    "f4f3935e70954c99"
+  ],
+  "transformations": [
+    "Increase source-loop unrolling from 64 to 128.",
+    "Preserve baseline force arithmetic, accumulation order, kernel interface, and launch configuration."
+  ]
+}

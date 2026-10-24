@@ -1,0 +1,17 @@
+{
+  "action": "integrate",
+  "base_id": "bd91ae4cb4c84315",
+  "idea_ids": [],
+  "rationale": "Integration experiment: use the measured, correct T1 tiled candidate (0.000890080 s) as base and incorporate T3's measured reciprocal-distance arithmetic and factor-four unrolling (T3: 0.000899482 s). Preserve the tile's ascending source order and explicit self-skip; do not use T3's split-range loops. The combination is unmeasured and must be freshly checked and timed.\n\nsrc/nbody_kernel.cu:\nstruct Particle{float x,y,z,vx,vy,vz,mass;};\nstruct SourceParticle{float x,y,z,mass;};\nextern \"C\" __global__ void nbody_step_naive(const Particle* in,Particle* out,int n,float dt){\n int i=blockIdx.x*blockDim.x+threadIdx.x; bool active=i<n;\n Particle target; if(active) target=in[i];\n extern __shared__ SourceParticle tile[];\n const float G=1.0f,soft=0.001f;\n float fx=0.0f,fy=0.0f,fz=0.0f;\n for(int base=0;base<n;base+=blockDim.x){\n  int count=n-base; if(count>blockDim.x) count=blockDim.x;\n  int load=base+threadIdx.x;\n  if(load<n){Particle q=in[load]; tile[threadIdx.x]=SourceParticle{q.x,q.y,q.z,q.mass};}\n  __syncthreads();\n  if(active){\n#pragma unroll 4\n   for(int o=0;o<count;++o){\n    int j=base+o; if(i==j) continue;\n    SourceParticle q=tile[o];\n    float dx=q.x-target.x,dy=q.y-target.y,dz=q.z-target.z;\n    float r2=dx*dx+dy*dy+dz*dz+soft,inv=rsqrtf(r2);\n    float f=(G*target.mass*q.mass)*inv*inv*inv;\n    fx+=f*dx; fy+=f*dy; fz+=f*dz;\n   }\n  }\n  __syncthreads();\n }\n if(!active) return;\n target.vx+=(fx/target.mass)*dt; target.vy+=(fy/target.mass)*dt; target.vz+=(fz/target.mass)*dt;\n target.x+=target.vx*dt; target.y+=target.vy*dt; target.z+=target.vz*dt;\n out[i]=target;\n}\n\nsrc/launch.json:\n{\"block\":128,\"items_per_block\":128,\"shared_memory_bytes\":2048}",
+  "read": {
+    "ids": [],
+    "offset": 0,
+    "operation": "none",
+    "path": "",
+    "query": ""
+  },
+  "source_ids": [
+    "bd91ae4cb4c84315",
+    "fd180002914c485c"
+  ]
+}

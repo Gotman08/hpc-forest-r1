@@ -1,0 +1,267 @@
+[
+  {
+    "condition": "775815",
+    "job_id": "780675",
+    "ordinal": 1,
+    "id": "a8795a3f5dd140e9",
+    "role": "T1",
+    "status": "valid",
+    "reason": "",
+    "created": 1792756326.840498,
+    "elapsed_seconds": 197.04054307937622,
+    "evaluated_at": 1792756871.6699066,
+    "measured_elapsed_seconds": 741.8699517250061,
+    "seconds": 0.0011331403584821822,
+    "score": 0.6201968205488412,
+    "base_search_seconds": 0.0018503532502855123,
+    "gain_vs_base_pct": 38.760863186132866,
+    "best_research_before_seconds": 0.0018503532502855123,
+    "best_research_after_seconds": 0.0011331403584821822,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "6f2654ac59cb6fcc13b6d506feefd5e6ae26a559",
+    "base_commit": "22138f39a9036399442f78956289de1c33a07b3d",
+    "variant_id": "87d7dd6afadce4ae",
+    "patch": "diffs/775815/a8795a3f5dd140e9.patch",
+    "hypothesis": "Cooperatively stage each 256-source tile's x, y, z, and mass values in 4 KiB of static shared memory so the block's output threads reuse them instead of repeatedly fetching those source fields from global memory. The sequential pairwise arithmetic and one-output-per-active-thread strategy remain close to baseline; barriers and shared-memory occupancy costs may offset the reduced global loads, so this is a performance hypothesis for measurement.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Stage source x, y, z, and mass in four 256-element shared-memory arrays, loading each tile cooperatively.",
+        "Synchronize after tile loads and after tile consumption so all output lanes, including tail-block lanes, safely participate before shared storage is reused.",
+        "Keep the source-particle accumulation in ascending tile/source order and guard output work and writes with i < n."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "775815",
+    "job_id": "780675",
+    "ordinal": 2,
+    "id": "fcfebc51a67f48d7",
+    "role": "T2",
+    "status": "valid",
+    "reason": "",
+    "created": 1792756326.877397,
+    "elapsed_seconds": 197.07744216918945,
+    "evaluated_at": 1792756884.5682242,
+    "measured_elapsed_seconds": 754.7682693004608,
+    "seconds": 0.002745536300643952,
+    "score": 0.40261046959044094,
+    "base_search_seconds": 0.0018503532502855123,
+    "gain_vs_base_pct": -48.37903520424067,
+    "best_research_before_seconds": 0.0011331403584821822,
+    "best_research_after_seconds": 0.0011331403584821822,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "f63c9b81df70aac6a75035827434cbdb26a3afac",
+    "base_commit": "22138f39a9036399442f78956289de1c33a07b3d",
+    "variant_id": "eb38eca5fee247a4",
+    "patch": "diffs/775815/fcfebc51a67f48d7.patch",
+    "hypothesis": "Giving each thread two outputs lets it load each source particle's position and mass once and reuse those values for both targets. Mapping the targets to threadIdx.x and threadIdx.x + blockDim.x preserves contiguous lane accesses for each output group. This may reduce repeated source loads, while the additional target state and accumulators may increase register pressure; official measurements are needed to assess the tradeoff.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Assign two output particles per thread, with the second target at first + blockDim.x so each target group remains contiguous across lanes.",
+        "Stream each source particle's position and mass once per thread and reuse the values for both target force calculations.",
+        "Maintain separate target states and force accumulators; guard the second target for partial groups and write each valid output once.",
+        "Set items_per_block to 512 while retaining block=256 and shared_memory_bytes=0."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "775815",
+    "job_id": "780675",
+    "ordinal": 3,
+    "id": "253c00e28c904a54",
+    "role": "T3",
+    "status": "incorrect",
+    "reason": "Protected correctness checks failed",
+    "created": 1792756326.908206,
+    "elapsed_seconds": 197.10825109481812,
+    "evaluated_at": 1792757033.6505866,
+    "measured_elapsed_seconds": 903.8506317138672,
+    "seconds": null,
+    "score": 0.0,
+    "base_search_seconds": 0.0018503532502855123,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.0011331403584821822,
+    "best_research_after_seconds": 0.0011331403584821822,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "7148961870199c9bcce2304b698d6b995bada423",
+    "base_commit": "22138f39a9036399442f78956289de1c33a07b3d",
+    "variant_id": "2af54be553b5fe2c",
+    "patch": "diffs/775815/253c00e28c904a54.patch",
+    "hypothesis": "With the same per-thread mapping, global-memory accesses, rsqrtf, and target-mass cancellation, forming (G * neighbor_mass * invDist) and (invDist * invDist) independently may shorten the dependent multiplication chain for each pair. This is a performance hypothesis; the changed float32 rounding must pass the independent oracle.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Keep one output per thread, the pairwise global-memory strategy, explicit rsqrtf, G=1, softening, update order, and the self-interaction skip.",
+        "Reorder the reciprocal-cube multiplications so the neighbor-mass/invDist product and invDist-squared product can be formed independently before their final multiplication."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "775815",
+    "job_id": "780675",
+    "ordinal": 4,
+    "id": "42ddd5d53dc94097",
+    "role": "T4",
+    "status": "valid",
+    "reason": "",
+    "created": 1792756326.9387507,
+    "elapsed_seconds": 197.13879585266113,
+    "evaluated_at": 1792756896.6359766,
+    "measured_elapsed_seconds": 766.8360216617584,
+    "seconds": 0.001851955682455682,
+    "score": 0.4997835901596435,
+    "base_search_seconds": 0.0018503532502855123,
+    "gain_vs_base_pct": -0.08660141894107909,
+    "best_research_before_seconds": 0.0011331403584821822,
+    "best_research_after_seconds": 0.0011331403584821822,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "08105ca24041a47613878a4745fe1065b1fe0007",
+    "base_commit": "22138f39a9036399442f78956289de1c33a07b3d",
+    "variant_id": "b76f91ac26d66cec",
+    "patch": "diffs/775815/42ddd5d53dc94097.patch",
+    "hypothesis": "Avec block=256 et items_per_block=128, la grille lance au moins N threads et l’indice global linéaire attribue chaque sortie valide à un seul thread; le garde traite les tails et les threads excédentaires. Cette géométrie dépareillée ajoute des threads inactifs, donc seule la mesure de la moyenne géométrique peut dire si elle est utile.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configurer block=256, items_per_block=128 et shared_memory_bytes=0; le choix block >= items_per_block garantit assez de threads avec grid.x=ceil(N/items_per_block).",
+        "Utiliser l’indice global linéaire non signé blockIdx.x*blockDim.x+threadIdx.x, puis retourner si i>=n: les indices 0..N-1 sont chacun traités une fois et les threads de queue n’écrivent rien."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "775815",
+    "job_id": "780675",
+    "ordinal": 5,
+    "id": "a8472c694eaa4bfe",
+    "role": "G",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757119.876141,
+    "elapsed_seconds": 990.0761861801147,
+    "evaluated_at": 1792757208.1818805,
+    "measured_elapsed_seconds": 1078.3819255828857,
+    "seconds": 0.0011249001639228504,
+    "score": 0.6219145036349258,
+    "base_search_seconds": 0.0011331403584821822,
+    "gain_vs_base_pct": 0.7271998122429735,
+    "best_research_before_seconds": 0.0011331403584821822,
+    "best_research_after_seconds": 0.0011331403584821822,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "071734546436a268a25633a36ef99f97e50219b2",
+    "base_commit": "6f2654ac59cb6fcc13b6d506feefd5e6ae26a559",
+    "variant_id": "aa7167d0325f9e32",
+    "patch": "diffs/775815/a8472c694eaa4bfe.patch",
+    "hypothesis": "Increasing the shared source tile from 256 to 512 may halve tile-loop and barrier iterations while remaining within the shared-memory limit; the larger shared allocation and longer inner loop may offset that benefit. This is an unmeasured hypothesis, not a claimed speedup.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Retain T1's cooperative staging of source positions and masses in shared memory.",
+        "Increase the source tile size from 256 to 512; leave the kernel interface, pairwise arithmetic, output mapping, and launch configuration unchanged."
+      ]
+    },
+    "parent_id": null,
+    "sources": [
+      "a8795a3f5dd140e9"
+    ],
+    "source_commits": [
+      "6f2654ac59cb6fcc13b6d506feefd5e6ae26a559"
+    ],
+    "depth": 1
+  },
+  {
+    "condition": "775815",
+    "job_id": "780675",
+    "ordinal": 6,
+    "id": "e03a3d880aa74e0e",
+    "role": "G",
+    "status": "valid",
+    "reason": "",
+    "created": 1792757304.4028964,
+    "elapsed_seconds": 1174.6029415130615,
+    "evaluated_at": 1792757469.335073,
+    "measured_elapsed_seconds": 1339.5351181030273,
+    "seconds": 0.0019851423390623082,
+    "score": 0.4824287258795003,
+    "base_search_seconds": 0.0011249001639228504,
+    "gain_vs_base_pct": -76.4727575591727,
+    "best_research_before_seconds": 0.0011331403584821822,
+    "best_research_after_seconds": 0.0011331403584821822,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "f01dd7b2ac3c7dc8bebdee90e3db17cf058265f9",
+    "base_commit": "071734546436a268a25633a36ef99f97e50219b2",
+    "variant_id": "2a4b0ecc223f3646",
+    "patch": "diffs/775815/e03a3d880aa74e0e.patch",
+    "hypothesis": "Correcting the second target's z-position update should address the observed negative-dt mismatch while retaining shared-memory tiling and two-output mapping. The repaired candidate remains unvalidated and must pass the full correctness and timing protocols.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Correct the second target's z-position update to use its updated z velocity.",
+        "Retain 512-element cooperative shared-memory staging and two outputs per thread with separate accumulators.",
+        "Keep all threads participating in shared-memory barriers and preserve each target's source accumulation order."
+      ]
+    },
+    "parent_id": null,
+    "sources": [
+      "a8472c694eaa4bfe",
+      "fcfebc51a67f48d7"
+    ],
+    "source_commits": [
+      "071734546436a268a25633a36ef99f97e50219b2",
+      "f63c9b81df70aac6a75035827434cbdb26a3afac"
+    ],
+    "depth": 1
+  }
+]

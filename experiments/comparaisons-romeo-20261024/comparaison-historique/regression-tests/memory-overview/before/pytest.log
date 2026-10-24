@@ -1,0 +1,29 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_______ test_tree_summary_keeps_valid_slow_alternatives_after_a_failure _______
+
+memory_db = (<hpc_forest.registry.Registry object at 0x000001D86FF7B770>, <hpc_forest.memory_store.MemoryStore object at 0x000001D...-23/ce-que-je-voudrais-que-tu/work/regression-snapshots/memory-overview-before/tests/test_tree_summary_keeps_valid_0'))
+
+    def test_tree_summary_keeps_valid_slow_alternatives_after_a_failure(memory_db):
+        db, store, config, root = memory_db
+        db.set("forest_plan:1", {"children": [{"role": "T1", "subject": "Topic", "objective": "Explore"}]})
+        fact(store, "best", seconds=1)
+        fact(store, "slow", seconds=9, claim="A different program may combine well")
+        fact(store, "latest-failed", seconds=None, correct=False)
+        fact(store, "unmeasured", seconds=None, correct=None)
+        fact(store, "development", kind="development")
+        fact(store, "other-protocol", protocol="q", seconds=.01)
+        fact(store, "sibling", role="T2", seconds=.001)
+        with db.connection:
+            db.connection.execute("UPDATE memory_facts SET created=10 WHERE id='latest-failed'")
+        with MemoryReader(root, mission("G"), config, "p") as reader:
+            page = reader.catalog()
+        item = page["items"][0]
+>       assert item["results"] == {"trials": 4, "valid": 2, "incorrect": 1, "unmeasured": 1}
+               ^^^^^^^^^^^^^^^
+E       KeyError: 'results'
+
+tests\test_memory_overview.py:29: KeyError
+=========================== short test summary info ===========================
+FAILED tests/test_memory_overview.py::test_tree_summary_keeps_valid_slow_alternatives_after_a_failure
+1 failed in 2.47s

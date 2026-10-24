@@ -1,0 +1,161 @@
+[
+  {
+    "id": "c8c01cd6351d4360",
+    "role": "T1",
+    "state": "completed",
+    "mission": {
+      "base_commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+      "budget_phase": "search",
+      "delegation_parent": "R/T1",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Staging each 256-particle source tile in shared memory lets 256 target threads reuse the tile while retaining one thread per target and the original interaction order. This may reduce repeated source loads, though the synchronization cost per tile could offset gains, particularly at smaller sizes.",
+      "id": "c8c01cd6351d4360",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T1",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/launch.json",
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Stage up to 256 source particles per block in dynamic shared memory, allocated as 256 * 28 bytes.",
+          "Keep one thread per target; traverse source tiles in increasing order and skip self-interaction by index.",
+          "Synchronize all threads before reading each staged tile and before reusing shared storage; keep inactive tail threads participating in barriers.",
+          "Retain the original integration and complete Particle output state."
+        ]
+      },
+      "tree_id": "e1:T1",
+      "trial_id": "01M5M7VC9PPW8C7ZBHM9ZGYA3P",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/worktrees/c8c01cd6351d4360"
+    },
+    "result": {
+      "binary_sha256": "da838a1c3d180b9c4e0698006cf393409050cfb8646735f32baa3e2c89d07256",
+      "cache_key": "a314026add6a7517e5fa4ffed1dee56f770dad4469ee8d1261b6a661b27f203b",
+      "commit": "626f10d1d8cebc39cee5e03ecb4b27d211bb315e",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/c8c01cd6351d4360/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/c8c01cd6351d4360/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/c8c01cd6351d4360/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/c8c01cd6351d4360/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/c8c01cd6351d4360/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.001079250349358449,
+      "reason": "",
+      "score": 0.6322065247371921,
+      "status": "valid",
+      "times": [
+        0.0010790473644068947,
+        0.0010792863156786842,
+        0.0010794173679897678
+      ],
+      "tree_hash": "ebd9b51cce3bff8836d69fc5ab7916827db55c4c"
+    },
+    "created": 1792754430.2630515
+  },
+  {
+    "id": "5c313ff0a7e54670",
+    "role": "T2",
+    "state": "completed",
+    "mission": {
+      "base_commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+      "budget_phase": "search",
+      "delegation_parent": "R/T2",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Assigning one CTA to each target row and striding its threads over source indices exposes row-level CTA parallelism while reducing the per-thread serial source loop. Warp shuffles and a small shared-memory reduction combine the force components; changing items_per_block to 1 requests one CTA per row. This is a performance hypothesis, not a measured result.",
+      "id": "5c313ff0a7e54670",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T2",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/launch.json",
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Changed the launch mapping to one 256-thread CTA per target row by setting items_per_block to 1.",
+          "Distributed source indices across CTA threads with a blockDim.x stride, skipping self-interactions and guarding the n tail.",
+          "Reduced per-thread force sums within each warp using shuffle-down operations, then reduced eight warp sums through shared memory and warp 0."
+        ]
+      },
+      "tree_id": "e1:T2",
+      "trial_id": "01M5M7VCANRSXXBF4AZ91VQNPS",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/worktrees/5c313ff0a7e54670"
+    },
+    "result": {
+      "binary_sha256": "6e121154bf8b12b774ac6a0ed2f7dd363da5a3721178840e01f9ef7276fe2214",
+      "cache_key": "4406cbd4a84a95200599e3ff017935def099302bcd417a6a722544ac423df412",
+      "commit": "072048c463a8593e353603bb047de6f557c940f5",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/5c313ff0a7e54670/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/5c313ff0a7e54670/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/5c313ff0a7e54670/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/5c313ff0a7e54670/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/logs/e1/5c313ff0a7e54670/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.00012643742423986977,
+      "reason": "",
+      "score": 0.9361936117565764,
+      "status": "valid",
+      "times": [
+        0.0001261729342150962,
+        0.0001264469304192937,
+        0.00012669240808521937
+      ],
+      "tree_hash": "8cabce9761ca632a5e4e8df4692c657c4a6b48e4"
+    },
+    "created": 1792754430.2942877
+  },
+  {
+    "id": "11ab1d9e992f420b",
+    "role": "T3",
+    "state": "infrastructure_error",
+    "mission": {
+      "base_commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+      "budget_phase": "search",
+      "delegation_parent": "R/T3",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Reassociating mass times inverse-distance cubed as (mass * invDist) * (invDist * invDist) keeps one rsqrtf and the same multiplication count while creating two independent products before the final scale multiply. This may shorten the dependent arithmetic path; changed float32 rounding means correctness and scored-size timing still require controller measurement.",
+      "id": "11ab1d9e992f420b",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T3",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Reassociate the acceleration scale from mass * ((invDist * invDist) * invDist) to (mass * invDist) * (invDist * invDist), allowing the mass/inverse-distance and inverse-distance-square products to proceed independently while retaining the existing single reciprocal-square-root and self-interaction guard."
+        ]
+      },
+      "tree_id": "e1:T3",
+      "trial_id": "01M5M7VCBGWWB29QNGQE6698YK",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-775521-55ed0c561b8d4e8187821b0bbc7a4b29/results-780641/cuda-nbody/worktrees/11ab1d9e992f420b"
+    },
+    "result": {
+      "binary_sha256": null,
+      "cache_key": null,
+      "commit": null,
+      "correct": null,
+      "logs": [],
+      "mean_seconds": null,
+      "reason": "The local model worker stopped sending heartbeats",
+      "score": null,
+      "status": "infrastructure_error",
+      "times": [],
+      "tree_hash": null
+    },
+    "created": 1792754430.3210855
+  }
+]

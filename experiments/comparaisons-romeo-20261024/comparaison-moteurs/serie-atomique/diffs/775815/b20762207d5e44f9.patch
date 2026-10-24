@@ -1,0 +1,58 @@
+diff --git a/src/launch.json b/src/launch.json
+index 1c20ca2..4545b6d 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+ {
+   "block": 128,
+   "items_per_block": 128,
+-  "shared_memory_bytes": 2048
++  "shared_memory_bytes": 4096
+ }
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index 677e7cc..af1b606 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -15,6 +15,7 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     const int tid = threadIdx.x;
+     const int i = blockIdx.x * blockDim.x + tid;
+     const bool active = i < n;
++    const int tile_capacity = 2 * blockDim.x;
+ 
+     Particle target;
+     if (active) {
+@@ -31,15 +32,14 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     int tile_start = 0;
+     while (tile_start < n) {
+         const int remaining = n - tile_start;
+-        const int tile_count = remaining < blockDim.x ? remaining : blockDim.x;
+-        const int source_index = tile_start + tid;
+-
+-        if (tid < tile_count) {
+-            const Particle source = in[source_index];
+-            tile[tid].x = source.x;
+-            tile[tid].y = source.y;
+-            tile[tid].z = source.z;
+-            tile[tid].mass = source.mass;
++        const int tile_count = remaining < tile_capacity ? remaining : tile_capacity;
++
++        for (int source_offset = tid; source_offset < tile_count; source_offset += blockDim.x) {
++            const Particle source = in[tile_start + source_offset];
++            tile[source_offset].x = source.x;
++            tile[source_offset].y = source.y;
++            tile[source_offset].z = source.z;
++            tile[source_offset].mass = source.mass;
+         }
+         __syncthreads();
+ 
+@@ -64,8 +64,8 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+         }
+         __syncthreads();
+ 
+-        if (remaining <= blockDim.x) break;
+-        tile_start += blockDim.x;
++        if (remaining <= tile_capacity) break;
++        tile_start += tile_capacity;
+     }
+ 
+     if (active) {

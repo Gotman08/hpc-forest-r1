@@ -1,0 +1,132 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "{\n  \"block\": 512,\n  \"items_per_block\": 512,\n  \"shared_memory_bytes\": 0\n}\n",
+        "path": "src/launch.json"
+      },
+      {
+        "content": "// Structure \"Array of Structures\" (AoS).\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n#define SOURCE_TILE_SIZE 2048\n\n// Each thread computes one target while the CTA reuses staged source fields.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    __shared__ float source_x[SOURCE_TILE_SIZE];\n    __shared__ float source_y[SOURCE_TILE_SIZE];\n    __shared__ float source_z[SOURCE_TILE_SIZE];\n    __shared__ float source_mass[SOURCE_TILE_SIZE];\n\n    for (int tile_start = 0; tile_start < n;) {\n        int tile_count = n - tile_start;\n        if (tile_count > SOURCE_TILE_SIZE) {\n            tile_count = SOURCE_TILE_SIZE;\n        }\n\n        for (int k = threadIdx.x; k < tile_count; k += blockDim.x) {\n            int j = tile_start + k;\n            source_x[k] = in[j].x;\n            source_y[k] = in[j].y;\n            source_z[k] = in[j].z;\n            source_mass[k] = in[j].mass;\n        }\n        __syncthreads();\n\n        if (i < n) {\n            for (int k = 0; k < tile_count; ++k) {\n                int j = tile_start + k;\n                if (i == j) continue;\n\n                float dx = source_x[k] - in[i].x;\n                float dy = source_y[k] - in[i].y;\n                float dz = source_z[k] - in[i].z;\n\n                float distSq = dx * dx + dy * dy + dz * dz + softening;\n                float dist = sqrtf(distSq);\n\n                float f = (G * in[i].mass * source_mass[k]) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n\n        tile_start += tile_count;\n    }\n\n    if (i < n) {\n        Particle p = in[i];\n        p.vx += (fx / p.mass) * dt;\n        p.vy += (fy / p.mass) * dt;\n        p.vz += (fz / p.mass) * dt;\n\n        p.x += p.vx * dt;\n        p.y += p.vy * dt;\n        p.z += p.vz * dt;\n\n        out[i] = p;\n    }\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "The selected parent stages 1024 sources for 256 targets per CTA. A 2048-source tile paired with 512 targets per CTA halves the source-tile iterations at large sizes and increases source reuse per CTA. The four shared arrays use 32,768 bytes, below the 49,152-byte limit. Fewer CTAs and greater shared-memory use may offset those benefits; controller timing must determine the result.",
+    "notes": "This is a single candidate, not a completed sweep. It preserves one thread per target, force arithmetic, self-interaction exclusion, and bounds checks for partial source tiles and target tails. The selected parent was correct with a three-repeat mean of 0.00112331 s and score 0.62254; a prior 768-source-tile candidate was correct with a 0.00102003 s mean and score 0.64492. These observations do not establish this candidate's performance. Request full correctness and official per-size geometric-mean timing evaluation.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Increase SOURCE_TILE_SIZE from 1024 to 2048; four source arrays consume 32,768 bytes of shared memory.",
+      "Set block and items_per_block to 512 so each CTA maps one thread to each target and reuses each staged source tile across up to 512 targets.",
+      "Preserve cooperative guarded source loads, partial-tile handling, target-tail guards, self-interaction exclusion, synchronization, and the existing force/update arithmetic."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "f99545b79fe64db2be8944d390ac807a",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "4e49e5eb274916e06d627c99b19f5eac015461f91de7037ca98ee68a0b02cd5e",
+  "session_id": "e8b7f643798c4e25be00ea7d5f6e8b05",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "d40b8c88e1a291e858b53cd6ba2c346a9b5effe43fc9a8eb0d31c33ddfc828f3",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4224,
+        "input_tokens": 23093,
+        "output_tokens": 4385,
+        "reasoning_output_tokens": 3067
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "b272c1b4f6c3bb75317285183e372b8e93a102fdbcc24bb2b17884d5fb685425",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "62559e021f254a31-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "b5e5fa1eb4f5434d",
+            "193cb62dae284e4d"
+          ],
+          "status": "applied",
+          "summary": "Proposed one bounded tile/block-size candidate against the selected parent while preserving the specified arithmetic and safety checks."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "applied",
+          "summary": "Used the supplied GH200/CUDA 12.6.3 target facts and checked the candidate's 32,768-byte static shared-memory footprint against the 49,152-byte limit."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The candidate uses existing static shared-memory and synchronization constructs; no uncertain API or hardware property beyond the supplied target and memory limit informed the change."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "b5e5fa1eb4f5434d",
+            "193cb62dae284e4d"
+          ],
+          "status": "applied",
+          "summary": "Compared only available parent and prior-candidate observations; this candidate remains unmeasured and requires controller correctness and official timing evaluation."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "f99545b79fe64db2be8944d390ac807a",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "4e49e5eb274916e06d627c99b19f5eac015461f91de7037ca98ee68a0b02cd5e",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "e8b7f643798c4e25be00ea7d5f6e8b05"
+    },
+    "observed_tokens": 27478,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 27478,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

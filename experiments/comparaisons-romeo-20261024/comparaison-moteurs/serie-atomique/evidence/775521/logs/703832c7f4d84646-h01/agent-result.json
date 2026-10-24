@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 8,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int warp_width = 32;\n    const int warps_per_block = blockDim.x / warp_width;\n    const int warp_index = static_cast<int>(threadIdx.x) / warp_width;\n    const int lane = static_cast<int>(threadIdx.x) % warp_width;\n    const int target = static_cast<int>(blockIdx.x) * warps_per_block + warp_index;\n\n    // All lanes in a warp share target, so an inactive target exits uniformly.\n    if (target >= n) return;\n\n    const Particle target_particle = in[target];\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Each lane accumulates source indices separated by one warp width.\n    for (int j = lane; j < n;) {\n        if (j != target) {\n            const Particle source = in[j];\n            const float dx = source.x - target_particle.x;\n            const float dy = source.y - target_particle.y;\n            const float dz = source.z - target_particle.z;\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (target_particle.mass * source.mass) / (distSq * dist);\n\n            fx += f * dx;\n            fy += f * dy;\n            fz += f * dz;\n        }\n\n        // Avoid signed overflow when advancing the final source index.\n        if (n - j <= warp_width) break;\n        j += warp_width;\n    }\n\n    // Every lane of a valid warp participates in all three reductions.\n    const unsigned int mask = 0xffffffffu;\n    fx += __shfl_down_sync(mask, fx, 16);\n    fy += __shfl_down_sync(mask, fy, 16);\n    fz += __shfl_down_sync(mask, fz, 16);\n    fx += __shfl_down_sync(mask, fx, 8);\n    fy += __shfl_down_sync(mask, fy, 8);\n    fz += __shfl_down_sync(mask, fz, 8);\n    fx += __shfl_down_sync(mask, fx, 4);\n    fy += __shfl_down_sync(mask, fy, 4);\n    fz += __shfl_down_sync(mask, fz, 4);\n    fx += __shfl_down_sync(mask, fx, 2);\n    fy += __shfl_down_sync(mask, fy, 2);\n    fz += __shfl_down_sync(mask, fz, 2);\n    fx += __shfl_down_sync(mask, fx, 1);\n    fy += __shfl_down_sync(mask, fy, 1);\n    fz += __shfl_down_sync(mask, fz, 1);\n\n    if (lane == 0) {\n        Particle p = target_particle;\n        p.vx += (fx / p.mass) * dt;\n        p.vy += (fy / p.mass) * dt;\n        p.vz += (fz / p.mass) * dt;\n        p.x += p.vx * dt;\n        p.y += p.vy * dt;\n        p.z += p.vz * dt;\n        out[target] = p;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Attribuer une cible à chaque warp et répartir ses sources entre les lanes expose du parallélisme intra-cible, au prix d'une réduction par warp et d'un ordre de sommation différent. Avec 256 threads, chaque CTA traite 8 cibles, donc items_per_block passe à 8.",
+  "notes": "Le masque complet est utilisé parce que chaque cible valide occupe un warp complet avec le bloc configuré à 256 threads; le test de cible est uniforme au sein du warp, y compris dans la queue. Chaque source reste traitée sauf l'auto-interaction. L'ordre d'accumulation change : correction et temps sur les trois tailles doivent être évalués par le contrôleur. Aucune commande ni mesure n'a été exécutée.",
+  "sources_kept": [],
+  "transformations": [
+    "Attribuer une cible à chaque warp et faire parcourir aux lanes des indices source distincts, avec accumulation locale des trois composantes.",
+    "Réduire fx, fy et fz par warp avec un masque complet; garder l'auto-interaction sans contribution et préserver le traitement des queues.",
+    "Régler items_per_block à 8 cibles pour un CTA de 256 threads, soit 8 warps."
+  ]
+}

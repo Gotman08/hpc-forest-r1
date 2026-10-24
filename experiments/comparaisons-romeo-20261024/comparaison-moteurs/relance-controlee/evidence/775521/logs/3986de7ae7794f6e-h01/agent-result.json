@@ -1,0 +1,18 @@
+{
+  "files": [
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// The launch uses 256 threads and 256 target items per block.\n// Each source tile is loaded once per CTA and reused by its target threads.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int tid = threadIdx.x;\n    const int i = blockIdx.x * blockDim.x + tid;\n    const bool active = i < n;\n\n    Particle target{};\n    if (active) {\n        target = in[i];\n    }\n\n    __shared__ float tileX[256];\n    __shared__ float tileY[256];\n    __shared__ float tileZ[256];\n    __shared__ float tileMass[256];\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int tileStart = 0; tileStart < n; tileStart += 256) {\n        const int sourceIndex = tileStart + tid;\n        if (sourceIndex < n) {\n            const Particle source = in[sourceIndex];\n            tileX[tid] = source.x;\n            tileY[tid] = source.y;\n            tileZ[tid] = source.z;\n            tileMass[tid] = source.mass;\n        } else {\n            tileX[tid] = 0.0f;\n            tileY[tid] = 0.0f;\n            tileZ[tid] = 0.0f;\n            tileMass[tid] = 0.0f;\n        }\n        __syncthreads();\n\n        if (active) {\n            int tileCount = n - tileStart;\n            if (tileCount > 256) {\n                tileCount = 256;\n            }\n            for (int k = 0; k < tileCount; ++k) {\n                const int j = tileStart + k;\n                if (i == j) {\n                    continue;\n                }\n\n                const float dx = tileX[k] - target.x;\n                const float dy = tileY[k] - target.y;\n                const float dz = tileZ[k] - target.z;\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * target.mass * tileMass[k]) / (distSq * dist);\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n    }\n\n    if (active) {\n        target.vx += (fx / target.mass) * dt;\n        target.vy += (fy / target.mass) * dt;\n        target.vz += (fz / target.mass) * dt;\n        target.x += target.vx * dt;\n        target.y += target.vy * dt;\n        target.z += target.vz * dt;\n        out[i] = target;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Staging source positions and masses once per 256-thread CTA should reduce repeated global source loads across target threads while preserving the reference force arithmetic. This is an unmeasured candidate; controller correctness and timing results are required.",
+  "notes": "The static shared-memory tile uses 4 KiB. The unchanged launch configuration is block=256, items_per_block=256, shared_memory_bytes=0; it matches this implementation. All threads reach both barriers, including inactive target lanes in a partial final block. No candidate measurement or correctness result is available yet.",
+  "sources_kept": [
+    "baseline-e1"
+  ],
+  "transformations": [
+    "Stage source x, y, z, and mass in four 256-element shared-memory arrays, reusing each loaded source across a CTA.",
+    "Retain the target particle in registers and preserve the reference force expression, self-exclusion, update order, and exact mass copy.",
+    "Keep the existing 256-thread, 256-items-per-block launch configuration; handle incomplete source and target tiles without skipping block barriers."
+  ]
+}

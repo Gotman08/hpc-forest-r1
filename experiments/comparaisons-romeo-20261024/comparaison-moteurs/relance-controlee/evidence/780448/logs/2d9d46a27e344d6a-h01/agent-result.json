@@ -1,0 +1,18 @@
+{
+  "files": [
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const Particle initial = in[i];\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int j = 0; j < n; ++j) {\n        if (i == j) continue;\n\n        const float dx = in[j].x - initial.x;\n        const float dy = in[j].y - initial.y;\n        const float dz = in[j].z - initial.z;\n        const float distSq = dx * dx + dy * dy + dz * dz + 0.001f;\n        const float invDist = rsqrtf(distSq);\n        const float scale = in[j].mass * (invDist * invDist * invDist);\n\n        fx += scale * dx;\n        fy += scale * dy;\n        fz += scale * dz;\n    }\n\n    Particle result = initial;\n    result.vx += fx * dt;\n    result.vy += fy * dt;\n    result.vz += fz * dt;\n    result.x += result.vx * dt;\n    result.y += result.vy * dt;\n    result.z += result.vz * dt;\n\n    out[i] = result;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Replacing the per-pair square root and division with rsqrtf-based inverse-distance cubing, while algebraically cancelling the target mass, may reduce arithmetic cost. Correctness and performance remain unmeasured for this candidate.",
+  "notes": "Adapted the arithmetic hypothesis from T2; its trial had an infrastructure error and provided no source or measured result. Retained baseline-e1 as the only measured correct source and left src/launch.json unchanged. The candidate must be freshly compiled, checked and timed; no speedup or correctness claim is made.",
+  "sources_kept": [
+    "baseline-e1"
+  ],
+  "transformations": [
+    "Keep one thread per output particle and load its initial state once for reuse.",
+    "Use rsqrtf(distSq) and its cube to compute inverse-distance cubed without sqrtf and division.",
+    "Cancel the target-mass factor algebraically when accumulating acceleration; retain the self-interaction skip, softening, update order, full-state output, and exact copied mass."
+  ]
+}

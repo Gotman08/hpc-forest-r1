@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 512,\n  \"items_per_block\": 512,\n  \"shared_memory_bytes\": 8192\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int thread = threadIdx.x;\n    const int i = blockIdx.x * blockDim.x + thread;\n\n    extern __shared__ float tile[];\n    float* shared_x = tile;\n    float* shared_y = shared_x + blockDim.x;\n    float* shared_z = shared_y + blockDim.x;\n    float* shared_mass = shared_z + blockDim.x;\n\n    Particle target;\n    if (i < n) {\n        target = in[i];\n    }\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    int base = 0;\n    while (base < n) {\n        const int remaining = n - base;\n        const int tile_count = remaining < blockDim.x ? remaining : blockDim.x;\n\n        if (thread < tile_count) {\n            const int source = base + thread;\n            shared_x[thread] = in[source].x;\n            shared_y[thread] = in[source].y;\n            shared_z[thread] = in[source].z;\n            shared_mass[thread] = in[source].mass;\n        }\n        __syncthreads();\n\n        if (i < n) {\n            for (int offset = 0; offset < tile_count; ++offset) {\n                const int j = base + offset;\n                if (i == j) continue;\n\n                float dx = shared_x[offset] - target.x;\n                float dy = shared_y[offset] - target.y;\n                float dz = shared_z[offset] - target.z;\n\n                float distSq = dx * dx + dy * dy + dz * dz + softening;\n                float dist = sqrtf(distSq);\n\n                float f = (G * target.mass * shared_mass[offset]) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n        base += tile_count;\n    }\n\n    if (i < n) {\n        Particle p = target;\n        p.vx += (fx / p.mass) * dt;\n        p.vy += (fy / p.mass) * dt;\n        p.vz += (fz / p.mass) * dt;\n\n        p.x += p.vx * dt;\n        p.y += p.vy * dt;\n        p.z += p.vz * dt;\n\n        out[i] = p;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Une tuile de 512 sources réutilisée par 512 cibles peut réduire le nombre de tuiles et de barrières par rapport aux variantes 64/128/256, tout en doublant la mémoire partagée par rapport à 256 (8192 octets). Le coût mémoire ou l’occupation peuvent annuler le bénéfice ; aucun gain n’est présumé.",
+  "notes": "La proposition nouvelle configure block=512, items_per_block=512 et shared_memory_bytes=8192 (4 tableaux float de 512 éléments). La boucle traite les tuiles partielles et tous les threads atteignent les deux barrières ; les threads sans cible ne lisent ni n’écrivent de particule, et j==i est exclu. L’ordre croissant des sources, sqrtf et la formule de référence sont conservés. La correction de cette proposition n’est pas encore mesurée : elle revient au contrôleur. Mesures antérieures fournies : 256/256/4096 octets, 0,926477338 ms ; 128/128/2048, 0,897521456 ms ; 64/64/1024, 1,000412798 ms. Les trois résultats antérieurs étaient valides et corrects sur 11 cas, avec erreur absolue maximale nulle et masse exacte. Le ralentissement relatif aux 128 threads était d’environ 3,2 % pour 256 et 11,5 % pour 64. Aucun résultat de performance n’est attribué à cette nouvelle proposition.",
+  "sources_kept": [],
+  "transformations": [
+    "Charger coopérativement les positions xyz et les masses de 512 sources dans quatre tableaux de mémoire partagée, avec une cible conservée par thread.",
+    "Traiter les tuiles finales partielles et faire participer tous les threads aux barrières, même sans cible valide.",
+    "Exclure j==i tout en gardant l’ordre croissant des sources et la formule arithmétique de référence.",
+    "Configurer 512 threads, 512 items par bloc et 8192 octets de mémoire partagée dynamique."
+  ]
+}

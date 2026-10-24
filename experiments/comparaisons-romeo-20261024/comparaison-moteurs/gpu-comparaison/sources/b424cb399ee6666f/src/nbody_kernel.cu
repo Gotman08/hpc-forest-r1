@@ -1,0 +1,102 @@
+struct Particle {
+    float x, y, z;
+    float vx, vy, vz;
+    float mass;
+};
+
+// Each thread handles three targets spaced by blockDim.x and reuses each
+// streamed source particle across their force accumulations.
+extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+    const long long base = static_cast<long long>(blockIdx.x) * blockDim.x * 3LL + threadIdx.x;
+    const long long i0 = base;
+    const long long i1 = base + blockDim.x;
+    const long long i2 = base + 2LL * blockDim.x;
+
+    const bool valid0 = i0 < n;
+    const bool valid1 = i1 < n;
+    const bool valid2 = i2 < n;
+    if (!valid0 && !valid1 && !valid2) return;
+
+    Particle p0, p1, p2;
+    if (valid0) p0 = in[i0];
+    if (valid1) p1 = in[i1];
+    if (valid2) p2 = in[i2];
+
+    float fx0 = 0.0f, fy0 = 0.0f, fz0 = 0.0f;
+    float fx1 = 0.0f, fy1 = 0.0f, fz1 = 0.0f;
+    float fx2 = 0.0f, fy2 = 0.0f, fz2 = 0.0f;
+
+    const float G = 1.0f;
+    const float softening = 0.001f;
+
+    for (int j = 0; j < n; ++j) {
+        const float sx = in[j].x;
+        const float sy = in[j].y;
+        const float sz = in[j].z;
+        const float sm = in[j].mass;
+
+        if (valid0 && i0 != j) {
+            const float dx = sx - p0.x;
+            const float dy = sy - p0.y;
+            const float dz = sz - p0.z;
+            const float distSq = dx * dx + dy * dy + dz * dz + softening;
+            const float dist = sqrtf(distSq);
+            const float f = (G * p0.mass * sm) / (distSq * dist);
+            fx0 += f * dx;
+            fy0 += f * dy;
+            fz0 += f * dz;
+        }
+
+        if (valid1 && i1 != j) {
+            const float dx = sx - p1.x;
+            const float dy = sy - p1.y;
+            const float dz = sz - p1.z;
+            const float distSq = dx * dx + dy * dy + dz * dz + softening;
+            const float dist = sqrtf(distSq);
+            const float f = (G * p1.mass * sm) / (distSq * dist);
+            fx1 += f * dx;
+            fy1 += f * dy;
+            fz1 += f * dz;
+        }
+
+        if (valid2 && i2 != j) {
+            const float dx = sx - p2.x;
+            const float dy = sy - p2.y;
+            const float dz = sz - p2.z;
+            const float distSq = dx * dx + dy * dy + dz * dz + softening;
+            const float dist = sqrtf(distSq);
+            const float f = (G * p2.mass * sm) / (distSq * dist);
+            fx2 += f * dx;
+            fy2 += f * dy;
+            fz2 += f * dz;
+        }
+    }
+
+    if (valid0) {
+        p0.vx += (fx0 / p0.mass) * dt;
+        p0.vy += (fy0 / p0.mass) * dt;
+        p0.vz += (fz0 / p0.mass) * dt;
+        p0.x += p0.vx * dt;
+        p0.y += p0.vy * dt;
+        p0.z += p0.vz * dt;
+        out[i0] = p0;
+    }
+    if (valid1) {
+        p1.vx += (fx1 / p1.mass) * dt;
+        p1.vy += (fy1 / p1.mass) * dt;
+        p1.vz += (fz1 / p1.mass) * dt;
+        p1.x += p1.vx * dt;
+        p1.y += p1.vy * dt;
+        p1.z += p1.vz * dt;
+        out[i1] = p1;
+    }
+    if (valid2) {
+        p2.vx += (fx2 / p2.mass) * dt;
+        p2.vy += (fy2 / p2.mass) * dt;
+        p2.vz += (fz2 / p2.mass) * dt;
+        p2.x += p2.vx * dt;
+        p2.y += p2.vy * dt;
+        p2.z += p2.vz * dt;
+        out[i2] = p2;
+    }
+}

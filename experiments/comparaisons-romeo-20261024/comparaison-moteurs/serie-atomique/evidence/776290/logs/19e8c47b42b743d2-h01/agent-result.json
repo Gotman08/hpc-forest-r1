@@ -1,0 +1,22 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 128,\n  \"items_per_block\": 128,\n  \"shared_memory_bytes\": 4096\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nstruct SourceParticle {\n    float x, y, z, mass;\n};\n\nstatic constexpr int SOURCE_TILE_SIZE = 256;\n\n__device__ __forceinline__ void accumulate_source_force(\n    const Particle& target,\n    const SourceParticle& source,\n    float G,\n    float softening,\n    float& fx,\n    float& fy,\n    float& fz) {\n    const float dx = source.x - target.x;\n    const float dy = source.y - target.y;\n    const float dz = source.z - target.z;\n\n    const float distSq = dx * dx + dy * dy + dz * dz + softening;\n    const float invDist = rsqrtf(distSq);\n    float invDistCube;\n    if (invDist == 0.0f) {\n        invDistCube = 0.0f;\n    } else {\n        const float invDistSq = invDist * invDist;\n        const float squareError = fmaf(distSq, invDistSq, -1.0f);\n        const float cubeCorrection = fmaf(-1.5f, squareError, 1.0f);\n        invDistCube = (invDistSq * invDist) * cubeCorrection;\n    }\n\n    const float f = (G * target.mass * source.mass) * invDistCube;\n    fx += f * dx;\n    fy += f * dy;\n    fz += f * dz;\n}\n\n// Each CTA stages source particles in shared-memory chunks. Each active\n// thread still owns exactly one target and accumulates its output locally.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    extern __shared__ SourceParticle source_tile[];\n\n    const int i = blockIdx.x * blockDim.x + threadIdx.x;\n    const bool active = i < n;\n    Particle target;\n    if (active) {\n        target = in[i];\n    }\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int tile_begin = 0; tile_begin < n;) {\n        int tile_size = n - tile_begin;\n        if (tile_size > SOURCE_TILE_SIZE) {\n            tile_size = SOURCE_TILE_SIZE;\n        }\n\n        for (int k = threadIdx.x; k < tile_size; k += blockDim.x) {\n            const int source_index = tile_begin + k;\n            source_tile[k].x = in[source_index].x;\n            source_tile[k].y = in[source_index].y;\n            source_tile[k].z = in[source_index].z;\n            source_tile[k].mass = in[source_index].mass;\n        }\n        __syncthreads();\n\n        if (active) {\n            const int self_k = i - tile_begin;\n            if (self_k >= 0 && self_k < tile_size) {\n                for (int k = 0; k < self_k; ++k) {\n                    accumulate_source_force(target, source_tile[k], G, softening, fx, fy, fz);\n                }\n                for (int k = self_k + 1; k < tile_size; ++k) {\n                    accumulate_source_force(target, source_tile[k], G, softening, fx, fy, fz);\n                }\n            } else {\n                for (int k = 0; k < tile_size; ++k) {\n                    accumulate_source_force(target, source_tile[k], G, softening, fx, fy, fz);\n                }\n            }\n        }\n        __syncthreads();\n        tile_begin += tile_size;\n    }\n\n    if (!active) return;\n\n    Particle p = target;\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Retaining the best measured valid program unchanged avoids an unsupported modification. Its controller-reported search mean was 0.00032749 s; this output makes no new performance claim.",
+  "notes": "This reproduces the controller-selected fallback source 038c7d345d454f80 unchanged. Its measurement is a search result, not independent confirmation.",
+  "sources_kept": [
+    "038c7d345d454f80"
+  ],
+  "transformations": [
+    "Retained the 128-thread launch and 256-entry shared-memory source tile.",
+    "Retained the corrected rsqrt-based inverse-distance cube with a zero-reciprocal guard.",
+    "Retained split-range self-exclusion and ordered source accumulation."
+  ]
+}

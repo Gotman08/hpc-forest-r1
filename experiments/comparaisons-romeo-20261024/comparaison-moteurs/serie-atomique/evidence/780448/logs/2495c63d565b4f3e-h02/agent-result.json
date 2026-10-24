@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Keep self-interactions excluded before evaluating their mass products.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float invDistCubed = (invDist * invDist) * invDist;\n\n        // Test the reciprocal-square-root factor while retaining target-mass\n        // force accumulation and division in the velocity update.\n        float f = (G * in[i].mass * in[j].mass) * invDistCubed;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "La variante précédente qui annulait la masse cible a échoué à un contrôle de correction à N=16384, tandis que la séparation des plages source a passé les contrôles mais avec une différence de temps minime par rapport au baseline. Cette expérience isole une autre variante arithmétique : remplacer sqrt puis la division par un facteur basé sur rsqrtf, tout en conservant le test d'exclusion de soi et le chemin de masse cible. Elle testera si la réduction d'opérations améliore le temps sans dépasser les tolérances GPU/FP64; aucun gain n'est présumé.",
+  "notes": "La séparation des plages source du candidat 896161c511ca4f2b était valide : moyenne 0.0018429299392803014 s contre 0.001844410019623214 s au baseline, avec seulement trois échantillons; l'écart est trop faible pour conclure à un gain fiable. Ce candidat teste rsqrtf séparément, conserve le calcul avec masse cible et le garde j == i, puis laisse le contrôleur vérifier la correction avant les mesures officielles.",
+  "sources_kept": [],
+  "transformations": [
+    "Remplacer sqrtf(distSq) suivi d'une division par un facteur de puissance inverse basé sur rsqrtf(distSq).",
+    "Conserver l'exclusion de j == i avant le calcul des produits de masse, ainsi que l'accumulation de force avec masse cible et la division de mise à jour par p.mass.",
+    "Ne pas modifier launch.json, le découpage en un thread par cible, ni utiliser de tiling ou de coarsening."
+  ]
+}

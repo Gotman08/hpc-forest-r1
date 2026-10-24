@@ -1,0 +1,22 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 32,\n  \"items_per_block\": 64,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "// Array-of-Structures particle data.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Each thread computes two distinct targets. Source values are loaded once\n// per interaction and reused by both target accumulators in registers.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int i0 = blockIdx.x * (2 * blockDim.x) + threadIdx.x;\n    const int i1 = i0 + blockDim.x;\n    if (i0 >= n && i1 >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    Particle p0;\n    Particle p1;\n    if (i0 < n) p0 = in[i0];\n    if (i1 < n) p1 = in[i1];\n\n    float fx0 = 0.0f;\n    float fy0 = 0.0f;\n    float fz0 = 0.0f;\n    float fx1 = 0.0f;\n    float fy1 = 0.0f;\n    float fz1 = 0.0f;\n\n    for (int j = 0; j < n; ++j) {\n        const float sx = in[j].x;\n        const float sy = in[j].y;\n        const float sz = in[j].z;\n        const float sm = in[j].mass;\n\n        if (i0 < n && i0 != j) {\n            const float dx = sx - p0.x;\n            const float dy = sy - p0.y;\n            const float dz = sz - p0.z;\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * p0.mass * sm) / (distSq * dist);\n            fx0 += f * dx;\n            fy0 += f * dy;\n            fz0 += f * dz;\n        }\n\n        if (i1 < n && i1 != j) {\n            const float dx = sx - p1.x;\n            const float dy = sy - p1.y;\n            const float dz = sz - p1.z;\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * p1.mass * sm) / (distSq * dist);\n            fx1 += f * dx;\n            fy1 += f * dy;\n            fz1 += f * dz;\n        }\n    }\n\n    if (i0 < n) {\n        p0.vx += (fx0 / p0.mass) * dt;\n        p0.vy += (fy0 / p0.mass) * dt;\n        p0.vz += (fz0 / p0.mass) * dt;\n        p0.x += p0.vx * dt;\n        p0.y += p0.vy * dt;\n        p0.z += p0.vz * dt;\n        out[i0] = p0;\n    }\n\n    if (i1 < n) {\n        p1.vx += (fx1 / p1.mass) * dt;\n        p1.vy += (fy1 / p1.mass) * dt;\n        p1.vz += (fz1 / p1.mass) * dt;\n        p1.x += p1.vx * dt;\n        p1.y += p1.vy * dt;\n        p1.z += p1.vz * dt;\n        out[i1] = p1;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "The seven distinct valid T2 programs measured so far are slower than the 0.001844 s baseline; the best reported two-target configuration, 96 threads, measured 0.002554 s. Test the contrasting smallest warp-aligned block: 32 threads map to 64 targets, yielding more one-warp CTAs while retaining two targets per thread and source-register reuse. This tests whether CTA granularity helps or whether one-warp blocks and reduced latency-hiding capacity outweigh that benefit; no speedup is assumed.",
+  "notes": "The mapping covers targets [blockIdx.x*64, blockIdx.x*64+31] and the following 32 targets. Both targets are independently bounds-checked, each valid output is written once, and no shared memory or block-level multi-output assignment is used. The supplied history reports seven distinct valid T2 programs with no repeats; this candidate has not been measured. The controller should evaluate correctness and performance under the official protocol.",
+  "sources_kept": [],
+  "transformations": [
+    "Set block=32, items_per_block=64, and shared_memory_bytes=0.",
+    "Map each thread to targets blockIdx.x*(2*blockDim.x)+threadIdx.x and that target plus blockDim.x.",
+    "Load each source position and mass once per loop iteration, then reuse these values across two separate register accumulators.",
+    "Guard both targets independently for partial groups and write each valid target exactly once.",
+    "Use no shared-memory source tiling or block-level multi-output assignment."
+  ]
+}

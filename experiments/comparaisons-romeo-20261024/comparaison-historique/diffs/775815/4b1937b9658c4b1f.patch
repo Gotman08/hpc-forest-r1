@@ -1,0 +1,77 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index a5e0691..65ea318 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -13,37 +13,46 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+-    const float targetX = in[i].x;
+-    const float targetY = in[i].y;
+-    const float targetZ = in[i].z;
+ 
+-    float ax = 0.0f;
+-    float ay = 0.0f;
+-    float az = 0.0f;
++    float fx = 0.0f;
++    float fy = 0.0f;
++    float fz = 0.0f;
+ 
+-    // The sum is already expressed directly as acceleration per unit target mass.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    // Keep the original pair arithmetic and accumulation order while excluding
++    // the self interaction through loop bounds rather than a per-pair branch.
++    for (int j = 0; j < i; j++) {
++        float dx = in[j].x - in[i].x;
++        float dy = in[j].y - in[i].y;
++        float dz = in[j].z - in[i].z;
+ 
+-        float dx = in[j].x - targetX;
+-        float dy = in[j].y - targetY;
+-        float dz = in[j].z - targetZ;
++        float distSq = dx * dx + dy * dy + dz * dz + softening;
++        float dist = sqrtf(distSq);
++        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++
++        fx += f * dx;
++        fy += f * dy;
++        fz += f * dz;
++    }
++
++    for (int j = i + 1; j < n; j++) {
++        float dx = in[j].x - in[i].x;
++        float dy = in[j].y - in[i].y;
++        float dz = in[j].z - in[i].z;
+ 
+         float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float invDist = rsqrtf(distSq);
+-        float invDistCube = invDist * invDist * invDist;
+-        float scale = G * in[j].mass * invDistCube;
++        float dist = sqrtf(distSq);
++        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
+ 
+-        ax += scale * dx;
+-        ay += scale * dy;
+-        az += scale * dz;
++        fx += f * dx;
++        fy += f * dy;
++        fz += f * dz;
+     }
+ 
+     // Intégration d'Euler explicite
+     Particle p = in[i];
+-    p.vx += ax * dt;
+-    p.vy += ay * dt;
+-    p.vz += az * dt;
++    p.vx += (fx / p.mass) * dt;
++    p.vy += (fy / p.mass) * dt;
++    p.vz += (fz / p.mass) * dt;
+ 
+     p.x += p.vx * dt;
+     p.y += p.vy * dt;
+@@ -51,3 +60,4 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     out[i] = p;
+ }
++

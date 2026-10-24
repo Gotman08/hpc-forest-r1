@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "// Structure \"Array of Structures\" (AoS).\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// CUDA N-Body simulation using a cooperative shared-memory source tile.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int i = blockIdx.x * blockDim.x + threadIdx.x;\n    const int tid = threadIdx.x;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    const int tileSize = 512;\n\n    __shared__ Particle sourceTile[512];\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Every thread, including inactive target threads, participates in both barriers.\n    for (int tileStart = 0; tileStart < n; tileStart += tileSize) {\n        int tileCount = n - tileStart;\n        if (tileCount > tileSize) tileCount = tileSize;\n\n        for (int k = tid; k < tileCount; k += blockDim.x) {\n            sourceTile[k] = in[tileStart + k];\n        }\n        __syncthreads();\n\n        if (i < n) {\n            for (int k = 0; k < tileCount; ++k) {\n                const int j = tileStart + k;\n                if (i == j) continue;\n\n                float dx = sourceTile[k].x - in[i].x;\n                float dy = sourceTile[k].y - in[i].y;\n                float dz = sourceTile[k].z - in[i].z;\n\n                float distSq = dx * dx + dy * dy + dz * dz + softening;\n                float dist = sqrtf(distSq);\n\n                float f = (G * in[i].mass * sourceTile[k].mass) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n    }\n\n    if (i < n) {\n        // Integration of Euler explicit; mass is copied without modification.\n        Particle p = in[i];\n        p.vx += (fx / p.mass) * dt;\n        p.vy += (fy / p.mass) * dt;\n        p.vz += (fz / p.mass) * dt;\n\n        p.x += p.vx * dt;\n        p.y += p.vy * dt;\n        p.z += p.vz * dt;\n\n        out[i] = p;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "A 512-particle shared-memory tile may reduce synchronization rounds relative to the previously measured 256-particle tile while preserving the pairwise arithmetic and source order. Its larger shared-memory footprint may offset that benefit; the controller's correctness suite and timing protocol must decide.",
+  "notes": "Changed only the kernel. With the supplied 256-thread launch, each thread loads up to two source particles per 512-entry tile. Both barriers are block-uniform, including for partial target blocks and the final partial source tile. The new candidate has not been measured; launch configuration and shared-memory limits were not changed.",
+  "sources_kept": [],
+  "transformations": [
+    "Replace the 256-entry static shared-memory source tile with a 512-entry tile while leaving the 256-thread launch settings unchanged.",
+    "Load tile entries cooperatively with a thread-strided loop and keep both block barriers unconditional so partial tiles and inactive target threads synchronize uniformly.",
+    "Preserve the source iteration order, pairwise force expression, self-interaction skip, and copied output mass."
+  ]
+}

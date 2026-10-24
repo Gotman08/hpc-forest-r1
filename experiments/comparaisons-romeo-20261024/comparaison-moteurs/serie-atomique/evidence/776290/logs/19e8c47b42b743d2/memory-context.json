@@ -1,0 +1,212 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "f6dc9f8d4a20220f79ce4afb41694fc91b4944a4b942661a5b45b0eb905dc83d",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "038c7d345d454f80",
+        "kind": "experiment",
+        "role": "G",
+        "tree_id": "e1:G-merge-2-1",
+        "mission_id": "038c7d345d454f80",
+        "facts": {
+          "commit": "071c0279c259112fca06f1e99b3b0b9dfb834bea",
+          "base_commit": "e811e048017ef7ad77a657992eb211885d6315d2",
+          "parent_id": null,
+          "source_ids": [
+            "39c6be41cc524cf0"
+          ],
+          "source_count": 1
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0003274886036807138,
+          "score": 0.8494188066108034
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Splitting the source-tile loop around the target index may remove per-pair self-index checks while preserving ordered accumulation and avoiding evaluation of a potentially overflowing self-force. This branch-avoidance adaptation is unmeasured; its variable loop bounds and helper calls may offset any benefit.",
+          "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Retained the measured shared-memory source tile, inverse-cube correction, and base launch settings.\",\"Adapted split-range self-exclusion: for a tile containing the active target, process entries before and after it in order; process other tiles in one full range.\",\"Factored the unchanged pair-force calculation into a force-inlined device helper to share it between the loop ranges.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "dbbc5eebcbc94010",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "dbbc5eebcbc94010",
+        "facts": {
+          "commit": "86f6de5282afc1c9a743883504cc2d05116082a4",
+          "base_commit": "3078d048f6bcf8274efa622ca7a26bbac7c4a8ab",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "score": 0.0
+        },
+        "diagnostic": "Protected correctness checks failed",
+        "model_interpretation": {
+          "claim": "With the existing 128-thread CTA, increasing the source tile from 512 to 1024 lets each CTA process twice as many sources per tile iteration, potentially reducing synchronization and loop overhead. The tradeoff is doubling dynamic shared memory from 8 KiB to 16 KiB and staging eight sources per thread; the controller's full correctness suite and official timing will determine whether this helps.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Increase the cooperative source tile to 1024 entries and set dynamic shared memory to 16384 bytes, consistent with four 32-bit fields per entry.\",\"Keep the 128-thread launch configuration, one target and accumulator per active thread, bounded partial-tile consumption, global-index self-exclusion, unconditional synchronization, and guarded output coverage.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "c8b2280c09214ba7",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "c8b2280c09214ba7",
+        "facts": {
+          "commit": "782d1f8247f76c1cf8aae3a7180a966302877593",
+          "base_commit": "716635b651bbad25b97e4f570db49724598b1a4e",
+          "parent_id": "09131d10999c43c6",
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0034091477035240285,
+          "score": 0.35144025251265304
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Mapping three targets to each thread should reuse each streamed source particle across three independent force accumulations. A 128-thread block keeps 384 logical outputs per block, matching the selected factor-two parent's tile size while testing a different coarsening factor. The additional accumulators may increase register pressure and reduce occupancy; prior factor-two candidates were slower than baseline and the measured factor-four candidate was slower still, so no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Assign three output targets per thread at offsets 0, blockDim.x, and 2*blockDim.x, with separate force accumulators and self-interaction checks.\",\"Load each source particle once per source-loop iteration and reuse its position and mass across valid targets; do not stage sources in shared memory.\",\"Use 128 threads and 384 logical outputs per block, matching the parent tile size while changing the coarsening factor; bounds-check all targets to cover arbitrary N and final partial blocks.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "47f44be9cc364759",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "47f44be9cc364759",
+        "facts": {
+          "commit": "790c266c87cabcd61065a1f598e4c93650d6609c",
+          "base_commit": "fb415a70d0befb5378ddf43900d0352dfab276f8",
+          "parent_id": "30ef56a858b64784",
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0012954557035787877,
+          "score": 0.5878017670633404
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Correct the inverse-distance cube directly using the squared relative error of rsqrtf, rather than refining the reciprocal distance and then cubing it. The first-order cube correction should have only a second-order residual when the rsqrt estimate is close, while reducing dependent multiplies. The controller must validate float32 tolerance and measure the official geometric-mean objective.",
+          "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Form the unrefined inverse-distance cube as invDistSq * invDist.\",\"Compute q - 1 with fmaf(distSq, invDistSq, -1.0f) and apply the first-order cube correction with fmaf(-1.5f, squareError, 1.0f).\",\"Retain the zero-reciprocal guard so infinite squared distances do not create an infinity-times-zero NaN during correction.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "3078d048f6bcf8274efa622ca7a26bbac7c4a8ab",
+          "base_commit": "3078d048f6bcf8274efa622ca7a26bbac7c4a8ab",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0018473421059835202,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "038c7d345d454f80-h01",
+        "kind": "development",
+        "role": "G",
+        "tree_id": "e1:G-merge-2-1",
+        "mission_id": "038c7d345d454f80",
+        "facts": {
+          "commit": null,
+          "base_commit": "e811e048017ef7ad77a657992eb211885d6315d2",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Splitting the source-tile loop around the target index may remove per-pair self-index checks while preserving ordered accumulation and avoiding evaluation of a potentially overflowing self-force. This branch-avoidance adaptation is unmeasured; its variable loop bounds and helper calls may offset any benefit.",
+          "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Retained the measured shared-memory source tile, inverse-cube correction, and base launch settings.\",\"Adapted split-range self-exclusion: for a tile containing the active target, process entries before and after it in order; process other tiles in one full range.\",\"Factored the unchanged pair-force calculation into a force-inlined device helper to share it between the loop ranges.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 65,
+    "next_offset": 6
+  },
+  "evidence_ids": [
+    "038c7d345d454f80",
+    "dbbc5eebcbc94010",
+    "c8b2280c09214ba7",
+    "47f44be9cc364759",
+    "baseline-e1",
+    "038c7d345d454f80-h01"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "071c0279c259112fca06f1e99b3b0b9dfb834bea",
+  "selected_parent_id": null
+}

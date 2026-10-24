@@ -1,0 +1,119 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..ca1c1e9 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 256,
++  "items_per_block": 256,
++  "shared_memory_bytes": 10752
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..124de9a 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,15 +1,24 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
++// Structure of an AoS particle.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
++static constexpr int SOURCE_TILE = 384;
++
++// One thread owns each output. The CTA cooperatively stages source particles
++// and reuses each staged tile across its output threads.
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    if (i >= n) return;
++    extern __shared__ Particle source_tile[];
++
++    const int i = blockIdx.x * blockDim.x + threadIdx.x;
++    const bool valid_output = i < n;
++
++    Particle target;
++    if (valid_output) {
++        target = in[i];
++    }
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+@@ -18,35 +27,46 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    for (int tile_start = 0; tile_start < n; tile_start += SOURCE_TILE) {
++        const int remaining = n - tile_start;
++        const int tile_count = remaining < SOURCE_TILE ? remaining : SOURCE_TILE;
+ 
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++        for (int k = threadIdx.x; k < tile_count; k += blockDim.x) {
++            source_tile[k] = in[tile_start + k];
++        }
++        __syncthreads();
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        if (valid_output) {
++            for (int k = 0; k < tile_count; ++k) {
++                const int j = tile_start + k;
++                if (i == j) continue;
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++                float dx = source_tile[k].x - target.x;
++                float dy = source_tile[k].y - target.y;
++                float dz = source_tile[k].z - target.z;
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++                float distSq = dx * dx + dy * dy + dz * dz + softening;
++                float dist = sqrtf(distSq);
++
++                float f = (G * target.mass * source_tile[k].mass) / (distSq * dist);
++
++                fx += f * dx;
++                fy += f * dy;
++                fz += f * dz;
++            }
++        }
++        __syncthreads();
+     }
+ 
+-    // Intégration d'Euler explicite
+-    Particle p = in[i];
+-    p.vx += (fx / p.mass) * dt;
+-    p.vy += (fy / p.mass) * dt;
+-    p.vz += (fz / p.mass) * dt;
++    if (valid_output) {
++        target.vx += (fx / target.mass) * dt;
++        target.vy += (fy / target.mass) * dt;
++        target.vz += (fz / target.mass) * dt;
+ 
+-    p.x += p.vx * dt;
+-    p.y += p.vy * dt;
+-    p.z += p.vz * dt;
++        target.x += target.vx * dt;
++        target.y += target.vy * dt;
++        target.z += target.vz * dt;
+ 
+-    out[i] = p;
++        out[i] = target;
++    }
+ }
+-

@@ -1,0 +1,275 @@
+[
+  {
+    "condition": "776290",
+    "job_id": "780644",
+    "ordinal": 1,
+    "id": "ea93af435e6942eb",
+    "role": "T1",
+    "status": "valid",
+    "reason": "",
+    "created": 1792754469.7107837,
+    "elapsed_seconds": 114.93974018096924,
+    "evaluated_at": 1792754641.624413,
+    "measured_elapsed_seconds": 286.853369474411,
+    "seconds": 0.0010038276636169898,
+    "score": 0.6480729348118351,
+    "base_search_seconds": 0.0018485464869197792,
+    "gain_vs_base_pct": 45.696379792446486,
+    "best_research_before_seconds": 0.0018485464869197792,
+    "best_research_after_seconds": 0.0010038276636169898,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "7199eb17f141c965e56029294e2e3090184951bf",
+    "base_commit": "2049232e03eb6d1989cecec3c7834fe4d9e826b9",
+    "variant_id": "5447ed76b2864518",
+    "patch": "diffs/776290/ea93af435e6942eb.patch",
+    "hypothesis": "Loading each source particle once into block-shared memory and reusing it across target threads may reduce repeated global source loads. The pairwise arithmetic and source iteration order remain unchanged, isolating memory reuse; barriers and bounds checks cover partial tiles and inactive target threads.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Stage source particles cooperatively in a 256-entry static shared-memory tile and reuse each tile across the block's target rows.",
+        "Keep inactive target threads in the uniform tile/barrier loop and guard both source loads and output writes for partial blocks.",
+        "Preserve source iteration order, force arithmetic, and the input particle mass when forming each output."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776290",
+    "job_id": "780644",
+    "ordinal": 2,
+    "id": "00d971d8a5c34a73",
+    "role": "T2",
+    "status": "infrastructure_error",
+    "reason": "The local model worker stopped sending heartbeats",
+    "created": 1792754469.745338,
+    "elapsed_seconds": 114.974294424057,
+    "evaluated_at": 1792754970.9965894,
+    "measured_elapsed_seconds": 616.2255458831787,
+    "seconds": null,
+    "score": null,
+    "base_search_seconds": 0.0018485464869197792,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.0010038276636169898,
+    "best_research_after_seconds": 0.0010038276636169898,
+    "change_kind": "indisponible",
+    "changed_paths": null,
+    "commit": null,
+    "base_commit": "2049232e03eb6d1989cecec3c7834fe4d9e826b9",
+    "variant_id": null,
+    "patch": null,
+    "hypothesis": "Replacing sqrt-plus-division with an explicit reciprocal-square-root cube, while algebraically cancelling the positive target mass from the force/acceleration calculation, may reduce hot-loop arithmetic. The controller must determine whether the changed FP32 rounding passes the FP64 oracle and whether it improves timing.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Replace sqrtf(distSq) and division by distSq * dist with rsqrtf(distSq) and its cube.",
+        "Accumulate acceleration using source mass only, algebraically cancelling the positive target mass and eliminating the final target-mass division.",
+        "Preserve the self-interaction guard and baseline thread mapping and launch configuration."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776290",
+    "job_id": "780644",
+    "ordinal": 3,
+    "id": "d4af8f5376ac420e",
+    "role": "T3",
+    "status": "valid",
+    "reason": "",
+    "created": 1792754469.7758741,
+    "elapsed_seconds": 115.00483059883118,
+    "evaluated_at": 1792754652.4616456,
+    "measured_elapsed_seconds": 297.6906020641327,
+    "seconds": 0.0020672367486622616,
+    "score": 0.472075795749458,
+    "base_search_seconds": 0.0018485464869197792,
+    "gain_vs_base_pct": -11.830390162753467,
+    "best_research_before_seconds": 0.0010038276636169898,
+    "best_research_after_seconds": 0.0010038276636169898,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "7ecaa7ec57bd7cdaffa387b8c2106e4bc43eb5a4",
+    "base_commit": "2049232e03eb6d1989cecec3c7834fe4d9e826b9",
+    "variant_id": "22335739129d40e6",
+    "patch": "diffs/776290/d4af8f5376ac420e.patch",
+    "hypothesis": "Using 128-thread blocks with 128 items per block may expose more independent target tiles to the GH200 at large N than the 256/256 baseline. A grid-stride target loop preserves complete coverage, including tails, even if launch tile size and thread count differ. Pairwise arithmetic and shared-memory usage remain unchanged; performance is uncertain and must be judged by the controller's prescribed geometric-mean comparison.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Changed launch settings from block/items_per_block 256/256 to 128/128, keeping shared memory disabled.",
+        "Replaced the single output index with a grid-stride loop so every target is covered for any positive launch dimensions, including tails and differing block/tile sizes."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776290",
+    "job_id": "780644",
+    "ordinal": 4,
+    "id": "f34be4e5a9f94e53",
+    "role": "T1",
+    "status": "valid",
+    "reason": "",
+    "created": 1792754641.638237,
+    "elapsed_seconds": 286.8671934604645,
+    "evaluated_at": 1792754779.648927,
+    "measured_elapsed_seconds": 424.87788343429565,
+    "seconds": 0.0011044595774217314,
+    "score": 0.6259880429104319,
+    "base_search_seconds": 0.0018485464869197792,
+    "gain_vs_base_pct": 40.25253975289066,
+    "best_research_before_seconds": 0.0010038276636169898,
+    "best_research_after_seconds": 0.0010038276636169898,
+    "change_kind": "noyau seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "commit": "3dc19b67d7d68aff1dad57fdd125b79b63364fd9",
+    "base_commit": "2049232e03eb6d1989cecec3c7834fe4d9e826b9",
+    "variant_id": "f5ff41eeb8442825",
+    "patch": "diffs/776290/f34be4e5a9f94e53.patch",
+    "hypothesis": "A 512-particle shared-memory tile may reduce synchronization rounds relative to the previously measured 256-particle tile while preserving the pairwise arithmetic and source order. Its larger shared-memory footprint may offset that benefit; the controller's correctness suite and timing protocol must decide.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Replace the 256-entry static shared-memory source tile with a 512-entry tile while leaving the 256-thread launch settings unchanged.",
+        "Load tile entries cooperatively with a thread-strided loop and keep both block barriers unconditional so partial tiles and inactive target threads synchronize uniformly.",
+        "Preserve the source iteration order, pairwise force expression, self-interaction skip, and copied output mass."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776290",
+    "job_id": "780644",
+    "ordinal": 5,
+    "id": "5c40e466f34a493e",
+    "role": "T3",
+    "status": "valid",
+    "reason": "",
+    "created": 1792754652.474974,
+    "elapsed_seconds": 297.7039303779602,
+    "evaluated_at": 1792754792.9925199,
+    "measured_elapsed_seconds": 438.221476316452,
+    "seconds": 0.003745210203586691,
+    "score": 0.33046601580956647,
+    "base_search_seconds": 0.0018485464869197792,
+    "gain_vs_base_pct": -102.60297645136909,
+    "best_research_before_seconds": 0.0010038276636169898,
+    "best_research_after_seconds": 0.0010038276636169898,
+    "change_kind": "noyau et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "commit": "4e04e659a8b69c9206248f089e6fc352e55d2e03",
+    "base_commit": "2049232e03eb6d1989cecec3c7834fe4d9e826b9",
+    "variant_id": "2b4815349e967741",
+    "patch": "diffs/776290/5c40e466f34a493e.patch",
+    "hypothesis": "With 256 threads per block and an items_per_block tile of 512, a grid-stride loop assigns up to two targets to each thread for larger inputs. Fewer threads and CTAs may reduce scheduling overhead, though the additional sequential target work per thread could instead hurt throughput. The pairwise arithmetic order and single-kernel interface remain unchanged; the controller must measure correctness and the prescribed geometric mean.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Changed src/launch.json to use block=256, items_per_block=512, and no shared memory.",
+        "Changed target assignment to a grid-stride loop using a wide index so all outputs, including tails, are covered when the launch tile and block size differ.",
+        "Kept the pairwise force arithmetic and its iteration order unchanged; with the proposed tile, a thread may process two targets sequentially."
+      ]
+    },
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776290",
+    "job_id": "780644",
+    "ordinal": 6,
+    "id": "40d90afac53549c2",
+    "role": "T1",
+    "status": "infrastructure_error",
+    "reason": "The local model worker stopped sending heartbeats",
+    "created": 1792754779.6626368,
+    "elapsed_seconds": 424.89159321784973,
+    "evaluated_at": 1792754970.8987954,
+    "measured_elapsed_seconds": 616.12775182724,
+    "seconds": null,
+    "score": null,
+    "base_search_seconds": 0.0018485464869197792,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.0010038276636169898,
+    "best_research_after_seconds": 0.0010038276636169898,
+    "change_kind": "indisponible",
+    "changed_paths": null,
+    "commit": null,
+    "base_commit": "2049232e03eb6d1989cecec3c7834fe4d9e826b9",
+    "variant_id": null,
+    "patch": null,
+    "hypothesis": "",
+    "transformations": {},
+    "parent_id": null,
+    "sources": [],
+    "source_commits": [],
+    "depth": 1
+  },
+  {
+    "condition": "776290",
+    "job_id": "780644",
+    "ordinal": 7,
+    "id": "69829ddbf8d24b21",
+    "role": "T3",
+    "status": "infrastructure_error",
+    "reason": "The local model worker stopped sending heartbeats",
+    "created": 1792754793.0065832,
+    "elapsed_seconds": 438.2355396747589,
+    "evaluated_at": 1792754973.1473026,
+    "measured_elapsed_seconds": 618.3762590885162,
+    "seconds": null,
+    "score": null,
+    "base_search_seconds": 0.0020672367486622616,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.0010038276636169898,
+    "best_research_after_seconds": 0.0010038276636169898,
+    "change_kind": "indisponible",
+    "changed_paths": null,
+    "commit": null,
+    "base_commit": "7ecaa7ec57bd7cdaffa387b8c2106e4bc43eb5a4",
+    "variant_id": null,
+    "patch": null,
+    "hypothesis": "",
+    "transformations": {},
+    "parent_id": "d4af8f5376ac420e",
+    "sources": [],
+    "source_commits": [],
+    "depth": 2
+  }
+]

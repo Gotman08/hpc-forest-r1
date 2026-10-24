@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 256,\n  \"shared_memory_bytes\": 32768\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "// Each thread computes one target particle; source tiles are shared across the CTA.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    constexpr int kSourceTile = 2048;\n\n    extern __shared__ float shared[];\n    float* tileX = shared;\n    float* tileY = tileX + kSourceTile;\n    float* tileZ = tileY + kSourceTile;\n    float* tileMass = tileZ + kSourceTile;\n\n    const int i = blockIdx.x * blockDim.x + threadIdx.x;\n    const bool active = i < n;\n    Particle target;\n    if (active) {\n        target = in[i];\n    }\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int tileStart = 0; tileStart < n;) {\n        const int remaining = n - tileStart;\n        const int tileCount = remaining < kSourceTile ? remaining : kSourceTile;\n\n        for (int k = threadIdx.x; k < tileCount; k += blockDim.x) {\n            const int sourceIndex = tileStart + k;\n            tileX[k] = in[sourceIndex].x;\n            tileY[k] = in[sourceIndex].y;\n            tileZ[k] = in[sourceIndex].z;\n            tileMass[k] = in[sourceIndex].mass;\n        }\n        __syncthreads();\n\n        if (active) {\n            for (int k = 0; k < tileCount; ++k) {\n                const int j = tileStart + k;\n                if (i == j) continue;\n\n                float dx = tileX[k] - target.x;\n                float dy = tileY[k] - target.y;\n                float dz = tileZ[k] - target.z;\n\n                float distSq = dx * dx + dy * dy + dz * dz + softening;\n                float dist = sqrtf(distSq);\n                float f = (G * target.mass * tileMass[k]) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n        tileStart += tileCount;\n    }\n\n    if (active) {\n        target.vx += (fx / target.mass) * dt;\n        target.vy += (fy / target.mass) * dt;\n        target.vz += (fz / target.mass) * dt;\n\n        target.x += target.vx * dt;\n        target.y += target.vy * dt;\n        target.z += target.vz * dt;\n\n        out[i] = target;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "A 2048-source tile with the prior 256-target CTA geometry reduces source-tile iterations and synchronization rounds compared with the previously measured 1536-by-256 candidate, while retaining one thread per target and the same force arithmetic. Its 32,768 bytes of shared memory remain below the 49,152-byte limit; increased shared-memory pressure may offset the reduced loop overhead, so official timing must decide.",
+  "notes": "The previous 1536-source-by-256-target candidate was correct and averaged 0.000999 seconds, but no per-size breakdown is provided. This is a distinct candidate; its correctness and per-size geometric-mean performance remain for the controller to evaluate. No local commands or independent measurements were used.",
+  "sources_kept": [],
+  "transformations": [
+    "Cooperatively stage source x, y, z, and mass into four dynamic shared-memory arrays with a 2048-source tile (32,768 bytes).",
+    "Keep one thread per target and the existing interaction order, force expression, square root, and self-interaction exclusion.",
+    "Keep all CTA threads participating in both barriers, including inactive target-tail threads, and limit partial source tiles to valid elements.",
+    "Set block and items_per_block to 256 and request the tile's shared-memory allocation in launch.json."
+  ]
+}

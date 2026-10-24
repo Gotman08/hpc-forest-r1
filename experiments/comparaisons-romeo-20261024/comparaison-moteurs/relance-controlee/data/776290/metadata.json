@@ -1,0 +1,1475 @@
+{
+  "config": {
+    "backend": "codex",
+    "binary_tree": {
+      "enabled": false
+    },
+    "budget": {
+      "confirmation_seconds": 120,
+      "confirmation_slots": 3,
+      "generation_seconds": 600,
+      "infrastructure_retries": 0,
+      "max_depth": 0,
+      "max_workers": 1,
+      "mission_tokens": null,
+      "search_slots": null,
+      "tokens": null,
+      "wall_seconds": 1800
+    },
+    "codex": {
+      "executable": "codex",
+      "mailbox_dir": "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/mailbox",
+      "model": "gpt-6-luna",
+      "reasoning_effort": "max",
+      "session_id": "c9a8de29452c4173a94a433ba9e3f945",
+      "transport": "codex-mailbox"
+    },
+    "compiler": {
+      "flavor": "gcc-compatible",
+      "path": "/usr/bin/gcc",
+      "sha256": "f7e1e7952e6aa5f31a79366a8dcdd751a150ed65e949429d527e933b5e7cc028"
+    },
+    "completion": {
+      "confirm_final_g": true,
+      "policy": "finish-started",
+      "postprocess_tokens": null,
+      "reserve_policy": "adaptive",
+      "token_policy": "observe-only"
+    },
+    "forest": {
+      "conversation": "persistent",
+      "integration": "memory-guided-v1",
+      "policy": "mother",
+      "statement": "Optimize the supplied one-step N-body CUDA kernel for one NVIDIA GH200 on ROMEO ARM.\nAll optimizations must be written as actual source files by the models and evaluated by the controller.\nThe only measurement allocation is one GPU and four CPU cores. C++17 device code is compiled with\nNVRTC CUDA 12.6.3 for the actual GPU architecture, without a global fast-math option.\nPreserve Particle as seven float32 x,y,z,vx,vy,vz,mass (28 bytes) and the entry:\nextern \"C\" __global__ void nbody_step_naive(const Particle*,Particle*,int,float).\nThe input is read-only; output a complete state for each particle. G=1; float32 softening=0.001;\nupdate velocity before position. Support all sizes, positive varying masses, nonzero velocities,\ncoincident positions and zero/negative dt. Nonfinite output is invalid. Preserve masses exactly.\nGPU reference tolerance: atol=5e-5, rtol=2e-4. An independent FP64 CPU oracle checks the reference,\nevery small output and 32 distributed large rows. Search and confirmation use different input data.\nNo benchmark input detection or benchmark-specific constants. No changing the checker or protocol.\nThe objective is geometric mean CUDA-event kernel time for N=4096,8192,16384. Compilation, transfers\nand startup are excluded. Each size has 10 warmups and 100 timed launches. Search uses three\ntiming repetitions and confirmation five fresh repetitions, alternating candidates.\nCorrectness also includes N=1,2,31,127,257,4095 and a single isolated particle with extreme mass.\nEdit only src/nbody_kernel.cu and src/launch.json. Device helpers may reside in the kernel file.\nThe protected host launches exactly one kernel. Extra host preprocessing, buffers or launches\nare outside this interface. launch.json has exactly block (1..1024), items_per_block (1..1048576),\nshared_memory_bytes (0..49152). grid.x=ceil(N/items_per_block); block.x=block; other dimensions=1.\nChoose all transformations yourself; these interface details are not optimization advice.\nMother chooses any useful number N of complementary topics. Independent real AB-MCTS trees write\nand optimize code. The controller serializes GPU checks and measures to prevent interference.\nPersistent memory stores measured facts and separately labelled fallible lessons, including slower\nor incorrect attempts. Each tree reads only its own evidence and the reference. After research closes,\nthe original Mother retrieves evidence across trees, selects combinations, writes combined code and\nexamines the measured results. She may reuse older bases and ideas from slower trials. Every combined\nprogram must be compiled and checked afresh. Never relaunch research during assembly. Confirm final G\nindependently and keep the best independently confirmed program. Never request extra allocations.\nOriginal user source, supplied as data:\n#include <cstdio>\n#include <cstdlib>\n#include <cmath>\n#include <cuda_runtime.h>\n\n// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\n__global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale\n    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue; // Divergence de branche inutile dans la boucle\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)\n\n        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n\nint main() {\n    const int N = 4096;\n    const float dt = 0.01f;\n    const size_t bytes = N * sizeof(Particle);\n\n    // Allocation CPU\n    Particle* h_particles = (Particle*)malloc(bytes);\n    for (int i = 0; i < N; i++) {\n        h_particles[i].x = (float)(rand() % 1000) / 100.0f;\n        h_particles[i].y = (float)(rand() % 1000) / 100.0f;\n        h_particles[i].z = (float)(rand() % 1000) / 100.0f;\n        h_particles[i].vx = 0.0f;\n        h_particles[i].vy = 0.0f;\n        h_particles[i].vz = 0.0f;\n        h_particles[i].mass = 1.0f + (float)(rand() % 100) / 10.0f;\n    }\n\n    // Allocation GPU\n    Particle *d_in, *d_out;\n    cudaMalloc(&d_in, bytes);\n    cudaMalloc(&d_out, bytes);\n\n    cudaMemcpy(d_in, h_particles, bytes, cudaMemcpyHostToDevice);\n\n    // Configuration d'exécution simple\n    int threadsPerBlock = 256;\n    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;\n\n    printf(\"Lancement du kernel N-Body naif pour %d particules...\\n\", N);\n    nbody_step_naive<<<blocksPerGrid, threadsPerBlock>>>(d_in, d_out, N, dt);\n    cudaDeviceSynchronize();\n\n    // Récupération des résultats\n    cudaMemcpy(h_particles, d_out, bytes, cudaMemcpyDeviceToHost);\n\n    printf(\"Exemple apres 1 pas de temps -> Particule 0 : pos=(%.3f, %.3f, %.3f), vel=(%.3f, %.3f, %.3f)\\n\",\n           h_particles[0].x, h_particles[0].y, h_particles[0].z,\n           h_particles[0].vx, h_particles[0].vy, h_particles[0].vz);\n\n    cudaFree(d_in);\n    cudaFree(d_out);\n    free(h_particles);\n\n    return 0;\n}\n"
+    },
+    "harness": {
+      "call_token_ceiling": null,
+      "enabled": true,
+      "max_attempts": 3,
+      "research": {
+        "allowed_hosts": [
+          "docs.nvidia.com",
+          "developer.nvidia.com",
+          "gcc.gnu.org",
+          "clang.llvm.org"
+        ],
+        "corpus": null,
+        "corpus_sha256": null,
+        "enabled": true
+      }
+    },
+    "memory": {
+      "assembly_rounds": 16,
+      "context_characters": 12000,
+      "mode": "active",
+      "page_size": 6,
+      "reads_per_mission": 3,
+      "selection_calls": 4,
+      "sources_per_integration": 3
+    },
+    "method": "H",
+    "minimum_gain": 0.03,
+    "ollama": {
+      "base_url": "http://127.0.0.1:11434",
+      "context_tokens": 8192,
+      "max_output_tokens": 4096,
+      "model": "qwen2.5-coder:7b",
+      "num_threads": 4,
+      "temperature": 0.0
+    },
+    "problem": "cuda-nbody",
+    "protocol": {
+      "benchmark": [
+        "{python}",
+        "{trusted}/protocol.py",
+        "benchmark",
+        "{binary}",
+        "{phase}"
+      ],
+      "build": [
+        "{python}",
+        "{trusted}/protocol.py",
+        "build",
+        "{worktree}",
+        "{build}"
+      ],
+      "build_timeout_seconds": 120,
+      "check": [
+        "{python}",
+        "{trusted}/protocol.py",
+        "check",
+        "{binary}",
+        "{phase}"
+      ],
+      "confirmation_repetitions": 5,
+      "environment": {
+        "FOREST_CUDA_CACHE": "/scratch_p/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/cache",
+        "FOREST_CUDA_HARNESS": "/scratch_p/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/harness-build/cuda_test_harness",
+        "FOREST_GPU_TARGET": "NVIDIA GH200; NVRTC CUDA 12.6.3",
+        "OMP_DYNAMIC": "FALSE",
+        "OMP_NUM_THREADS": "1",
+        "OMP_PROC_BIND": "TRUE",
+        "OPENBLAS_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "repetitions": 3,
+      "timeout_seconds": 240,
+      "warmups": 0
+    },
+    "roles": [
+      "A",
+      "B",
+      "C"
+    ],
+    "schedule": {
+      "cycles": null,
+      "integrations_per_cycle": 0,
+      "trials_per_role_per_cycle": 1
+    },
+    "seed": 23,
+    "skills": {
+      "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+      "enabled": true,
+      "version": "hpc-forest-project-skills-v1"
+    },
+    "submission": {
+      "kernel": "nbody_step_naive",
+      "kind": "cuda-kernel",
+      "launch": "src/launch.json",
+      "source": "src/nbody_kernel.cu"
+    },
+    "target_id": "romeo-cuda-nbody-780677"
+  },
+  "manifest": {
+    "config.json": "59aad5a69ed2571975689ef014c2025a5149a7fc58b368e64b6af7edbf4ef0b0",
+    "evaluator-source-commit.txt": "a63c40006dca637a2888d3f2481278b41724e21abb070bfdd4331748b2972b94",
+    "original.cu": "566e9a4085ff08795269fdb76df607198f835c597ad2dfab4155ea4f0bc33291",
+    "protocol.py": "3311797eec4fec382991af5fe8f8fedb76bdaa068facfe1258f688e051ffeb74",
+    "reference.cu": "ab22e9f1e077f75420e407b68a4285d97a5912340297d1a700f98f40697b00bc",
+    "result-schema.json": "d20ccdd5fa3fa17b32351cb7887b88d1fb17e7ab5ddfaf65c03ea64671b067ae",
+    "use_harness.py": "41efa5033b65c1c1868e19ceadc3b130987c87a3139d7d8f3015cc1951b08c54"
+  },
+  "identity": {
+    "compiler": {
+      "flavor": "gcc-compatible",
+      "path": "/usr/bin/gcc",
+      "sha256": "f7e1e7952e6aa5f31a79366a8dcdd751a150ed65e949429d527e933b5e7cc028"
+    },
+    "controller_implementation": "e97183fce446d8d7db79e22e0508c8f4910c3929d4dd2c063560494ea4ea45c4",
+    "cpus": 288,
+    "dependencies": {
+      "numpy": "2.5.4",
+      "scipy": "1.18.1",
+      "treequest": "0.3.2"
+    },
+    "environment": {
+      "FOREST_CUDA_CACHE": "/scratch_p/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/cache",
+      "FOREST_CUDA_HARNESS": "/scratch_p/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/harness-build/cuda_test_harness",
+      "FOREST_GPU_TARGET": "NVIDIA GH200; NVRTC CUDA 12.6.3",
+      "OMP_DYNAMIC": "FALSE",
+      "OMP_NUM_THREADS": "1",
+      "OMP_PROC_BIND": "TRUE",
+      "OPENBLAS_NUM_THREADS": "1",
+      "PYTHONDONTWRITEBYTECODE": "1"
+    },
+    "hostname": "romeo-a046",
+    "machine": "aarch64",
+    "processor": "aarch64",
+    "python": "3.12.5 (main, Mar 13 2025, 11:06:50) [GCC 11.4.1 20231218 (Red Hat 11.4.1-3)]",
+    "python_executable": "/scratch_p/nimarano/hpc-forest-localmodels-20261015-r1/venv-r3/bin/python",
+    "system": "Linux-5.14.0-570.141.1.el9_6.aarch64+64k-aarch64-with-glibc2.34",
+    "target": "romeo-cuda-nbody-780677"
+  },
+  "protocol_id": "a32f214fba5f430d3cea80c520867b02e678d360d18da5c337aacaae30a543fe",
+  "current_epoch": 1,
+  "started": 1792756175.7352784,
+  "deadline": 1792757975.7352784,
+  "mother_enabled": true,
+  "mother_plan:preparation:1": {
+    "budget_phase": "search",
+    "conversation": {
+      "id": "c47b601d46234619bdfd07b555a3712b",
+      "phase": "planning",
+      "request_sha256": "69fe40700b33ab1a9dda03747a2513f5b26f796ee844901ec5166882b7414c66",
+      "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+      "turn": 0
+    },
+    "final_synthesis": false,
+    "model_calls": 1,
+    "phase": "preparation",
+    "plan": {
+      "G": "Preparation only: no integrated candidate yet. After research closes, I will compare measured, correctly validated programs, write any selected combination, check it afresh, and independently confirm G before retaining the best confirmed result.",
+      "analysis": "I choose N=3 because the direct O(N²) kernel exposes three complementary opportunities: reducing pairwise arithmetic, reusing source data across outputs, and parallelizing the source reduction. The only available measurement is a valid, correct baseline: three search times of 1.850754, 1.851757, and 1.852921 ms (mean 1.851811 ms); there is no candidate result, per-size breakdown, or profile to establish a dominant bottleneck. All trees must preserve the one-kernel interface, 28-byte Particle layout, complete outputs and exact masses; support arbitrary sizes and tails, coincident positions, positive varying masses, nonzero velocities, zero/negative dt, and avoid nonfinite output. They must pass the stated reference tolerance and independent oracle checks, including extreme-mass coverage, without specializing to test values or adding preprocessing, buffers, or launches. The documentation lookup returned the CUDA Best Practices Guide publisher-current 13.4 content, not a CUDA 12.6.3-matched manual, so I treat it only as general context and not as version-specific evidence.",
+      "children": [
+        {
+          "objective": "Explore lower-cost pairwise arithmetic while keeping the current one-output-per-thread mapping and serial source loop as the starting point. Test selective reciprocal-square-root use, algebraic force simplifications, and self-interaction handling only as justified by measurements. Preserve the physical result and validate every change against the tolerance and full oracle suite, including extreme-mass and coincident-position cases; make no bounded-mass assumption. Do not pivot to shared-memory tiling or source-axis parallel reduction in this tree. Tune only parameters needed to measure this arithmetic path, and report correctness and timing across all three objective sizes.",
+          "subject": "Pairwise arithmetic and numerical-cost reduction"
+        },
+        {
+          "objective": "Explore CTA-level reuse of source positions and masses: stage source tiles cooperatively in shared memory and reuse them across multiple output particles, retaining a serial source accumulation per output initially to isolate the reuse effect. Tune legal block, items_per_block, and shared_memory_bytes settings; handle partial source and output tiles without races or out-of-bounds accesses. Keep the required Particle layout and interface, use no extra buffers or launches, and validate all required sizes and edge cases. Measure the three objective sizes and report the cost/benefit of tiling and synchronization.",
+          "subject": "Shared-memory source tiling and CTA reuse"
+        },
+        {
+          "objective": "Explore an alternative mapping that distributes each target's source-particle reduction across lanes, such as a warp-per-target reduction, with correct handling of source tails and self-interaction. Keep the original force formulation initially to distinguish mapping and reduction effects from arithmetic simplification; do not make CTA shared-memory source staging the focus of this tree. Tune warp/target mapping and legal launch parameters, preserve complete outputs and exact masses, and validate all required sizes, numerical tolerances, and edge cases before reporting timing for the three objective sizes.",
+          "subject": "Warp-cooperative source-axis reduction"
+        }
+      ]
+    },
+    "request_sha256": "69fe40700b33ab1a9dda03747a2513f5b26f796ee844901ec5166882b7414c66",
+    "response": {
+      "conversation": {
+        "id": "c47b601d46234619bdfd07b555a3712b",
+        "phase": "planning",
+        "request_sha256": "69fe40700b33ab1a9dda03747a2513f5b26f796ee844901ec5166882b7414c66",
+        "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+        "turn": 0
+      },
+      "data": {
+        "G": "Preparation only: no integrated candidate yet. After research closes, I will compare measured, correctly validated programs, write any selected combination, check it afresh, and independently confirm G before retaining the best confirmed result.",
+        "analysis": "I choose N=3 because the direct O(N²) kernel exposes three complementary opportunities: reducing pairwise arithmetic, reusing source data across outputs, and parallelizing the source reduction. The only available measurement is a valid, correct baseline: three search times of 1.850754, 1.851757, and 1.852921 ms (mean 1.851811 ms); there is no candidate result, per-size breakdown, or profile to establish a dominant bottleneck. All trees must preserve the one-kernel interface, 28-byte Particle layout, complete outputs and exact masses; support arbitrary sizes and tails, coincident positions, positive varying masses, nonzero velocities, zero/negative dt, and avoid nonfinite output. They must pass the stated reference tolerance and independent oracle checks, including extreme-mass coverage, without specializing to test values or adding preprocessing, buffers, or launches. The documentation lookup returned the CUDA Best Practices Guide publisher-current 13.4 content, not a CUDA 12.6.3-matched manual, so I treat it only as general context and not as version-specific evidence.",
+        "children": [
+          {
+            "objective": "Explore lower-cost pairwise arithmetic while keeping the current one-output-per-thread mapping and serial source loop as the starting point. Test selective reciprocal-square-root use, algebraic force simplifications, and self-interaction handling only as justified by measurements. Preserve the physical result and validate every change against the tolerance and full oracle suite, including extreme-mass and coincident-position cases; make no bounded-mass assumption. Do not pivot to shared-memory tiling or source-axis parallel reduction in this tree. Tune only parameters needed to measure this arithmetic path, and report correctness and timing across all three objective sizes.",
+            "subject": "Pairwise arithmetic and numerical-cost reduction"
+          },
+          {
+            "objective": "Explore CTA-level reuse of source positions and masses: stage source tiles cooperatively in shared memory and reuse them across multiple output particles, retaining a serial source accumulation per output initially to isolate the reuse effect. Tune legal block, items_per_block, and shared_memory_bytes settings; handle partial source and output tiles without races or out-of-bounds accesses. Keep the required Particle layout and interface, use no extra buffers or launches, and validate all required sizes and edge cases. Measure the three objective sizes and report the cost/benefit of tiling and synchronization.",
+            "subject": "Shared-memory source tiling and CTA reuse"
+          },
+          {
+            "objective": "Explore an alternative mapping that distributes each target's source-particle reduction across lanes, such as a warp-per-target reduction, with correct handling of source tails and self-interaction. Keep the original force formulation initially to distinguish mapping and reduction effects from arithmetic simplification; do not make CTA shared-memory source staging the focus of this tree. Tune warp/target mapping and legal launch parameters, preserve complete outputs and exact masses, and validate all required sizes, numerical tolerances, and edge cases before reporting timing for the three objective sizes.",
+            "subject": "Warp-cooperative source-axis reduction"
+          }
+        ]
+      },
+      "error": null,
+      "infrastructure_error": false,
+      "model": "gpt-6-luna",
+      "nonce": "f30b368fc38840a1ba1d046a18cfbef8",
+      "protocol": "hpc-forest-codex-mailbox-v1",
+      "reasoning_effort": "max",
+      "request_sha256": "69fe40700b33ab1a9dda03747a2513f5b26f796ee844901ec5166882b7414c66",
+      "session_id": "c9a8de29452c4173a94a433ba9e3f945",
+      "usage": {
+        "cached_tokens_included_in_input": true,
+        "codex_jsonl_sha256": "1cc36e594dc29f7a3b561f418216279b788d4858968a92dec3ff80b8ad8f870e",
+        "events": [
+          {
+            "cache_write_input_tokens": 0,
+            "cached_input_tokens": 96384,
+            "input_tokens": 128190,
+            "output_tokens": 8129,
+            "reasoning_output_tokens": 6888
+          }
+        ],
+        "forbidden_tool_events": [],
+        "llm_calls": 1,
+        "mcp_tool_calls": [
+          {
+            "allowed": true,
+            "id": "item_2",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "documentation_catalog"
+          },
+          {
+            "allowed": true,
+            "id": "item_3",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_4",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_5",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "read_documentation"
+          }
+        ],
+        "model_requested": "gpt-6-luna",
+        "model_skills": {
+          "conversation": {
+            "id": "c47b601d46234619bdfd07b555a3712b",
+            "phase": "planning",
+            "previous_request_sha256": null,
+            "thread_id": null,
+            "turn": 0
+          },
+          "effective_instructions_sha256": "d006ee627599f40e7a36763a7437b9b88bc5e5fa43949478f5be1a94eb70d18b",
+          "loading": "explicit_system_instructions",
+          "manifest": {
+            "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+            "loaded": [
+              {
+                "name": "planifier-optimisation",
+                "path": "assets/skills/planifier-optimisation/SKILL.md",
+                "sha256": "ace3ff2a1dfbddc126bba36c3a406f6f7259cfe241c81fa7672232fb2a82064e"
+              },
+              {
+                "name": "inspecter-environnement",
+                "path": "assets/skills/inspecter-environnement/SKILL.md",
+                "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+              },
+              {
+                "name": "evaluer-performances",
+                "path": "assets/skills/evaluer-performances/SKILL.md",
+                "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+              }
+            ],
+            "phase": "planning",
+            "role": "Mother",
+            "version": "hpc-forest-project-skills-v1"
+          },
+          "mission_id": "mother-preparation-5b2c5ae4505f48a3",
+          "model_declarations_are_execution_proof": false,
+          "model_reported": [
+            {
+              "name": "planifier-optimisation",
+              "references": [
+                "9474e9b1105b774bc2858607f13fbdef946812ea"
+              ],
+              "status": "applied",
+              "summary": "Chose three distinct research objectives from the O(N²) kernel and limited measurements: arithmetic cost, CTA source reuse, and source-axis parallelism."
+            },
+            {
+              "name": "inspecter-environnement",
+              "references": [],
+              "status": "not_needed",
+              "summary": "The supplied target already specifies GH200, ARM host, NVRTC CUDA 12.6.3, and the one-GPU/four-core allocation; no additional environment-dependent decision requires inspection."
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "references": [
+                "https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html"
+              ],
+              "status": "applied",
+              "summary": "Checked the official CUDA Best Practices Guide for general math-intrinsic and precision guidance. The returned publisher-current version is 13.4, not the target's CUDA 12.6.3, so I do not use it to establish version-specific feature availability."
+            },
+            {
+              "name": "evaluer-performances",
+              "references": [
+                "9474e9b1105b774bc2858607f13fbdef946812ea"
+              ],
+              "status": "applied",
+              "summary": "Recorded the valid baseline timing triple and its mean; no candidate comparisons or independent confirmations are available yet. G must be freshly checked and independently confirmed."
+            }
+          ],
+          "native_turn_completed": true,
+          "nonce": "f30b368fc38840a1ba1d046a18cfbef8",
+          "observed_mcp_calls": [
+            {
+              "allowed": true,
+              "id": "item_2",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "documentation_catalog"
+            },
+            {
+              "allowed": true,
+              "id": "item_3",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_4",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_5",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "read_documentation"
+            }
+          ],
+          "report_error": null,
+          "report_status": "reported",
+          "request_sha256": "69fe40700b33ab1a9dda03747a2513f5b26f796ee844901ec5166882b7414c66",
+          "schema": "hpc-forest-project-skills-v1",
+          "session_id": "c9a8de29452c4173a94a433ba9e3f945"
+        },
+        "observed_tokens": 136319,
+        "reasoning_effort_requested": "max",
+        "token_accounting": "exact",
+        "tokens": 136319,
+        "tool_events": [
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call"
+        ],
+        "tool_runtime_errors": []
+      }
+    },
+    "slot_id": "a127c486db124b36b581864d2a01f0c7",
+    "status": "complete"
+  },
+  "forest_plan:1": {
+    "base_commit": "9474e9b1105b774bc2858607f13fbdef946812ea",
+    "children": [
+      {
+        "objective": "Explore lower-cost pairwise arithmetic while keeping the current one-output-per-thread mapping and serial source loop as the starting point. Test selective reciprocal-square-root use, algebraic force simplifications, and self-interaction handling only as justified by measurements. Preserve the physical result and validate every change against the tolerance and full oracle suite, including extreme-mass and coincident-position cases; make no bounded-mass assumption. Do not pivot to shared-memory tiling or source-axis parallel reduction in this tree. Tune only parameters needed to measure this arithmetic path, and report correctness and timing across all three objective sizes.",
+        "role": "T1",
+        "subject": "Pairwise arithmetic and numerical-cost reduction"
+      },
+      {
+        "objective": "Explore CTA-level reuse of source positions and masses: stage source tiles cooperatively in shared memory and reuse them across multiple output particles, retaining a serial source accumulation per output initially to isolate the reuse effect. Tune legal block, items_per_block, and shared_memory_bytes settings; handle partial source and output tiles without races or out-of-bounds accesses. Keep the required Particle layout and interface, use no extra buffers or launches, and validate all required sizes and edge cases. Measure the three objective sizes and report the cost/benefit of tiling and synchronization.",
+        "role": "T2",
+        "subject": "Shared-memory source tiling and CTA reuse"
+      },
+      {
+        "objective": "Explore an alternative mapping that distributes each target's source-particle reduction across lanes, such as a warp-per-target reduction, with correct handling of source tails and self-interaction. Keep the original force formulation initially to distinguish mapping and reduction effects from arithmetic simplification; do not make CTA shared-memory source staging the focus of this tree. Tune warp/target mapping and legal launch parameters, preserve complete outputs and exact masses, and validate all required sizes, numerical tolerances, and edge cases before reporting timing for the three objective sizes.",
+        "role": "T3",
+        "subject": "Warp-cooperative source-axis reduction"
+      }
+    ],
+    "conversation": {
+      "id": "c47b601d46234619bdfd07b555a3712b",
+      "phase": "planning",
+      "request_sha256": "69fe40700b33ab1a9dda03747a2513f5b26f796ee844901ec5166882b7414c66",
+      "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+      "turn": 0
+    },
+    "epoch": 1,
+    "mother_slot_id": "a127c486db124b36b581864d2a01f0c7",
+    "parallelism": 3,
+    "plan_sha256": "24d30fd582dc7697c1435249b0fc8659f644ca4960be78cafdaae484d8ad3695",
+    "protocol": "hpc-forest-mother-forest-v1",
+    "request_sha256": "69fe40700b33ab1a9dda03747a2513f5b26f796ee844901ec5166882b7414c66",
+    "status": "complete"
+  },
+  "adaptive_budget:1": {
+    "archive_seconds": 5.0,
+    "can_admit": true,
+    "code_call_limit": 6,
+    "confirmation_seconds": 91.82791130663827,
+    "estimation_policy": "independent_phase_medians",
+    "final_g_seconds": 134.54055067899753,
+    "first_wave_continues_mother": true,
+    "inflight_roles": [],
+    "integration_estimate_source": "memory-guided-typical-selection+code+evaluation",
+    "integration_seconds": 389.08110135799507,
+    "integration_step_limit": 16,
+    "integration_steps": 2,
+    "mother_seconds": 186.6708586215973,
+    "next_work_seconds": 204.52706504624075,
+    "observed_at": 1792756376.9820762,
+    "pending_roles": [
+      "T1",
+      "T2",
+      "T3"
+    ],
+    "predicted_drain_seconds": 163.6216520369926,
+    "remaining_seconds": 1598.753202199936,
+    "research_estimate_source": "generation_and_exclusive_evaluation",
+    "reserve_seconds": 617.3862658307917,
+    "safety_factor": 1.25,
+    "sample_counts": {
+      "baseline": 1,
+      "evaluation_benchmark:baseline": 1,
+      "evaluation_build:baseline": 1,
+      "evaluation_check:baseline": 1,
+      "evaluation_lock_wait:baseline": 1,
+      "evaluation_work:baseline": 1,
+      "mother": 1
+    },
+    "search_admission_deadline": 1792757358.3490126,
+    "selection_call_limit": 4,
+    "selection_call_seconds": 30,
+    "selection_calls_per_round": 2,
+    "selection_seconds": 120,
+    "target_deadline": 1792757975.7352784
+  },
+  "forest_wave:1:0": {
+    "admitted_at": 1792756376.98562,
+    "parent_mother_slot": "a127c486db124b36b581864d2a01f0c7",
+    "roles": [
+      "T1",
+      "T2",
+      "T3"
+    ],
+    "slots": {
+      "T1": "2f8e91dec8e24dd5940aa43da1e32e9a",
+      "T2": "4e60221e42ad4f6ebc4c1cbbfad0678e",
+      "T3": "ecbd4c0d1c254e2cbd2836dd42990979"
+    }
+  },
+  "research_initial_dispatch:1": {
+    "claimed_at": 1792756377.0819457,
+    "mission_ids": [
+      "daaf325c39034713",
+      "7aa965b731624403",
+      "83a932bc05ba4f61"
+    ]
+  },
+  "plan_cursor:1": 1,
+  "research_scheduler:1": {
+    "one_pending_trial_per_tree": true,
+    "parallelism": 3,
+    "policy": "independent-v1",
+    "settled_nodes_by_tree": {
+      "T1": 1,
+      "T2": 1,
+      "T3": 1
+    },
+    "status": "infrastructure_error"
+  },
+  "research_pending:1": [],
+  "search_closed:1": 1792756732.8451438,
+  "mother_assembly_started:1": 1792756732.8468375,
+  "memory_selection_call_counts": [
+    2,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "mother_plan:final_synthesis:1": {
+    "budget_phase": "postprocess",
+    "conversation": {
+      "id": "c47b601d46234619bdfd07b555a3712b",
+      "phase": "assembly",
+      "request_sha256": "a40274644e09061a3f2e83bfc2dbb407c2ab44d0242ae09298de3efba60c3b41",
+      "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+      "turn": 15
+    },
+    "final_synthesis": true,
+    "model_calls": 1,
+    "phase": "assembly",
+    "request_sha256": "a40274644e09061a3f2e83bfc2dbb407c2ab44d0242ae09298de3efba60c3b41",
+    "status": "complete",
+    "usage_charged_to_g_mission": "bdae446f3570488f-h01"
+  },
+  "mother_conversation:1": {
+    "id": "c47b601d46234619bdfd07b555a3712b",
+    "phase": "assembly",
+    "request_sha256": "02983ceee0e2be107ce7a8c5fe687e7e6a8dccb12968f850393bed3172cd015b",
+    "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+    "turn": 16
+  },
+  "postprocess:1": {
+    "active_mission_id": "bdae446f3570488f",
+    "best_reference_id": "f4f3935e70954c99",
+    "budget_phase": "postprocess",
+    "completed_at": 1792757615.6675763,
+    "context_compaction": "bounded-retrieval-and-codex-cli-automatic",
+    "elapsed_seconds": 882.822033405304,
+    "error": "InfrastructureError: Mother selection failed: Codex attempted a tool call outside the authorized MCP access",
+    "integration_policy": "memory-guided-v1",
+    "limits": {
+      "code_calls_per_round": 6,
+      "code_slots": 16,
+      "postprocess_slots": 80,
+      "rounds": 16,
+      "selection_calls_per_round": 4,
+      "selection_slots": 64
+    },
+    "mission_id": "bdae446f3570488f",
+    "mother": {
+      "budget_phase": "postprocess",
+      "conversation": {
+        "id": "c47b601d46234619bdfd07b555a3712b",
+        "phase": "assembly",
+        "request_sha256": "a40274644e09061a3f2e83bfc2dbb407c2ab44d0242ae09298de3efba60c3b41",
+        "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+        "turn": 15
+      },
+      "final_synthesis": true,
+      "model_calls": 1,
+      "phase": "assembly",
+      "request_sha256": "a40274644e09061a3f2e83bfc2dbb407c2ab44d0242ae09298de3efba60c3b41",
+      "status": "complete",
+      "usage_charged_to_g_mission": "bdae446f3570488f-h01"
+    },
+    "mother_required": true,
+    "outcome": {
+      "binary_sha256": "4db712ed1a6283105da6bac713053386f44c5a8e39f422f99add3ce48a11b9d3",
+      "cache_key": "724a5bf2a6dd8235cf73f1f3baff19f88ff637e9336e3932f227ca79604c534c",
+      "commit": "fda02e78ab6f1b513cf670eed0056cba117b444d",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.001799136078860113,
+      "reason": "",
+      "score": 0.5072138523816854,
+      "status": "valid",
+      "times": [
+        0.001798351407077685,
+        0.0017991401345964389,
+        0.0017999166949062145
+      ],
+      "tree_hash": "f5dd34e00309d961e056a8f778332cf4951d8e7f"
+    },
+    "search_stop_reason": "infrastructure_error",
+    "selections": [
+      {
+        "decision": {
+          "action": "read",
+          "base_id": "",
+          "idea_ids": [],
+          "rationale": "The baseline is the only available correct measured program. All three tree records ended in infrastructure errors and contain no source or usable optimization lessons. Read the baseline kernel before selecting an independently authored integration experiment.",
+          "read": {
+            "ids": [
+              "baseline-e1"
+            ],
+            "offset": 0,
+            "operation": "source",
+            "path": "src/nbody_kernel.cu",
+            "query": ""
+          },
+          "source_ids": []
+        },
+        "id": "memory-select-e1-r1-t1",
+        "read_result": {
+          "commit": "9474e9b1105b774bc2858607f13fbdef946812ea",
+          "file_sha256": "ab22e9f1e077f75420e407b68a4285d97a5912340297d1a700f98f40697b00bc",
+          "id": "baseline-e1",
+          "next_offset": null,
+          "offset_unit": "characters",
+          "path": "src/nbody_kernel.cu",
+          "schema": "hpc-forest-memory-v1",
+          "snapshot_digest": "238101b9728a332f5db5303a0cccf6935dc1f7490b478a27686868478cc8a9d0",
+          "text": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale\n    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue; // Divergence de branche inutile dans la boucle\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)\n\n        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n\n",
+          "total_characters": 1505
+        },
+        "round": 1,
+        "slot_id": "dc8d18c08e4c417eb549b63d667034e7",
+        "status": "complete",
+        "turn": 1
+      },
+      {
+        "decision": {
+          "action": "integrate",
+          "base_id": "baseline-e1",
+          "idea_ids": [],
+          "rationale": "Test one Mother-authored arithmetic rewrite on the only valid measured base. It cancels the target-mass factor from acceleration and uses rsqrtf; this is a hypothesis, not a confirmed speedup. Keep launch.json unchanged. Complete files:\nsrc/nbody_kernel.cu:\nstruct Particle { float x,y,z,vx,vy,vz,mass; };\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n  int i=blockIdx.x*blockDim.x+threadIdx.x;\n  if(i>=n) return;\n  const Particle pi=in[i];\n  float ax=0.0f, ay=0.0f, az=0.0f;\n  for(int j=0;j<n;++j) {\n    if(i==j) continue;\n    const Particle pj=in[j];\n    float dx=pj.x-pi.x, dy=pj.y-pi.y, dz=pj.z-pi.z;\n    float r2=dx*dx+dy*dy+dz*dz+0.001f;\n    float invr=rsqrtf(r2);\n    float s=pj.mass*invr*invr*invr;\n    ax+=s*dx; ay+=s*dy; az+=s*dz;\n  }\n  Particle p=pi;\n  p.vx+=ax*dt; p.vy+=ay*dt; p.vz+=az*dt;\n  p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt;\n  out[i]=p;\n}\nsrc/launch.json:\n{\"block\":256,\"items_per_block\":256,\"shared_memory_bytes\":0}\nThe controller must freshly check the full correctness suite and measure all three objective sizes; retain this candidate only if its results justify it.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "baseline-e1"
+          ]
+        },
+        "id": "memory-select-e1-r1-t2",
+        "round": 1,
+        "slot_id": "62b14cf35cd845c1874c8a4cc65d6961",
+        "status": "complete",
+        "turn": 2
+      },
+      {
+        "decision": {
+          "action": "integrate",
+          "base_id": "9b2da819634b40dd",
+          "idea_ids": [],
+          "rationale": "The current integration is correct and measured at 0.001843805 s (score 0.50108), a modest improvement over the valid baseline at 0.001851811 s (score 0.5). Test one bounded follow-up: increase source-loop unrolling from 4 to 8 while preserving baseline arithmetic and launch configuration. Keep the current correct integration as the base; the change needs a fresh correctness check and measurement.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "9b2da819634b40dd"
+          ]
+        },
+        "id": "memory-select-e1-r2-t1",
+        "round": 2,
+        "slot_id": "f358582cd0894477b017b1826c7d17f5",
+        "status": "complete",
+        "turn": 1
+      },
+      {
+        "decision": {
+          "action": "integrate",
+          "base_id": "5e853b44a8bc44c4",
+          "idea_ids": [],
+          "rationale": "The unroll-8 integration is correct and measured at 0.001814007 s (score 0.50516), faster than the correct unroll-4 candidate at 0.001843805 s. Test one bounded follow-up by increasing loop unrolling to 16, preserving arithmetic and launch configuration. This is not yet independently confirmed; keep the correct unroll-8 program as the base and compare only after a fresh correctness check and measurement.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "5e853b44a8bc44c4"
+          ]
+        },
+        "id": "memory-select-e1-r3-t1",
+        "round": 3,
+        "slot_id": "0134163621354c67813dd5010b9e1cbe",
+        "status": "complete",
+        "turn": 1
+      },
+      {
+        "decision": {
+          "action": "integrate",
+          "base_id": "52d1defc653743d0",
+          "idea_ids": [],
+          "rationale": "The correct unroll-16 integration measured 0.001798210 s (score 0.50734), improving on unroll-8 at 0.001814007 s. Test one more bounded step: increase unrolling to 32 while preserving arithmetic, accumulation order, and launch settings. This extends the measured trend but is only a hypothesis; retain the current correct base unless a fresh check and measurement justify the change.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "52d1defc653743d0"
+          ]
+        },
+        "id": "memory-select-e1-r4-t1",
+        "round": 4,
+        "slot_id": "66417f18df8e4893a722abd75f58a2fe",
+        "status": "complete",
+        "turn": 1
+      },
+      {
+        "decision": {
+          "action": "integrate",
+          "base_id": "3f23558b5b9e4387",
+          "idea_ids": [],
+          "rationale": "The correct unroll-32 candidate measured 0.001795054 s versus 0.001798210 s for unroll-16, a small aggregate difference. One final bounded experiment can test unroll-64 while preserving arithmetic and launch settings; the gain may be noise or reverse. Use the valid unroll-32 program as base, then retain the best correct measured branch and confirm it independently.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "3f23558b5b9e4387"
+          ]
+        },
+        "id": "memory-select-e1-r5-t1",
+        "round": 5,
+        "slot_id": "9f5d5ba33bae436f8bb025fc286eb001",
+        "status": "complete",
+        "turn": 1
+      },
+      {
+        "decision": {
+          "action": "integrate",
+          "base_id": "f4f3935e70954c99",
+          "idea_ids": [],
+          "rationale": "The correct unroll-64 candidate measured 0.001790758 s, modestly faster than unroll-32 at 0.001795054 s. Test one final bounded step at unroll-128, preserving arithmetic and launch settings; the gains may be within measurement noise or reverse. Retain unroll-64 as the correct measured base and require a fresh correctness check and measurement before judging the variant.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "f4f3935e70954c99"
+          ]
+        },
+        "id": "memory-select-e1-r6-t1",
+        "round": 6,
+        "slot_id": "b5fd6b4de4b54c87a9dac55cfe8c31cc",
+        "status": "complete",
+        "turn": 1
+      },
+      {
+        "error": "Finish requires an already evaluated integration",
+        "id": "memory-select-e1-r7-t1",
+        "round": 7,
+        "slot_id": "b2dbeae3cb2147fc85963334dd6551bb",
+        "status": "rejected",
+        "turn": 1
+      },
+      {
+        "error": "Codex attempted a tool call outside the authorized MCP access",
+        "id": "memory-select-e1-r7-t2",
+        "round": 7,
+        "slot_id": "97de378b361c47ce9732dcdaa36713d7",
+        "status": "failed",
+        "turn": 2
+      }
+    ],
+    "slot_id": "97de378b361c47ce9732dcdaa36713d7",
+    "started_at": 1792756732.845543,
+    "status": "failed",
+    "steps": [
+      {
+        "base_id": "baseline-e1",
+        "final": false,
+        "idea_ids": [],
+        "input_commits": [
+          "9474e9b1105b774bc2858607f13fbdef946812ea"
+        ],
+        "input_ids": [
+          "baseline-e1"
+        ],
+        "mission_id": "9b2da819634b40dd",
+        "mother": {
+          "budget_phase": "postprocess",
+          "conversation": {
+            "id": "c47b601d46234619bdfd07b555a3712b",
+            "phase": "assembly",
+            "request_sha256": "ea35bda0597f5a3816c99fc1d014676ad9550a5771b82f11df63dc39af3e3ed9",
+            "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+            "turn": 5
+          },
+          "final_synthesis": true,
+          "model_calls": 1,
+          "phase": "assembly",
+          "request_sha256": "ea35bda0597f5a3816c99fc1d014676ad9550a5771b82f11df63dc39af3e3ed9",
+          "status": "complete",
+          "usage_charged_to_g_mission": "9b2da819634b40dd-h03"
+        },
+        "outcome": {
+          "binary_sha256": "4fb8bb1ef458a85e53628776c09a41066bdf8a2a47b4f38756fcbe6642542354",
+          "cache_key": "04b3994648ead17828e6beca38cb1c8124ac29380f210fd92b9fb7454a0d7d9a",
+          "commit": "3a49a33e15199aefbda00547861ef56b8044458b",
+          "correct": true,
+          "logs": [
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/9b2da819634b40dd/search/attempt-001/build.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/9b2da819634b40dd/search/attempt-001/correctness.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/9b2da819634b40dd/search/attempt-001/sample-0.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/9b2da819634b40dd/search/attempt-001/sample-1.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/9b2da819634b40dd/search/attempt-001/sample-2.log"
+          ],
+          "mean_seconds": 0.0018438049557566439,
+          "reason": "",
+          "score": 0.5010831628726461,
+          "status": "valid",
+          "times": [
+            0.001846752525235563,
+            0.0018435322848595168,
+            0.0018411300571748515
+          ],
+          "tree_hash": "acbaf1bfecfe67b1123ab1880e1148020e7441e1"
+        },
+        "pair": 1,
+        "retained_ids": [
+          "baseline-e1"
+        ],
+        "round": 1,
+        "selection": {
+          "action": "integrate",
+          "base_id": "baseline-e1",
+          "idea_ids": [],
+          "rationale": "Test one Mother-authored arithmetic rewrite on the only valid measured base. It cancels the target-mass factor from acceleration and uses rsqrtf; this is a hypothesis, not a confirmed speedup. Keep launch.json unchanged. Complete files:\nsrc/nbody_kernel.cu:\nstruct Particle { float x,y,z,vx,vy,vz,mass; };\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n  int i=blockIdx.x*blockDim.x+threadIdx.x;\n  if(i>=n) return;\n  const Particle pi=in[i];\n  float ax=0.0f, ay=0.0f, az=0.0f;\n  for(int j=0;j<n;++j) {\n    if(i==j) continue;\n    const Particle pj=in[j];\n    float dx=pj.x-pi.x, dy=pj.y-pi.y, dz=pj.z-pi.z;\n    float r2=dx*dx+dy*dy+dz*dz+0.001f;\n    float invr=rsqrtf(r2);\n    float s=pj.mass*invr*invr*invr;\n    ax+=s*dx; ay+=s*dy; az+=s*dz;\n  }\n  Particle p=pi;\n  p.vx+=ax*dt; p.vy+=ay*dt; p.vz+=az*dt;\n  p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt;\n  out[i]=p;\n}\nsrc/launch.json:\n{\"block\":256,\"items_per_block\":256,\"shared_memory_bytes\":0}\nThe controller must freshly check the full correctness suite and measure all three objective sizes; retain this candidate only if its results justify it.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "baseline-e1"
+          ]
+        },
+        "status": "complete",
+        "step": 1
+      },
+      {
+        "base_id": "9b2da819634b40dd",
+        "final": false,
+        "idea_ids": [],
+        "input_commits": [
+          "3a49a33e15199aefbda00547861ef56b8044458b"
+        ],
+        "input_ids": [
+          "9b2da819634b40dd"
+        ],
+        "mission_id": "5e853b44a8bc44c4",
+        "mother": {
+          "budget_phase": "postprocess",
+          "conversation": {
+            "id": "c47b601d46234619bdfd07b555a3712b",
+            "phase": "assembly",
+            "request_sha256": "75899715be281da68d3b5523600e676be3bd3173d3db9f1af826a91c60fd5780",
+            "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+            "turn": 7
+          },
+          "final_synthesis": true,
+          "model_calls": 1,
+          "phase": "assembly",
+          "request_sha256": "75899715be281da68d3b5523600e676be3bd3173d3db9f1af826a91c60fd5780",
+          "status": "complete",
+          "usage_charged_to_g_mission": "5e853b44a8bc44c4-h01"
+        },
+        "outcome": {
+          "binary_sha256": "1f5247726ab91465c9e199b5d9b0e476963db5c4a2de3bcb51373f66eed2b89b",
+          "cache_key": "1f0432e479908c5d74dc731c9475f53d9881799bd5ec307999d8987e1426ff3c",
+          "commit": "147c0b064efa7429e04732ae0d9091ce5e21801d",
+          "correct": true,
+          "logs": [
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/5e853b44a8bc44c4/search/attempt-001/build.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/5e853b44a8bc44c4/search/attempt-001/correctness.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/5e853b44a8bc44c4/search/attempt-001/sample-0.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/5e853b44a8bc44c4/search/attempt-001/sample-1.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/5e853b44a8bc44c4/search/attempt-001/sample-2.log"
+          ],
+          "mean_seconds": 0.001814006558315496,
+          "reason": "",
+          "score": 0.5051563267868362,
+          "status": "valid",
+          "times": [
+            0.0018143422401694018,
+            0.0018118949543109366,
+            0.0018157824804661497
+          ],
+          "tree_hash": "0dca9fdf14eab3f96d993fe7c800745f18430ac8"
+        },
+        "pair": 1,
+        "retained_ids": [
+          "9b2da819634b40dd"
+        ],
+        "round": 2,
+        "selection": {
+          "action": "integrate",
+          "base_id": "9b2da819634b40dd",
+          "idea_ids": [],
+          "rationale": "The current integration is correct and measured at 0.001843805 s (score 0.50108), a modest improvement over the valid baseline at 0.001851811 s (score 0.5). Test one bounded follow-up: increase source-loop unrolling from 4 to 8 while preserving baseline arithmetic and launch configuration. Keep the current correct integration as the base; the change needs a fresh correctness check and measurement.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "9b2da819634b40dd"
+          ]
+        },
+        "status": "complete",
+        "step": 2
+      },
+      {
+        "base_id": "5e853b44a8bc44c4",
+        "final": false,
+        "idea_ids": [],
+        "input_commits": [
+          "147c0b064efa7429e04732ae0d9091ce5e21801d"
+        ],
+        "input_ids": [
+          "5e853b44a8bc44c4"
+        ],
+        "mission_id": "52d1defc653743d0",
+        "mother": {
+          "budget_phase": "postprocess",
+          "conversation": {
+            "id": "c47b601d46234619bdfd07b555a3712b",
+            "phase": "assembly",
+            "request_sha256": "df45266e95f894f3bfade484aee8cf1aeff5f3679b5da3570854f1a00244f47c",
+            "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+            "turn": 9
+          },
+          "final_synthesis": true,
+          "model_calls": 1,
+          "phase": "assembly",
+          "request_sha256": "df45266e95f894f3bfade484aee8cf1aeff5f3679b5da3570854f1a00244f47c",
+          "status": "complete",
+          "usage_charged_to_g_mission": "52d1defc653743d0-h01"
+        },
+        "outcome": {
+          "binary_sha256": "c285b4a31559623a0044533a7910a6a58ee49863610ba20002ceb650da6539f4",
+          "cache_key": "302634512a773f6cf68020f4dcce84b41cd3dde6f06b918e225828ab795f0d82",
+          "commit": "69be5fe00205d3d6b9fa52ab38016c2ce9991477",
+          "correct": true,
+          "logs": [
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/52d1defc653743d0/search/attempt-001/build.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/52d1defc653743d0/search/attempt-001/correctness.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/52d1defc653743d0/search/attempt-001/sample-0.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/52d1defc653743d0/search/attempt-001/sample-1.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/52d1defc653743d0/search/attempt-001/sample-2.log"
+          ],
+          "mean_seconds": 0.0017982097685352951,
+          "reason": "",
+          "score": 0.5073425742371824,
+          "status": "valid",
+          "times": [
+            0.0017969232768190672,
+            0.0018006593203396938,
+            0.0017970467084471246
+          ],
+          "tree_hash": "a6a3d5a5df9dd2a20e836744e5271cdf007ddb06"
+        },
+        "pair": 1,
+        "retained_ids": [
+          "5e853b44a8bc44c4"
+        ],
+        "round": 3,
+        "selection": {
+          "action": "integrate",
+          "base_id": "5e853b44a8bc44c4",
+          "idea_ids": [],
+          "rationale": "The unroll-8 integration is correct and measured at 0.001814007 s (score 0.50516), faster than the correct unroll-4 candidate at 0.001843805 s. Test one bounded follow-up by increasing loop unrolling to 16, preserving arithmetic and launch configuration. This is not yet independently confirmed; keep the correct unroll-8 program as the base and compare only after a fresh correctness check and measurement.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "5e853b44a8bc44c4"
+          ]
+        },
+        "status": "complete",
+        "step": 3
+      },
+      {
+        "base_id": "52d1defc653743d0",
+        "final": false,
+        "idea_ids": [],
+        "input_commits": [
+          "69be5fe00205d3d6b9fa52ab38016c2ce9991477"
+        ],
+        "input_ids": [
+          "52d1defc653743d0"
+        ],
+        "mission_id": "3f23558b5b9e4387",
+        "mother": {
+          "budget_phase": "postprocess",
+          "conversation": {
+            "id": "c47b601d46234619bdfd07b555a3712b",
+            "phase": "assembly",
+            "request_sha256": "2044e9108f10df68ea05e87cd7f280e704eeae7f03627eb0af4875f0b527e9bd",
+            "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+            "turn": 11
+          },
+          "final_synthesis": true,
+          "model_calls": 1,
+          "phase": "assembly",
+          "request_sha256": "2044e9108f10df68ea05e87cd7f280e704eeae7f03627eb0af4875f0b527e9bd",
+          "status": "complete",
+          "usage_charged_to_g_mission": "3f23558b5b9e4387-h01"
+        },
+        "outcome": {
+          "binary_sha256": "d47c4c759a5d741045321af304d74064eebd40928a86a49583538cb57853b75f",
+          "cache_key": "13b3cd31cebcd3c7fa171aa98ab6575198c6cbf15d8edcf0c671c56f4776efa5",
+          "commit": "15a43058bab25b3c6decb05d2ff0a465f8e1cd3b",
+          "correct": true,
+          "logs": [
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/3f23558b5b9e4387/search/attempt-001/build.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/3f23558b5b9e4387/search/attempt-001/correctness.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/3f23558b5b9e4387/search/attempt-001/sample-0.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/3f23558b5b9e4387/search/attempt-001/sample-1.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/3f23558b5b9e4387/search/attempt-001/sample-2.log"
+          ],
+          "mean_seconds": 0.001795053646140594,
+          "reason": "",
+          "score": 0.5077816460085971,
+          "status": "valid",
+          "times": [
+            0.0017970960977297442,
+            0.0017947330544020009,
+            0.0017933317862900368
+          ],
+          "tree_hash": "30f38e739d743dbae53d8517ed9ed65d8c463cea"
+        },
+        "pair": 1,
+        "retained_ids": [
+          "52d1defc653743d0"
+        ],
+        "round": 4,
+        "selection": {
+          "action": "integrate",
+          "base_id": "52d1defc653743d0",
+          "idea_ids": [],
+          "rationale": "The correct unroll-16 integration measured 0.001798210 s (score 0.50734), improving on unroll-8 at 0.001814007 s. Test one more bounded step: increase unrolling to 32 while preserving arithmetic, accumulation order, and launch settings. This extends the measured trend but is only a hypothesis; retain the current correct base unless a fresh check and measurement justify the change.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "52d1defc653743d0"
+          ]
+        },
+        "status": "complete",
+        "step": 4
+      },
+      {
+        "base_id": "3f23558b5b9e4387",
+        "final": false,
+        "idea_ids": [],
+        "input_commits": [
+          "15a43058bab25b3c6decb05d2ff0a465f8e1cd3b"
+        ],
+        "input_ids": [
+          "3f23558b5b9e4387"
+        ],
+        "mission_id": "f4f3935e70954c99",
+        "mother": {
+          "budget_phase": "postprocess",
+          "conversation": {
+            "id": "c47b601d46234619bdfd07b555a3712b",
+            "phase": "assembly",
+            "request_sha256": "eb48e81578b559a929991394578252682a32623833c276228ee19e91db451488",
+            "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+            "turn": 13
+          },
+          "final_synthesis": true,
+          "model_calls": 1,
+          "phase": "assembly",
+          "request_sha256": "eb48e81578b559a929991394578252682a32623833c276228ee19e91db451488",
+          "status": "complete",
+          "usage_charged_to_g_mission": "f4f3935e70954c99-h01"
+        },
+        "outcome": {
+          "binary_sha256": "3543876d99c795322fcdefb37a099470d32da3a293d0089525ff47fdfb47ffad",
+          "cache_key": "bda59c3feeefcbfd5313ce882177db9a2ddc14687142615cef9d4ac62a17ffc1",
+          "commit": "e9f88f92d874150d66a6ce20b02779f34002ad97",
+          "correct": true,
+          "logs": [
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/f4f3935e70954c99/search/attempt-001/build.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/f4f3935e70954c99/search/attempt-001/correctness.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/f4f3935e70954c99/search/attempt-001/sample-0.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/f4f3935e70954c99/search/attempt-001/sample-1.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/f4f3935e70954c99/search/attempt-001/sample-2.log"
+          ],
+          "mean_seconds": 0.0017907584667140378,
+          "reason": "",
+          "score": 0.5083804028424225,
+          "status": "valid",
+          "times": [
+            0.0017905650493185946,
+            0.0017899058829397123,
+            0.0017918044678838065
+          ],
+          "tree_hash": "b394d984bfe064e1f9d8c70b5a493c07e180845c"
+        },
+        "pair": 1,
+        "retained_ids": [
+          "3f23558b5b9e4387"
+        ],
+        "round": 5,
+        "selection": {
+          "action": "integrate",
+          "base_id": "3f23558b5b9e4387",
+          "idea_ids": [],
+          "rationale": "The correct unroll-32 candidate measured 0.001795054 s versus 0.001798210 s for unroll-16, a small aggregate difference. One final bounded experiment can test unroll-64 while preserving arithmetic and launch settings; the gain may be noise or reverse. Use the valid unroll-32 program as base, then retain the best correct measured branch and confirm it independently.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "3f23558b5b9e4387"
+          ]
+        },
+        "status": "complete",
+        "step": 5
+      },
+      {
+        "base_id": "f4f3935e70954c99",
+        "final": false,
+        "idea_ids": [],
+        "input_commits": [
+          "e9f88f92d874150d66a6ce20b02779f34002ad97"
+        ],
+        "input_ids": [
+          "f4f3935e70954c99"
+        ],
+        "mission_id": "bdae446f3570488f",
+        "mother": {
+          "budget_phase": "postprocess",
+          "conversation": {
+            "id": "c47b601d46234619bdfd07b555a3712b",
+            "phase": "assembly",
+            "request_sha256": "a40274644e09061a3f2e83bfc2dbb407c2ab44d0242ae09298de3efba60c3b41",
+            "thread_id": "01a16899-06b7-7333-a4ff-364e22737c85",
+            "turn": 15
+          },
+          "final_synthesis": true,
+          "model_calls": 1,
+          "phase": "assembly",
+          "request_sha256": "a40274644e09061a3f2e83bfc2dbb407c2ab44d0242ae09298de3efba60c3b41",
+          "status": "complete",
+          "usage_charged_to_g_mission": "bdae446f3570488f-h01"
+        },
+        "outcome": {
+          "binary_sha256": "4db712ed1a6283105da6bac713053386f44c5a8e39f422f99add3ce48a11b9d3",
+          "cache_key": "724a5bf2a6dd8235cf73f1f3baff19f88ff637e9336e3932f227ca79604c534c",
+          "commit": "fda02e78ab6f1b513cf670eed0056cba117b444d",
+          "correct": true,
+          "logs": [
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/build.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/correctness.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/sample-0.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/sample-1.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/search/attempt-001/sample-2.log"
+          ],
+          "mean_seconds": 0.001799136078860113,
+          "reason": "",
+          "score": 0.5072138523816854,
+          "status": "valid",
+          "times": [
+            0.001798351407077685,
+            0.0017991401345964389,
+            0.0017999166949062145
+          ],
+          "tree_hash": "f5dd34e00309d961e056a8f778332cf4951d8e7f"
+        },
+        "pair": 1,
+        "retained_ids": [
+          "f4f3935e70954c99"
+        ],
+        "round": 6,
+        "selection": {
+          "action": "integrate",
+          "base_id": "f4f3935e70954c99",
+          "idea_ids": [],
+          "rationale": "The correct unroll-64 candidate measured 0.001790758 s, modestly faster than unroll-32 at 0.001795054 s. Test one final bounded step at unroll-128, preserving arithmetic and launch settings; the gains may be within measurement noise or reverse. Retain unroll-64 as the correct measured base and require a fresh correctness check and measurement before judging the variant.",
+          "read": {
+            "ids": [],
+            "offset": 0,
+            "operation": "none",
+            "path": "",
+            "query": ""
+          },
+          "source_ids": [
+            "f4f3935e70954c99"
+          ]
+        },
+        "status": "complete",
+        "step": 6
+      }
+    ],
+    "unlimited_tokens": true,
+    "unlimited_wall_time": true
+  },
+  "confirmation_started:1": 1792757615.6862879,
+  "confirmation_deadline:1": null,
+  "confirmation_extra_slot:1": true,
+  "confirmation_plan:1": [
+    {
+      "baseline": true,
+      "commit": "9474e9b1105b774bc2858607f13fbdef946812ea",
+      "id": "baseline-e1",
+      "slot_id": "381a87ba0f5a41e288f2ab8d181b061b",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/worktrees/confirm-e1-baseline-e1"
+    },
+    {
+      "baseline": false,
+      "commit": "e9f88f92d874150d66a6ce20b02779f34002ad97",
+      "id": "f4f3935e70954c99",
+      "slot_id": "b68216a7f39649c1bb5495e80a9952fd",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/worktrees/confirm-e1-f4f3935e70954c99"
+    },
+    {
+      "baseline": false,
+      "commit": "15a43058bab25b3c6decb05d2ff0a465f8e1cd3b",
+      "id": "3f23558b5b9e4387",
+      "slot_id": "a05cfd5412414b49874fecbde8b68d9c",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/worktrees/confirm-e1-3f23558b5b9e4387"
+    },
+    {
+      "baseline": false,
+      "commit": "fda02e78ab6f1b513cf670eed0056cba117b444d",
+      "id": "bdae446f3570488f",
+      "mandatory_final_g": true,
+      "slot_id": "b6125ed7fcc844ab98ba5fbb3c24cf43",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/worktrees/confirm-e1-bdae446f3570488f"
+    }
+  ],
+  "confirmation_attempts:1": 1,
+  "final_g_confirmation:1": {
+    "eligible_for_promotion": true,
+    "experiment_id": "bdae446f3570488f",
+    "outcome": {
+      "binary_sha256": "4db712ed1a6283105da6bac713053386f44c5a8e39f422f99add3ce48a11b9d3",
+      "cache_key": "724a5bf2a6dd8235cf73f1f3baff19f88ff637e9336e3932f227ca79604c534c",
+      "commit": "fda02e78ab6f1b513cf670eed0056cba117b444d",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/confirmation/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/confirmation/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/confirmation/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/confirmation/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/confirmation/attempt-001/sample-2.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/confirmation/attempt-001/sample-3.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-776290-c9a8de29452c4173a94a433ba9e3f945/results-780677/cuda-nbody/logs/e1/bdae446f3570488f/confirmation/attempt-001/sample-4.log"
+      ],
+      "mean_seconds": 0.0018001666229718008,
+      "reason": "",
+      "score": 0.5070317626951022,
+      "status": "valid",
+      "times": [
+        0.001799783779309947,
+        0.0018005736402841803,
+        0.0018008627082487913,
+        0.0018013495179032665,
+        0.001798263469112819
+      ],
+      "tree_hash": "f5dd34e00309d961e056a8f778332cf4951d8e7f"
+    },
+    "status": "confirmed"
+  },
+  "best_confirmed": {
+    "commit": "9474e9b1105b774bc2858607f13fbdef946812ea",
+    "epoch": 1,
+    "evaluation_digest": "2b0a715b8af8f8333ead943eea92da3c98486cd96b0a8cc3dac5232aa8fedb86",
+    "experiment_id": "baseline-e1",
+    "improvement_fraction": 0.0,
+    "is_baseline": true,
+    "mean_seconds": 0.0018515222420420498,
+    "protocol_id": "a32f214fba5f430d3cea80c520867b02e678d360d18da5c337aacaae30a543fe",
+    "reference_seconds": 0.0018515222420420498
+  },
+  "status": "confirmed",
+  "confirmation_finished:1": 1792757765.5865846,
+  "timing_samples": {
+    "archive": [
+      0.03183965498465113
+    ],
+    "baseline": [
+      14.540893077850342
+    ],
+    "confirmation": [
+      149.7938666343689
+    ],
+    "evaluation_benchmark:G": [
+      5.74491157400189,
+      5.853719887003535,
+      6.203534864995163,
+      7.240496704005636,
+      12.596603166981367,
+      13.278529631032143
+    ],
+    "evaluation_benchmark:baseline": [
+      6.876910848979605
+    ],
+    "evaluation_build:G": [
+      0.111358474008739,
+      0.10881165901082568,
+      0.10919170500710607,
+      0.11090511997463182,
+      0.10972457000752911,
+      0.11070545398979448
+    ],
+    "evaluation_build:baseline": [
+      0.10155923798447475
+    ],
+    "evaluation_check:G": [
+      4.094386917015072,
+      4.250794389983639,
+      4.896367110020947,
+      5.712653159018373,
+      15.855990837007994,
+      13.140764873998705
+    ],
+    "evaluation_check:baseline": [
+      7.518020031013293
+    ],
+    "evaluation_lock_wait:G": [
+      9.110200335271657e-05,
+      0.00011222198372706771,
+      0.0001062059891410172,
+      9.148599929176271e-05,
+      0.00010537399793975055,
+      8.972600335255265e-05
+    ],
+    "evaluation_lock_wait:baseline": [
+      0.00024389999452978373
+    ],
+    "evaluation_work:G": [
+      9.99354788500932,
+      10.256734333001077,
+      11.25174432201311,
+      13.107781893981155,
+      28.605327133001992,
+      26.571387972013326
+    ],
+    "evaluation_work:baseline": [
+      14.540550678997533
+    ],
+    "generation:G": [
+      172.89510917663574,
+      28.469374418258667,
+      25.381043195724487,
+      23.946163177490234,
+      31.809277296066284,
+      41.702409982681274
+    ],
+    "generation:T1": [
+      355.48271322250366
+    ],
+    "generation:T2": [
+      355.5520977973938
+    ],
+    "generation:T3": [
+      355.7481441497803
+    ],
+    "memory_selection": [
+      151.5314383506775,
+      77.85147023200989,
+      37.81761717796326,
+      14.793253183364868,
+      18.800700426101685,
+      19.06147265434265,
+      39.315781354904175,
+      18.300809860229492,
+      80.59195494651794
+    ],
+    "mission:G": [
+      182.9880495071411,
+      38.827268838882446,
+      36.73340129852295,
+      37.15645170211792,
+      60.53431725502014,
+      68.37457251548767
+    ],
+    "mission:T1": [
+      355.5834722518921
+    ],
+    "mission:T2": [
+      355.61838603019714
+    ],
+    "mission:T3": [
+      355.78598165512085
+    ],
+    "mother": [
+      186.6708586215973
+    ],
+    "postprocess": [
+      882.822033405304
+    ],
+    "research_wave:3": [
+      355.75912442198023
+    ]
+  },
+  "pipeline_finished:1": 1792757765.6298184
+}

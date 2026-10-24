@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale\n    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue; // Divergence de branche inutile dans la boucle\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float invDist3 = invDist * invDist * invDist;\n\n        float f = (G * in[i].mass * in[j].mass) * invDist3;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Remplacer sqrtf puis la division par distSq * dist par rsqrtf(distSq) et trois multiplications peut réduire le coût mathématique par interaction sans activer fast math global. La cancellation de la masse cible est volontairement omise : avec des masses float32 extrêmes, elle peut changer les débordements, sous-débordements et arrondis de la voie actuelle.",
+  "notes": "Une seule modification arithmétique isolée est proposée. La boucle, son ordre d'accumulation, l'intégration et la copie de la masse de sortie restent inchangés; le softening garde distSq positif pour les positions coïncidentes. Aucune mesure ni vérification de correction de ce candidat n'est disponible ici : la correction complète doit précéder toute mesure officielle, notamment pour masses extrêmes, dt variés et tous les cas du contrat. Le baseline fourni était valide et correct, avec une moyenne de 0.0018545204 s sur trois répétitions (baseline-e1).",
+  "sources_kept": [],
+  "transformations": [
+    "Utiliser rsqrtf(distSq), puis invDist * invDist * invDist, à la place de sqrtf et de la division par distSq * dist.",
+    "Conserver les multiplications par les deux masses, la division par la masse cible après accumulation, l'ordre de boucle et l'intégration inchangés.",
+    "Ne pas activer fast math global ni spécialiser les tailles ou les entrées."
+  ]
+}

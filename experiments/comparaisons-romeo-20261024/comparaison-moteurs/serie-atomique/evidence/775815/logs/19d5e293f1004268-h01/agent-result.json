@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 192,\n  \"items_per_block\": 192,\n  \"shared_memory_bytes\": 3072\n}\n",
+      "path": "src/launch.json"
+    }
+  ],
+  "hypothesis": "Un bloc de 192 threads (6 warps) teste un compromis entre le bloc de 128, plus rapide dans les mesures disponibles, et celui de 512, plus lent. Il augmente les sources traitées par tuile et réduit les itérations/barrières d’un tiers par rapport à 128, au prix de 3072 octets de mémoire partagée contre 2048. L’effet sur l’occupation et le temps doit être mesuré.",
+  "notes": "Le noyau tuilé de src/nbody_kernel.cu reste inchangé : il utilise blockDim.x pour la taille des tuiles, charge les sources valides avant la barrière, laisse tous les threads atteindre les barrières et conserve l’ordre des sources ainsi que l’exclusion j==i. Configuration proposée : block=192, items_per_block=192, shared_memory_bytes=3072. Les trois configurations précédemment mesurées et toutes correctes sur les 11 cas sont : (64, 64, 1024), temps 1.000597720, 1.000325046 et 1.000315629 ms, moyenne 1.000412798 ms ; (128, 128, 2048), 0.897680717, 0.897269727 et 0.897613925 ms, moyenne 0.897521456 ms ; (512, 512, 8192), 1.102930360, 1.103371758 et 1.103374982 ms, moyenne 1.103225700 ms. Par rapport à 128, les moyennes de 64 et 512 sont environ 11.5 % et 22.9 % plus lentes. L’historique signale aussi une autre mesure valide de 0.000926477 s (a0ecc881ed964bda), sans configuration ni répétitions détaillées dans les données fournies. La proposition 192 n’a pas encore de résultat de correction ou de temps ; le contrôleur doit fournir ses trois mesures de recherche.",
+  "sources_kept": [],
+  "transformations": [
+    "Régler block et items_per_block à 192 et la mémoire partagée dynamique à 3072 octets, soit quatre tableaux float par thread.",
+    "Conserver le noyau tuilé, l’ordre arithmétique et le traitement existants pour isoler l’effet du réglage de bloc."
+  ]
+}

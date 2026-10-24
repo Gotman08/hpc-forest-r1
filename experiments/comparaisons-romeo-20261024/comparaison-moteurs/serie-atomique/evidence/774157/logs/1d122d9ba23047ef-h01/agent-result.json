@@ -1,0 +1,22 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 16,\n  \"items_per_block\": 16,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        invDist = invDist * (1.5f - 0.5f * distSq * invDist * invDist);\n        float invDist3 = (invDist * invDist) * invDist;\n        float f = (G * in[i].mass * in[j].mass) * invDist3;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Applying T3's smaller block configuration to T4's reciprocal-square-root interaction may raise the number of CTAs and improve device utilization. Half-warp blocks may instead waste execution capacity; the combined program needs measurement.",
+  "notes": "T4 is the better measured starting kernel: valid and correct at a reported mean of 0.0009816780 s, versus T3's valid, correct launch-only result of 0.0017977762 s. This proposal keeps T4's complete kernel and applies T3's block=16/items_per_block=16 configuration. The combined result is unmeasured; these search means are not independent confirmation.",
+  "sources_kept": [
+    "78d4bf6a2d734d9e",
+    "b53069b033954bb1"
+  ],
+  "transformations": [
+    "Retained T4's one-thread-per-target source traversal, Newton-refined rsqrtf inverse-distance calculation, self-pair exclusion, velocity-then-position updates, and exact mass copy.",
+    "Applied T3's launch-only change: block=16 and items_per_block=16, with shared_memory_bytes=0; the source index mapping remains consistent with the launch grid."
+  ]
+}

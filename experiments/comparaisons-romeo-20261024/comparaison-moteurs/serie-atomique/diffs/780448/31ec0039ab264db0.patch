@@ -1,0 +1,111 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..0e26fc2 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 128,
++  "items_per_block": 128,
++  "shared_memory_bytes": 3584
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..a0aa81a 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,44 +1,65 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
++// Structure "Array of Structures" (AoS): each thread owns one target particle.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
++// N-body step with one target per thread and CTA-level source tiling.
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    if (i >= n) return;
++    const int i = blockIdx.x * blockDim.x + threadIdx.x;
++    const bool active = i < n;
++
++    Particle target;
++    if (active) {
++        target = in[i];
++    }
++
++    extern __shared__ Particle source_tile[];
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+-
+     float fx = 0.0f;
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    for (int base = 0; base < n; base += blockDim.x) {
++        const int source_index = base + threadIdx.x;
++        int tile_count = n - base;
++        if (tile_count > blockDim.x) {
++            tile_count = blockDim.x;
++        }
+ 
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++        if (source_index < n) {
++            source_tile[threadIdx.x] = in[source_index];
++        }
++        __syncthreads();
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        if (active) {
++            for (int offset = 0; offset < tile_count; ++offset) {
++                const int j = base + offset;
++                if (i == j) continue;
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++                const Particle source = source_tile[offset];
++                const float dx = source.x - target.x;
++                const float dy = source.y - target.y;
++                const float dz = source.z - target.z;
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++                const float distSq = dx * dx + dy * dy + dz * dz + softening;
++                const float dist = sqrtf(distSq);
++                const float f = (G * target.mass * source.mass) / (distSq * dist);
++
++                fx += f * dx;
++                fy += f * dy;
++                fz += f * dz;
++            }
++        }
++        __syncthreads();
+     }
+ 
+-    // Intégration d'Euler explicite
+-    Particle p = in[i];
++    if (!active) return;
++
++    Particle p = target;
+     p.vx += (fx / p.mass) * dt;
+     p.vy += (fy / p.mass) * dt;
+     p.vz += (fz / p.mass) * dt;
+@@ -49,4 +70,3 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     out[i] = p;
+ }
+-

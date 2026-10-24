@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 512,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Each thread handles two targets spaced by blockDim.x, reusing each streamed\n// source particle while keeping the source path in registers.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const long long base = static_cast<long long>(blockIdx.x) * static_cast<long long>(blockDim.x) * 2LL + static_cast<long long>(threadIdx.x);\n    const long long i0 = base;\n    const long long i1 = base + static_cast<long long>(blockDim.x);\n\n    const bool valid0 = i0 < n;\n    const bool valid1 = i1 < n;\n    if (!valid0 && !valid1) return;\n\n    Particle p0, p1;\n    if (valid0) p0 = in[i0];\n    if (valid1) p1 = in[i1];\n\n    float fx0 = 0.0f, fy0 = 0.0f, fz0 = 0.0f;\n    float fx1 = 0.0f, fy1 = 0.0f, fz1 = 0.0f;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    for (int j = 0; j < n; ++j) {\n        const float sx = in[j].x;\n        const float sy = in[j].y;\n        const float sz = in[j].z;\n        const float sm = in[j].mass;\n\n        if (valid0 && i0 != j) {\n            const float dx = sx - p0.x;\n            const float dy = sy - p0.y;\n            const float dz = sz - p0.z;\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * p0.mass * sm) / (distSq * dist);\n            fx0 += f * dx;\n            fy0 += f * dy;\n            fz0 += f * dz;\n        }\n\n        if (valid1 && i1 != j) {\n            const float dx = sx - p1.x;\n            const float dy = sy - p1.y;\n            const float dz = sz - p1.z;\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * p1.mass * sm) / (distSq * dist);\n            fx1 += f * dx;\n            fy1 += f * dy;\n            fz1 += f * dz;\n        }\n    }\n\n    if (valid0) {\n        p0.vx += (fx0 / p0.mass) * dt;\n        p0.vy += (fy0 / p0.mass) * dt;\n        p0.vz += (fz0 / p0.mass) * dt;\n        p0.x += p0.vx * dt;\n        p0.y += p0.vy * dt;\n        p0.z += p0.vz * dt;\n        out[i0] = p0;\n    }\n    if (valid1) {\n        p1.vx += (fx1 / p1.mass) * dt;\n        p1.vy += (fy1 / p1.mass) * dt;\n        p1.vz += (fz1 / p1.mass) * dt;\n        p1.x += p1.vx * dt;\n        p1.y += p1.vy * dt;\n        p1.z += p1.vz * dt;\n        out[i1] = p1;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "A factor-two target tile retains source-register reuse while halving the per-thread force accumulators compared with the valid but slower factor-four parent. With 256 threads, 512 outputs per block preserves the two-target mapping. This may reduce register-pressure or occupancy costs, but requires official measurement; no speedup is assumed.",
+  "notes": "The factor-four parent and baseline comparisons are supplied controller measurements; no factor-two result or register/occupancy data is available yet. The kernel streams sources from global memory without shared-memory staging, preserves each target's source iteration order and mass, and bounds-checks both outputs for tail blocks. The controller should run correctness and official timing.",
+  "sources_kept": [],
+  "transformations": [
+    "Change per-thread target coarsening from four outputs to two, with target indices separated by blockDim.x.",
+    "Set items_per_block to 512 for 256-thread blocks so each thread covers two logical outputs.",
+    "Stream each source particle once per loop iteration and reuse its position and mass across valid target accumulators.",
+    "Bounds-check both target indices and store each valid output exactly once; keep shared_memory_bytes at zero."
+  ]
+}

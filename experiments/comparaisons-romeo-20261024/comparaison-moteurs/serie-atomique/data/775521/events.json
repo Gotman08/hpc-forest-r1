@@ -1,0 +1,2814 @@
+[
+  {
+    "id": 1,
+    "kind": "workspace_created",
+    "payload": {
+      "base_commit": "8876e027d0d79f3a67e7d68324a68c322bee8817",
+      "protocol_id": "2d4db35ed303b974335c73f6c44fd70c839488b06d5b014a56e0ed5fb7135a9b"
+    },
+    "created": 1792757342.5403633
+  },
+  {
+    "id": 2,
+    "kind": "cuda_nbody_fresh_campaign",
+    "payload": {
+      "effort": "max",
+      "job_id": "780689",
+      "metric": "geomean_cuda_event_seconds",
+      "model": "gpt-6-luna",
+      "old_candidates_imported": false,
+      "pipeline_complete": false,
+      "scope": "cuda-nbody-luna-max-memory-v1",
+      "search_policy": "ab-mcts-a",
+      "session_id": "1be439e2bef24a80978f41176eca48ad",
+      "source_sha256": "566e9a4085ff08795269fdb76df607198f835c597ad2dfab4155ea4f0bc33291",
+      "subject": "cuda-nbody",
+      "target_seconds": 1800
+    },
+    "created": 1792757345.062285
+  },
+  {
+    "id": 3,
+    "kind": "mother_usage",
+    "payload": {
+      "budget_phase": "search",
+      "conversation": {
+        "id": "3115c4d9188b460a9cf8993bc629f438",
+        "phase": "planning",
+        "request_sha256": "8ea56a3205252a83ccd94008cac0c68bdcc68ff4780afe67c07ff392a08ea30a",
+        "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+        "turn": 0
+      },
+      "final_synthesis": false,
+      "model_calls": 1,
+      "phase": "preparation",
+      "plan": {
+        "G": "Après la recherche, comparer les candidats correctement validés selon la moyenne géométrique officielle. Tester les combinaisons utiles sans présumer que leurs gains s’additionnent, compiler et vérifier chaque intégration, puis confirmer indépendamment le meilleur candidat et conserver le meilleur programme confirmé.",
+        "analysis": "Je choisis N=3 : le calcul est quadratique et le code fourni offre trois pistes complémentaires, soit le coût arithmétique par interaction, la réutilisation des particules sources et le parallélisme sur l’axe des sources. Le seul résultat mesuré fourni est la référence correcte (commit 8876e027d0d79f3a67e7d68324a68c322bee8817), avec trois répétitions et mean_seconds=0.0018433244440074987; aucun détail par taille ni candidat optimisé n’est fourni, donc cela ne permet pas d’attribuer le coût dominant. L’environnement fourni indique un GPU NVIDIA GH200, NVRTC CUDA 12.6.3, un hôte ARM et une allocation d’un GPU/quatre cœurs CPU. La documentation CUDA 12.6.3 consultée décrit le partage de données via mémoire partagée et synchronisation, et recommande l’appel explicite à rsqrtf quand une racine carrée réciproque est souhaitée; cela justifie des pistes à mesurer, pas un gain garanti. Référence : https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html. Les trois branches doivent préserver l’interface et les contraintes numériques, rester dans les fichiers autorisés, et être jugées avec les tests et mesures officiels.",
+        "children": [
+          {
+            "objective": "Explorer une décomposition par tuiles de particules sources en mémoire partagée : chaque CTA coopère pour charger des tuiles et les réutilise pour ses particules cibles, en balayant toutes les sources. Optimiser la taille des tuiles, la configuration block/items_per_block et les synchronisations dans la limite de shared_memory_bytes autorisée. Couvrir les tailles non multiples et tous les cas de bord; n’ajouter ni lancement ni prétraitement. Comparer les mesures officielles sur les trois tailles et ne retenir que les versions validées.",
+            "subject": "Réutilisation des sources par tuilage en mémoire partagée"
+          },
+          {
+            "objective": "Étudier une décomposition distincte où les lanes d’un warp parcourent des indices source différents pour une cible, accumulent des contributions partielles puis réduisent les trois composantes par warp. Adapter items_per_block au nombre de cibles réellement traitées par CTA et vérifier le calcul des indices, les queues et le masque de réduction. Conserver chaque interaction, traiter l’auto-interaction sans contribution, et valider avec l’oracle indépendant, car l’ordre de réduction change. Mesurer le temps officiel sur les trois tailles.",
+            "subject": "Parallélisme warp sur l’axe des sources et réduction des contributions"
+          },
+          {
+            "objective": "Explorer les simplifications arithmétiques par interaction : notamment calculer directement l’accélération après annulation algébrique de la masse cible, remplacer sqrt/division par une formulation avec rsqrtf et multiplications, et évaluer prudemment les regroupements/FMA. Ce sont des hypothèses à mesurer : garder G=1, softening=0.001f, toutes les interactions, l’ordre d’intégration requis et la masse copiée exactement; rejeter toute variante échouant aux tolérances ou produisant une sortie non finie. Tester toutes les tailles et cas limites, y compris masse extrême isolée, puis comparer le temps officiel.",
+            "subject": "Réduction du coût mathématique par interaction avec validation de précision"
+          }
+        ]
+      },
+      "request_sha256": "8ea56a3205252a83ccd94008cac0c68bdcc68ff4780afe67c07ff392a08ea30a",
+      "response": {
+        "conversation": {
+          "id": "3115c4d9188b460a9cf8993bc629f438",
+          "phase": "planning",
+          "request_sha256": "8ea56a3205252a83ccd94008cac0c68bdcc68ff4780afe67c07ff392a08ea30a",
+          "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+          "turn": 0
+        },
+        "data": {
+          "G": "Après la recherche, comparer les candidats correctement validés selon la moyenne géométrique officielle. Tester les combinaisons utiles sans présumer que leurs gains s’additionnent, compiler et vérifier chaque intégration, puis confirmer indépendamment le meilleur candidat et conserver le meilleur programme confirmé.",
+          "analysis": "Je choisis N=3 : le calcul est quadratique et le code fourni offre trois pistes complémentaires, soit le coût arithmétique par interaction, la réutilisation des particules sources et le parallélisme sur l’axe des sources. Le seul résultat mesuré fourni est la référence correcte (commit 8876e027d0d79f3a67e7d68324a68c322bee8817), avec trois répétitions et mean_seconds=0.0018433244440074987; aucun détail par taille ni candidat optimisé n’est fourni, donc cela ne permet pas d’attribuer le coût dominant. L’environnement fourni indique un GPU NVIDIA GH200, NVRTC CUDA 12.6.3, un hôte ARM et une allocation d’un GPU/quatre cœurs CPU. La documentation CUDA 12.6.3 consultée décrit le partage de données via mémoire partagée et synchronisation, et recommande l’appel explicite à rsqrtf quand une racine carrée réciproque est souhaitée; cela justifie des pistes à mesurer, pas un gain garanti. Référence : https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html. Les trois branches doivent préserver l’interface et les contraintes numériques, rester dans les fichiers autorisés, et être jugées avec les tests et mesures officiels.",
+          "children": [
+            {
+              "objective": "Explorer une décomposition par tuiles de particules sources en mémoire partagée : chaque CTA coopère pour charger des tuiles et les réutilise pour ses particules cibles, en balayant toutes les sources. Optimiser la taille des tuiles, la configuration block/items_per_block et les synchronisations dans la limite de shared_memory_bytes autorisée. Couvrir les tailles non multiples et tous les cas de bord; n’ajouter ni lancement ni prétraitement. Comparer les mesures officielles sur les trois tailles et ne retenir que les versions validées.",
+              "subject": "Réutilisation des sources par tuilage en mémoire partagée"
+            },
+            {
+              "objective": "Étudier une décomposition distincte où les lanes d’un warp parcourent des indices source différents pour une cible, accumulent des contributions partielles puis réduisent les trois composantes par warp. Adapter items_per_block au nombre de cibles réellement traitées par CTA et vérifier le calcul des indices, les queues et le masque de réduction. Conserver chaque interaction, traiter l’auto-interaction sans contribution, et valider avec l’oracle indépendant, car l’ordre de réduction change. Mesurer le temps officiel sur les trois tailles.",
+              "subject": "Parallélisme warp sur l’axe des sources et réduction des contributions"
+            },
+            {
+              "objective": "Explorer les simplifications arithmétiques par interaction : notamment calculer directement l’accélération après annulation algébrique de la masse cible, remplacer sqrt/division par une formulation avec rsqrtf et multiplications, et évaluer prudemment les regroupements/FMA. Ce sont des hypothèses à mesurer : garder G=1, softening=0.001f, toutes les interactions, l’ordre d’intégration requis et la masse copiée exactement; rejeter toute variante échouant aux tolérances ou produisant une sortie non finie. Tester toutes les tailles et cas limites, y compris masse extrême isolée, puis comparer le temps officiel.",
+              "subject": "Réduction du coût mathématique par interaction avec validation de précision"
+            }
+          ]
+        },
+        "error": null,
+        "infrastructure_error": false,
+        "model": "gpt-6-luna",
+        "nonce": "fb36fdf36d9b4340905a7ff44908e852",
+        "protocol": "hpc-forest-codex-mailbox-v1",
+        "reasoning_effort": "max",
+        "request_sha256": "8ea56a3205252a83ccd94008cac0c68bdcc68ff4780afe67c07ff392a08ea30a",
+        "session_id": "1be439e2bef24a80978f41176eca48ad",
+        "usage": {
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "53868b4dee9d3c37f0375163226a429eb820ed52224a08d87e27c372332740d2",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 174208,
+              "input_tokens": 213753,
+              "output_tokens": 9774,
+              "reasoning_output_tokens": 8131
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [
+            {
+              "allowed": true,
+              "id": "item_2",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "documentation_catalog"
+            },
+            {
+              "allowed": true,
+              "id": "item_3",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_4",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_5",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "read_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_6",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_7",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_8",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            }
+          ],
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": {
+              "id": "3115c4d9188b460a9cf8993bc629f438",
+              "phase": "planning",
+              "previous_request_sha256": null,
+              "thread_id": null,
+              "turn": 0
+            },
+            "effective_instructions_sha256": "d006ee627599f40e7a36763a7437b9b88bc5e5fa43949478f5be1a94eb70d18b",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "planifier-optimisation",
+                  "path": "assets/skills/planifier-optimisation/SKILL.md",
+                  "sha256": "ace3ff2a1dfbddc126bba36c3a406f6f7259cfe241c81fa7672232fb2a82064e"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "planning",
+              "role": "Mother",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "mother-preparation-631e0f3ea1154a98",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "planifier-optimisation",
+                "references": [
+                  "8876e027d0d79f3a67e7d68324a68c322bee8817"
+                ],
+                "status": "applied",
+                "summary": "Choix de trois pistes distinctes fondées sur le noyau O(N²), le seul résultat de référence fourni et le critère de temps officiel."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [
+                  "execution_target_as_data",
+                  "official_statement_as_data"
+                ],
+                "status": "applied",
+                "summary": "Utilisé les faits fournis sur GH200, NVRTC 12.6.3, l’hôte ARM et l’allocation; aucun détail matériel supplémentaire n’était disponible, donc aucune capacité non vérifiée n’est supposée."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [
+                  "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html"
+                ],
+                "status": "applied",
+                "summary": "Consulté le guide CUDA 12.6.3 pour le partage/synchronisation en mémoire partagée et l’usage explicite de rsqrtf; ces références motivent des essais sans garantir de performance."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "8876e027d0d79f3a67e7d68324a68c322bee8817"
+                ],
+                "status": "applied",
+                "summary": "Traité la référence comme correcte avec trois répétitions mesurées; demandé validation et comparaison selon le protocole officiel, sans conclure à un gain ni inventer de confirmation."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "fb36fdf36d9b4340905a7ff44908e852",
+            "observed_mcp_calls": [
+              {
+                "allowed": true,
+                "id": "item_2",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "documentation_catalog"
+              },
+              {
+                "allowed": true,
+                "id": "item_3",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "search_documentation"
+              },
+              {
+                "allowed": true,
+                "id": "item_4",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "search_documentation"
+              },
+              {
+                "allowed": true,
+                "id": "item_5",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "read_documentation"
+              },
+              {
+                "allowed": true,
+                "id": "item_6",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "search_documentation"
+              },
+              {
+                "allowed": true,
+                "id": "item_7",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "search_documentation"
+              },
+              {
+                "allowed": true,
+                "id": "item_8",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "search_documentation"
+              }
+            ],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "8ea56a3205252a83ccd94008cac0c68bdcc68ff4780afe67c07ff392a08ea30a",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "1be439e2bef24a80978f41176eca48ad"
+          },
+          "observed_tokens": 223527,
+          "reasoning_effort_requested": "max",
+          "token_accounting": "exact",
+          "tokens": 223527,
+          "tool_events": [
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call"
+          ],
+          "tool_runtime_errors": []
+        }
+      },
+      "slot_id": "34b406ef8d014436b3ff7c95792c4206",
+      "status": "complete"
+    },
+    "created": 1792757473.6271865
+  },
+  {
+    "id": 4,
+    "kind": "mother_forest_selected",
+    "payload": {
+      "base_commit": "8876e027d0d79f3a67e7d68324a68c322bee8817",
+      "children": [
+        {
+          "objective": "Explorer une décomposition par tuiles de particules sources en mémoire partagée : chaque CTA coopère pour charger des tuiles et les réutilise pour ses particules cibles, en balayant toutes les sources. Optimiser la taille des tuiles, la configuration block/items_per_block et les synchronisations dans la limite de shared_memory_bytes autorisée. Couvrir les tailles non multiples et tous les cas de bord; n’ajouter ni lancement ni prétraitement. Comparer les mesures officielles sur les trois tailles et ne retenir que les versions validées.",
+          "role": "T1",
+          "subject": "Réutilisation des sources par tuilage en mémoire partagée"
+        },
+        {
+          "objective": "Étudier une décomposition distincte où les lanes d’un warp parcourent des indices source différents pour une cible, accumulent des contributions partielles puis réduisent les trois composantes par warp. Adapter items_per_block au nombre de cibles réellement traitées par CTA et vérifier le calcul des indices, les queues et le masque de réduction. Conserver chaque interaction, traiter l’auto-interaction sans contribution, et valider avec l’oracle indépendant, car l’ordre de réduction change. Mesurer le temps officiel sur les trois tailles.",
+          "role": "T2",
+          "subject": "Parallélisme warp sur l’axe des sources et réduction des contributions"
+        },
+        {
+          "objective": "Explorer les simplifications arithmétiques par interaction : notamment calculer directement l’accélération après annulation algébrique de la masse cible, remplacer sqrt/division par une formulation avec rsqrtf et multiplications, et évaluer prudemment les regroupements/FMA. Ce sont des hypothèses à mesurer : garder G=1, softening=0.001f, toutes les interactions, l’ordre d’intégration requis et la masse copiée exactement; rejeter toute variante échouant aux tolérances ou produisant une sortie non finie. Tester toutes les tailles et cas limites, y compris masse extrême isolée, puis comparer le temps officiel.",
+          "role": "T3",
+          "subject": "Réduction du coût mathématique par interaction avec validation de précision"
+        }
+      ],
+      "conversation": {
+        "id": "3115c4d9188b460a9cf8993bc629f438",
+        "phase": "planning",
+        "request_sha256": "8ea56a3205252a83ccd94008cac0c68bdcc68ff4780afe67c07ff392a08ea30a",
+        "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+        "turn": 0
+      },
+      "epoch": 1,
+      "mother_slot_id": "34b406ef8d014436b3ff7c95792c4206",
+      "parallelism": 3,
+      "plan_sha256": "8490b12bb44e5cd4e56ef363b373496866e0f9343b4757b97b3c9f517c99d722",
+      "protocol": "hpc-forest-mother-forest-v1",
+      "request_sha256": "8ea56a3205252a83ccd94008cac0c68bdcc68ff4780afe67c07ff392a08ea30a",
+      "status": "complete"
+    },
+    "created": 1792757473.629432
+  },
+  {
+    "id": 5,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": true,
+      "confirmation_seconds": 76.36397176146663,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 731.9117945580219,
+      "first_wave_continues_mother": true,
+      "inflight_roles": [],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2423.823589116044,
+      "integration_steps": 2,
+      "mother_seconds": 116.61849117279053,
+      "next_work_seconds": 194.66922959258227,
+      "observed_at": 1792757473.640024,
+      "pending_roles": [
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "predicted_drain_seconds": 155.73538367406582,
+      "remaining_seconds": 1671.4336841106415,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3141.484451096888,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:baseline": 1,
+        "mother": 1
+      },
+      "search_admission_deadline": 1792756003.589257,
+      "selection_seconds": 960,
+      "target_deadline": 1792759145.073708
+    },
+    "created": 1792757473.643032
+  },
+  {
+    "id": 6,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "Explorer une décomposition par tuiles de particules sources en mémoire partagée : chaque CTA coopère pour charger des tuiles et les réutilise pour ses particules cibles, en balayant toutes les sources"
+    },
+    "created": 1792757473.672533
+  },
+  {
+    "id": 7,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "Étudier une décomposition distincte où les lanes d’un warp parcourent des indices source différents pour une cible, accumulent des contributions partielles puis réduisent les trois composantes par war"
+    },
+    "created": 1792757473.702294
+  },
+  {
+    "id": 8,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "Explorer les simplifications arithmétiques par interaction : notamment calculer directement l’accélération après annulation algébrique de la masse cible, remplacer sqrt/division par une formulation av"
+    },
+    "created": 1792757473.7314126
+  },
+  {
+    "id": 9,
+    "kind": "research_node_submitted",
+    "payload": {
+      "experiment_id": "f2ddc9b63af245be",
+      "ordinal": 1,
+      "role": "T1",
+      "submitted_at": 1792757473.7347522
+    },
+    "created": 1792757473.735217
+  },
+  {
+    "id": 10,
+    "kind": "research_node_submitted",
+    "payload": {
+      "experiment_id": "703832c7f4d84646",
+      "ordinal": 1,
+      "role": "T2",
+      "submitted_at": 1792757473.7365732
+    },
+    "created": 1792757473.7374547
+  },
+  {
+    "id": 11,
+    "kind": "research_node_submitted",
+    "payload": {
+      "experiment_id": "afd29401fa204b75",
+      "ordinal": 1,
+      "role": "T3",
+      "submitted_at": 1792757473.7390468
+    },
+    "created": 1792757473.7395203
+  },
+  {
+    "id": 12,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "0f1ebad9d3d97ba98aeb6e8c99100bc060b1929e8bbd9265c84a77a6f9c1177d",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 0,
+              "input_tokens": 12930,
+              "output_tokens": 6264,
+              "reasoning_output_tokens": 4962
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "b24e7bc9f6bc56fe72b56a2019066979da2c4aa9bdc694979880e82647e5887e",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T1",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "f2ddc9b63af245be-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Proposé un seul essai de réutilisation des sources par tuiles partagées et distingué l'hypothèse des mesures officielles à venir."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "applied",
+                "summary": "Utilisé les faits fournis sur la cible GH200 et NVRTC CUDA 12.6.3; retenu une allocation modeste de 4096 octets sans inspection supplémentaire."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [
+                  "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html"
+                ],
+                "status": "applied",
+                "summary": "Réutilisé la référence CUDA 12.6.3 déjà indiquée dans le contexte pour le modèle de mémoire partagée et les barrières; aucune nouvelle recherche n'a été demandée."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Consigné les mesures de référence disponibles et laissé au contrôleur l'évaluation de correction et de vitesse du candidat sur les tailles officielles."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "6c72a89635bf4a5883aed9a8b8d98096",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "8a062c15a68e0d87a9c81de488922c59f9dea37bbc28a353ea28cc7ce831afe1",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "1be439e2bef24a80978f41176eca48ad"
+          },
+          "observed_tokens": 19194,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "8a062c15a68e0d87a9c81de488922c59f9dea37bbc28a353ea28cc7ce831afe1",
+          "token_accounting": "exact",
+          "tokens": 19194,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "search",
+      "contract_rejected": false,
+      "development_evaluations": 1,
+      "experiment_id": "f2ddc9b63af245be",
+      "harness_attempts": 1,
+      "journal": "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/f2ddc9b63af245be/node-harness.json",
+      "llm_calls": 1,
+      "memory_reads": 0,
+      "observed_tokens": 19194,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 1,
+      "token_accounting": "exact"
+    },
+    "created": 1792757557.3963082
+  },
+  {
+    "id": 13,
+    "kind": "research_node_settled",
+    "payload": {
+      "experiment_id": "f2ddc9b63af245be",
+      "ordinal": 1,
+      "role": "T1",
+      "settled_at": 1792757566.5284784
+    },
+    "created": 1792757566.5284886
+  },
+  {
+    "id": 14,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 59.29269221002082,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 729.0729251960001,
+      "inflight_roles": [
+        "T2",
+        "T3"
+      ],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2418.1458503920003,
+      "integration_steps": 2,
+      "mother_seconds": 116.61849117279053,
+      "next_work_seconds": 115.91463429966097,
+      "observed_at": 1792757566.5341616,
+      "pending_roles": [
+        "T1"
+      ],
+      "predicted_drain_seconds": 92.73170743972878,
+      "remaining_seconds": 1578.5395464897156,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3113.0481782525267,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "mission:T1": 1,
+        "mother": 1
+      },
+      "search_admission_deadline": 1792756032.0255299,
+      "selection_seconds": 960,
+      "target_deadline": 1792759145.073708
+    },
+    "created": 1792757566.5349596
+  },
+  {
+    "id": 15,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "d02e8cee5d231145d1af1227c89c75501578ae22ffb2dacd7cac5ad0e303d228",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 16384,
+              "input_tokens": 17983,
+              "output_tokens": 1413,
+              "reasoning_output_tokens": 0
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "6692b42f364f244e850912e9c63f2dee9aebd6f764e9e9359da90f2665abed6a",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T2",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "703832c7f4d84646-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [],
+                "status": "applied",
+                "summary": "Proposition limitée au parallélisme source par warp et au nombre de cibles par CTA; le contrôleur doit vérifier la correction et mesurer le candidat."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "applied",
+                "summary": "J'ai retenu la cible GH200 et CUDA 12.6.3 indiquées dans le contexte, ainsi que le bloc configuré de 256 threads; aucune inspection supplémentaire n'a été faite."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "La proposition utilise le shuffle warp CUDA standard sur des warps de 32 lanes, sans API nouvelle ou propriété de version incertaine nécessitant une recherche distincte."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Le seul résultat fourni est la baseline agrégée correcte; il ne permet pas de conclure sur le gain. L'oracle et les mesures officielles des trois tailles restent nécessaires."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "e31aee4108ef498094e584b80c7cb159",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "0eb5c939192d7445bad3e995ee296fed5c82a9fe82f60e06314394404d393dae",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "1be439e2bef24a80978f41176eca48ad"
+          },
+          "observed_tokens": 19396,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "0eb5c939192d7445bad3e995ee296fed5c82a9fe82f60e06314394404d393dae",
+          "token_accounting": "exact",
+          "tokens": 19396,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "search",
+      "contract_rejected": false,
+      "development_evaluations": 1,
+      "experiment_id": "703832c7f4d84646",
+      "harness_attempts": 1,
+      "journal": "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/703832c7f4d84646/node-harness.json",
+      "llm_calls": 1,
+      "memory_reads": 0,
+      "observed_tokens": 19396,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 1,
+      "token_accounting": "exact"
+    },
+    "created": 1792757580.7331653
+  },
+  {
+    "id": 16,
+    "kind": "research_node_settled",
+    "payload": {
+      "experiment_id": "703832c7f4d84646",
+      "ordinal": 1,
+      "role": "T2",
+      "settled_at": 1792757591.3394487
+    },
+    "created": 1792757591.3394608
+  },
+  {
+    "id": 17,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 58.509921829342304,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 729.8097068700008,
+      "inflight_roles": [
+        "T3"
+      ],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2419.6194137400016,
+      "integration_steps": 2,
+      "mother_seconds": 116.61849117279053,
+      "next_work_seconds": 146.92515644015657,
+      "observed_at": 1792757591.3448987,
+      "pending_roles": [
+        "T2"
+      ],
+      "predicted_drain_seconds": 117.54012515212526,
+      "remaining_seconds": 1553.7288093566895,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3113.9116694616796,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mother": 1
+      },
+      "search_admission_deadline": 1792756031.1620386,
+      "selection_seconds": 960,
+      "target_deadline": 1792759145.073708
+    },
+    "created": 1792757591.3457115
+  },
+  {
+    "id": 18,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 58.509921829342304,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 729.8097068700008,
+      "inflight_roles": [
+        "T3"
+      ],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2419.6194137400016,
+      "integration_steps": 2,
+      "mother_seconds": 116.61849117279053,
+      "next_work_seconds": 115.91463429966097,
+      "observed_at": 1792757591.3467815,
+      "pending_roles": [
+        "T1"
+      ],
+      "predicted_drain_seconds": 92.73170743972878,
+      "remaining_seconds": 1553.7269265651703,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3113.9116694616796,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mother": 1
+      },
+      "search_admission_deadline": 1792756031.1620386,
+      "selection_seconds": 960,
+      "target_deadline": 1792759145.073708
+    },
+    "created": 1792757591.3475146
+  },
+  {
+    "id": 19,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "1ea5d1794ff47e0b996e6adb79dda251f505783097385a04f12e5092e51a938e",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 6656,
+              "input_tokens": 12979,
+              "output_tokens": 3557,
+              "reasoning_output_tokens": 2588
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "f21c70702916afcd833009623e5967e2d9419decc5c93fc1c783a3dc7b9202db",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T3",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "afd29401fa204b75-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Propose une variante isolant l’annulation de la masse cible et l’emploi de rsqrtf; le baseline fourni est correct, mais aucun gain n’est présumé."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "applied",
+                "summary": "A tenu compte des faits de cible et compilateur fournis pour cette campagne; aucune inspection supplémentaire n’était nécessaire pour cette variante."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [
+                  "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html"
+                ],
+                "status": "applied",
+                "summary": "Réutilise la référence CUDA 12.6.3 signalée dans le contexte de préparation concernant l’usage explicite de rsqrtf; ce n’est pas une preuve de performance."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Traite la moyenne baseline fournie comme seule mesure disponible et laisse au contrôleur la validation numérique et la comparaison officielle."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "f4693adf8ec445f7aedd080e4e762c30",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "dae4db58a7247da4cc4ff766153938c01cc291a6f92f05b4b5937d81f05405d6",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "1be439e2bef24a80978f41176eca48ad"
+          },
+          "observed_tokens": 16536,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "dae4db58a7247da4cc4ff766153938c01cc291a6f92f05b4b5937d81f05405d6",
+          "token_accounting": "exact",
+          "tokens": 16536,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        },
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "40726b324e72dda3d08e8c8f1cc8482a8e70b361975d9c9d5b1c85670e9bf3b4",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 0,
+              "input_tokens": 14909,
+              "output_tokens": 4910,
+              "reasoning_output_tokens": 3971
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "f21c70702916afcd833009623e5967e2d9419decc5c93fc1c783a3dc7b9202db",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T3",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "afd29401fa204b75-h02",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Propose une modification unique et interprétable de l’accumulation par interaction, sans revendiquer de gain avant validation et mesure."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "applied",
+                "summary": "A retenu le contexte matériel et compilateur fourni pour cette campagne; aucune inspection ni commande supplémentaire n’a été effectuée."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "La variante utilise fmaf dans le noyau CUDA existant; aucune propriété version-spécifique supplémentaire n’est nécessaire à cette proposition prudente."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Rapporte la référence mesurée et distingue la vérification officielle à venir de l’hypothèse de performance."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "9b34301ad4b14522a3371d431acd6b50",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "bbc04ff71a4c3f8eb30f9ab39dc2179bbbc1399cf0beac8704bc8a2f694c3f1e",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "1be439e2bef24a80978f41176eca48ad"
+          },
+          "observed_tokens": 19819,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "bbc04ff71a4c3f8eb30f9ab39dc2179bbbc1399cf0beac8704bc8a2f694c3f1e",
+          "token_accounting": "exact",
+          "tokens": 19819,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        },
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "b196c1b8e14ad7ff9ae8c80fe2bc667926e6cd8967c22108cadd4788d44ea60d",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 16768,
+              "input_tokens": 18021,
+              "output_tokens": 7308,
+              "reasoning_output_tokens": 6318
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "f21c70702916afcd833009623e5967e2d9419decc5c93fc1c783a3dc7b9202db",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T3",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "afd29401fa204b75-h03",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Choix d’un seul regroupement arithmétique mesurable; aucun gain ni résultat de correction n’est présumé."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "applied",
+                "summary": "Décision fondée sur les faits fournis pour la cible GH200 et NVRTC CUDA 12.6.3; aucune capacité matérielle supplémentaire n’est supposée."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [
+                  "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html"
+                ],
+                "status": "applied",
+                "summary": "La référence CUDA 12.6.3 déjà consultée étaye l’usage de rsqrtf; aucune nouvelle API n’est introduite."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "La mesure de référence est rapportée; la correction, la tolérance et le temps de la variante restent à établir par le contrôleur."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "643d398084fe4a61b2bc0a527a2bff0a",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "b3cd383a52b47019797cb14b6808380d34317e6e28c01b7715cc3924b8bd335b",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "1be439e2bef24a80978f41176eca48ad"
+          },
+          "observed_tokens": 25329,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "b3cd383a52b47019797cb14b6808380d34317e6e28c01b7715cc3924b8bd335b",
+          "token_accounting": "exact",
+          "tokens": 25329,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "search",
+      "contract_rejected": false,
+      "development_evaluations": 3,
+      "experiment_id": "afd29401fa204b75",
+      "harness_attempts": 3,
+      "journal": "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/afd29401fa204b75/node-harness.json",
+      "llm_calls": 3,
+      "memory_reads": 0,
+      "observed_tokens": 61684,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 3,
+      "token_accounting": "exact"
+    },
+    "created": 1792757679.7881374
+  },
+  {
+    "id": 20,
+    "kind": "research_node_settled",
+    "payload": {
+      "experiment_id": "afd29401fa204b75",
+      "ordinal": 1,
+      "role": "T3",
+      "settled_at": 1792757688.9786255
+    },
+    "created": 1792757688.9786398
+  },
+  {
+    "id": 21,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 57.37540900935225,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 729.1289991780068,
+      "inflight_roles": [],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2418.2579983560136,
+      "integration_steps": 2,
+      "mother_seconds": 116.61849117279053,
+      "next_work_seconds": 268.9694925452204,
+      "observed_at": 1792757688.9848635,
+      "pending_roles": [
+        "T3"
+      ],
+      "predicted_drain_seconds": 215.17559403617634,
+      "remaining_seconds": 1456.088844537735,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3110.791759206707,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:T3": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:T3": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:T3": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:T3": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "generation:T3": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mission:T3": 1,
+        "mother": 1,
+        "research_wave:3": 1
+      },
+      "search_admission_deadline": 1792756034.2819488,
+      "selection_seconds": 960,
+      "target_deadline": 1792759145.073708
+    },
+    "created": 1792757688.985758
+  },
+  {
+    "id": 22,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 57.37540900935225,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 729.1289991780068,
+      "inflight_roles": [],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2418.2579983560136,
+      "integration_steps": 2,
+      "mother_seconds": 116.61849117279053,
+      "next_work_seconds": 115.91463429966097,
+      "observed_at": 1792757688.9868746,
+      "pending_roles": [
+        "T1"
+      ],
+      "predicted_drain_seconds": 92.73170743972878,
+      "remaining_seconds": 1456.0868334770203,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3110.791759206707,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:T3": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:T3": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:T3": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:T3": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "generation:T3": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mission:T3": 1,
+        "mother": 1,
+        "research_wave:3": 1
+      },
+      "search_admission_deadline": 1792756034.2819488,
+      "selection_seconds": 960,
+      "target_deadline": 1792759145.073708
+    },
+    "created": 1792757688.9876962
+  },
+  {
+    "id": 23,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 57.37540900935225,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 729.1289991780068,
+      "inflight_roles": [],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2418.2579983560136,
+      "integration_steps": 2,
+      "mother_seconds": 116.61849117279053,
+      "next_work_seconds": 146.92515644015657,
+      "observed_at": 1792757688.988765,
+      "pending_roles": [
+        "T2"
+      ],
+      "predicted_drain_seconds": 117.54012515212526,
+      "remaining_seconds": 1456.0849430561066,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3110.791759206707,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:T3": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:T3": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:T3": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:T3": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "generation:T3": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mission:T3": 1,
+        "mother": 1,
+        "research_wave:3": 1
+      },
+      "search_admission_deadline": 1792756034.2819488,
+      "selection_seconds": 960,
+      "target_deadline": 1792759145.073708
+    },
+    "created": 1792757688.989512
+  },
+  {
+    "id": 24,
+    "kind": "budget_stop",
+    "payload": {
+      "reason": "No independent research node fits before finalization"
+    },
+    "created": 1792757688.9903753
+  },
+  {
+    "id": 25,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "read",
+        "base_id": "",
+        "idea_ids": [
+          "f2ddc9b63af245be",
+          "afd29401fa204b75"
+        ],
+        "rationale": "T2 is the strongest correct measured candidate so far (0.00014804925230338682 s, score 0.9256547113293426). T1 is also correct but slower; T3 failed correctness. I’ll inspect T2’s actual files before deciding whether the shared-memory idea can complement it safely.",
+        "read": {
+          "ids": [
+            "703832c7f4d84646"
+          ],
+          "offset": 0,
+          "operation": "source",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": []
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "00aaadb05503e3628a6b9a14d86d29d5e12cdc84a54874f2ca818fe8c3f746a4",
+      "conversation": {
+        "id": "3115c4d9188b460a9cf8993bc629f438",
+        "phase": "assembly",
+        "request_sha256": "999cfeb3fd786799c0f67e8625559eb064677f9406abe31bf22e36e8c28b6be1",
+        "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+        "turn": 1
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 174208,
+          "input_tokens": 263232,
+          "output_tokens": 11448,
+          "reasoning_output_tokens": 9394
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "3115c4d9188b460a9cf8993bc629f438",
+          "phase": "assembly",
+          "previous_request_sha256": "8ea56a3205252a83ccd94008cac0c68bdcc68ff4780afe67c07ff392a08ea30a",
+          "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+          "turn": 1
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r1-t1",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "703832c7f4d84646",
+              "f2ddc9b63af245be",
+              "afd29401fa204b75"
+            ],
+            "status": "applied",
+            "summary": "Prioritized the fastest correct measured candidate and requested its source before integration; the slower correct and incorrect branches remain available as possible ideas, not verified inputs."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "execution_target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "The target and resource limits are already supplied; this source-inspection step does not require additional environment facts."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [
+              "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html"
+            ],
+            "status": "applied",
+            "summary": "Reusing the already consulted CUDA 12.6.3 guide; the immediate decision depends on inspecting candidate code, not a new API question."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "703832c7f4d84646",
+              "f2ddc9b63af245be",
+              "baseline-e1"
+            ],
+            "status": "applied",
+            "summary": "Compared only supplied correctness-checked search outcomes; T2 leads, while no independent confirmation is available yet."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "2062bf0e9f5943ec844f3768a92bee29",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "999cfeb3fd786799c0f67e8625559eb064677f9406abe31bf22e36e8c28b6be1",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "1be439e2bef24a80978f41176eca48ad"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 274680,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "999cfeb3fd786799c0f67e8625559eb064677f9406abe31bf22e36e8c28b6be1",
+      "selection_id": "memory-select-e1-r1-t1",
+      "token_accounting": "exact",
+      "tokens": 274680,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792757710.2956364
+  },
+  {
+    "id": 26,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "read",
+        "base_id": "",
+        "idea_ids": [
+          "f2ddc9b63af245be",
+          "afd29401fa204b75"
+        ],
+        "rationale": "The previous read did not select integration inputs. I need the winning measured candidate’s actual kernel source before deciding whether to integrate it alone or combine it; T2 remains the fastest correct measured branch, while T1 is slower and T3 is incorrect.",
+        "read": {
+          "ids": [
+            "703832c7f4d84646"
+          ],
+          "offset": 0,
+          "operation": "source",
+          "path": "src/nbody_kernel.cu",
+          "query": ""
+        },
+        "source_ids": []
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "703094d5780257ec3345c18227981546e09efff3842dd964e9bd87d90f505c23",
+      "conversation": {
+        "id": "3115c4d9188b460a9cf8993bc629f438",
+        "phase": "assembly",
+        "request_sha256": "820fe096f84eb499cace91a0adecd80977023f49cc6bb8982c0d67520e2bbeff",
+        "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+        "turn": 2
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 278400,
+          "input_tokens": 376254,
+          "output_tokens": 13906,
+          "reasoning_output_tokens": 11433
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "3115c4d9188b460a9cf8993bc629f438",
+          "phase": "assembly",
+          "previous_request_sha256": "999cfeb3fd786799c0f67e8625559eb064677f9406abe31bf22e36e8c28b6be1",
+          "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+          "turn": 2
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r1-t2",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "703832c7f4d84646",
+              "f2ddc9b63af245be",
+              "afd29401fa204b75"
+            ],
+            "status": "applied",
+            "summary": "T2 remains the strongest correct measured base; requested its kernel source to make the integration choice evidence-based."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "execution_target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "The supplied target limits are unchanged; no new environment fact is needed to inspect this source."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [
+              "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html"
+            ],
+            "status": "not_needed",
+            "summary": "No new technical compatibility question is raised by requesting the recorded candidate source."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "703832c7f4d84646",
+              "f2ddc9b63af245be",
+              "baseline-e1"
+            ],
+            "status": "applied",
+            "summary": "Using the correctness-checked recorded measurements to prioritize T2, without treating it as independently confirmed."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "081435d3982c4cfca2b55e5337f76499",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "820fe096f84eb499cace91a0adecd80977023f49cc6bb8982c0d67520e2bbeff",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "1be439e2bef24a80978f41176eca48ad"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 390160,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "820fe096f84eb499cace91a0adecd80977023f49cc6bb8982c0d67520e2bbeff",
+      "selection_id": "memory-select-e1-r1-t2",
+      "token_accounting": "exact",
+      "tokens": 390160,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792757742.8537467
+  },
+  {
+    "id": 27,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "integrate",
+        "base_id": "703832c7f4d84646",
+        "idea_ids": [],
+        "rationale": "Integrate T2 alone as the measured base and sole source. It is correct and has the best supplied result: mean_seconds 0.00014804925230338682 versus 0.0009205335376977983 for T1 and 0.0018433244440074987 for baseline. Its warp-per-target mapping is an alternative to T1’s shared-memory approach, so I will not assume their gains combine without code-level evidence. T3 failed correctness and is excluded. This is a search result, not independent confirmation; compile and check this integration afresh.",
+        "read": {
+          "ids": [],
+          "offset": 0,
+          "operation": "none",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": [
+          "703832c7f4d84646"
+        ]
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "2b503364d4fddfa3010415d38a5fdfae7db6094e17a10dd92376e3207c019c88",
+      "conversation": {
+        "id": "3115c4d9188b460a9cf8993bc629f438",
+        "phase": "assembly",
+        "request_sha256": "3417321eb2a69786593613c99bb7b1b83934e0cddf8908edde524f15b6079643",
+        "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+        "turn": 3
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 336128,
+          "input_tokens": 438562,
+          "output_tokens": 15490,
+          "reasoning_output_tokens": 12600
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "3115c4d9188b460a9cf8993bc629f438",
+          "phase": "assembly",
+          "previous_request_sha256": "820fe096f84eb499cace91a0adecd80977023f49cc6bb8982c0d67520e2bbeff",
+          "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+          "turn": 3
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r1-t3",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "703832c7f4d84646",
+              "f2ddc9b63af245be",
+              "baseline-e1"
+            ],
+            "status": "applied",
+            "summary": "Selected the fastest correct measured candidate as both base and source; kept the slower alternative separate and excluded the incorrect trial."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "execution_target_as_data",
+              "official_statement_as_data"
+            ],
+            "status": "applied",
+            "summary": "Kept the integration within the supplied GH200, one-kernel interface and launch constraints; no unverified environment capability is assumed."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [],
+            "status": "not_needed",
+            "summary": "Selecting T2 verbatim raises no new API or hardware-compatibility question."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "703832c7f4d84646",
+              "f2ddc9b63af245be",
+              "baseline-e1"
+            ],
+            "status": "applied",
+            "summary": "Compared the supplied correctness-checked search means, while distinguishing them from the required fresh integration check and independent confirmation."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "b81cf5a00170477e98922e0d0eb82296",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "3417321eb2a69786593613c99bb7b1b83934e0cddf8908edde524f15b6079643",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "1be439e2bef24a80978f41176eca48ad"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 454052,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "3417321eb2a69786593613c99bb7b1b83934e0cddf8908edde524f15b6079643",
+      "selection_id": "memory-select-e1-r1-t3",
+      "token_accounting": "exact",
+      "tokens": 454052,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792757764.6424866
+  },
+  {
+    "id": 28,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "G locality SIMD OpenMP"
+    },
+    "created": 1792757764.6807487
+  },
+  {
+    "id": 29,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "a5a5bd425d34ccac31735de6d18a2551a197acacb512e45e22938c4e847cd440",
+          "conversation": {
+            "id": "3115c4d9188b460a9cf8993bc629f438",
+            "phase": "assembly",
+            "request_sha256": "6018fe17500e269eb31f2067b73f5b6b4d2a2a98e3fcf9fd28fcd70857b7b095",
+            "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+            "turn": 4
+          },
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 336128,
+              "input_tokens": 511841,
+              "output_tokens": 23418,
+              "reasoning_output_tokens": 18925
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [
+            {
+              "applicability": "Evidence is from this campaign and its search measurements; it does not establish a general performance rule.",
+              "claim": "The correct warp-per-target candidate measured 0.00014804925230338682 seconds, faster than the correct shared-memory candidate at 0.0009205335376977983 seconds and the baseline at 0.0018433244440074987 seconds.",
+              "evidence_ids": [
+                "703832c7f4d84646",
+                "f2ddc9b63af245be",
+                "baseline-e1"
+              ],
+              "next_experiment": "Measure this two-source loop-unroll variant with the official correctness checks and timing protocol."
+            }
+          ],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": {
+              "id": "3115c4d9188b460a9cf8993bc629f438",
+              "phase": "assembly",
+              "previous_request_sha256": "3417321eb2a69786593613c99bb7b1b83934e0cddf8908edde524f15b6079643",
+              "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+              "turn": 4
+            },
+            "effective_instructions_sha256": "2817158b0d8034b727087613562881c5ec5fc7cf7d1ff46e376c403fceeb967d",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "integrer-optimisations",
+                  "path": "assets/skills/integrer-optimisations/SKILL.md",
+                  "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "assembly",
+              "role": "Mother",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "00f539728bdf4a2c-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "integrer-optimisations",
+                "references": [
+                  "703832c7f4d84646",
+                  "f2ddc9b63af245be"
+                ],
+                "status": "applied",
+                "summary": "Kept the best correct measured warp-per-target base and added a bounded loop-unroll experiment; did not combine the slower shared-memory alternative."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [
+                  "execution_target_as_data"
+                ],
+                "status": "applied",
+                "summary": "Preserved the supplied GH200/NVRTC target and existing legal launch configuration; the edit assumes no new hardware capability."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "The edit uses the existing CUDA kernel interface and shuffle operations; it introduces no new API or uncertain hardware feature."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "703832c7f4d84646",
+                  "f2ddc9b63af245be",
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Used correctness-checked search measurements to choose the base, but left this changed program's correctness and timing to fresh controller evaluation."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "4b603c6412e349d19fb7f66500fb3008",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "6018fe17500e269eb31f2067b73f5b6b4d2a2a98e3fcf9fd28fcd70857b7b095",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "1be439e2bef24a80978f41176eca48ad"
+          },
+          "mother_assembly": true,
+          "observed_tokens": 535259,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "6018fe17500e269eb31f2067b73f5b6b4d2a2a98e3fcf9fd28fcd70857b7b095",
+          "token_accounting": "exact",
+          "tokens": 535259,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "postprocess",
+      "contract_rejected": false,
+      "development_evaluations": 1,
+      "experiment_id": "00f539728bdf4a2c",
+      "harness_attempts": 1,
+      "journal": "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/00f539728bdf4a2c/node-harness.json",
+      "llm_calls": 1,
+      "memory_reads": 0,
+      "observed_tokens": 535259,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 1,
+      "token_accounting": "exact"
+    },
+    "created": 1792757859.1792605
+  },
+  {
+    "id": 30,
+    "kind": "mother_memory_integration",
+    "payload": {
+      "base_id": "703832c7f4d84646",
+      "final": false,
+      "idea_ids": [],
+      "input_commits": [
+        "35a01569b665d075a531a8a46539ad8a6bd7f13f"
+      ],
+      "input_ids": [
+        "703832c7f4d84646"
+      ],
+      "mission_id": "00f539728bdf4a2c",
+      "mother": {
+        "budget_phase": "postprocess",
+        "conversation": {
+          "id": "3115c4d9188b460a9cf8993bc629f438",
+          "phase": "assembly",
+          "request_sha256": "6018fe17500e269eb31f2067b73f5b6b4d2a2a98e3fcf9fd28fcd70857b7b095",
+          "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+          "turn": 4
+        },
+        "final_synthesis": true,
+        "model_calls": 1,
+        "phase": "assembly",
+        "request_sha256": "6018fe17500e269eb31f2067b73f5b6b4d2a2a98e3fcf9fd28fcd70857b7b095",
+        "status": "complete",
+        "usage_charged_to_g_mission": "00f539728bdf4a2c-h01"
+      },
+      "outcome": {
+        "binary_sha256": "96521c19c6f364877bd83521dbfe1c299cf59b370e612e9bf89c35a867432910",
+        "cache_key": "d17c9504dec955b4f493bb3cfef88b3c43ca7b577fc05f80352f6c3e74731213",
+        "commit": "b49f0fd86a329bfb47a370600f2df775c44e455d",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.00016489150859877718,
+        "reason": "",
+        "score": 0.9178915452868603,
+        "status": "valid",
+        "times": [
+          0.00016532377994695724,
+          0.00016521072043806378,
+          0.00016414002541131052
+        ],
+        "tree_hash": "361d78d113044d7c7711077076671bdae0904323"
+      },
+      "pair": 1,
+      "retained_ids": [
+        "703832c7f4d84646"
+      ],
+      "round": 1,
+      "selection": {
+        "action": "integrate",
+        "base_id": "703832c7f4d84646",
+        "idea_ids": [],
+        "rationale": "Integrate T2 alone as the measured base and sole source. It is correct and has the best supplied result: mean_seconds 0.00014804925230338682 versus 0.0009205335376977983 for T1 and 0.0018433244440074987 for baseline. Its warp-per-target mapping is an alternative to T1’s shared-memory approach, so I will not assume their gains combine without code-level evidence. T3 failed correctness and is excluded. This is a search result, not independent confirmation; compile and check this integration afresh.",
+        "read": {
+          "ids": [],
+          "offset": 0,
+          "operation": "none",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": [
+          "703832c7f4d84646"
+        ]
+      },
+      "status": "complete",
+      "step": 1
+    },
+    "created": 1792757882.4325156
+  },
+  {
+    "id": 31,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "integrate",
+        "base_id": "703832c7f4d84646",
+        "idea_ids": [
+          "f2ddc9b63af245be"
+        ],
+        "rationale": "Use the correct, fastest measured warp-per-target kernel as the base and adapt T1’s source-tile reuse rather than copying its slower standalone mapping. Each CTA stages 256 sources (x, y, z, mass; 4096 bytes) and reuses them across its eight target warps. This is a new combination, so its correctness and speed must be established by the controller.",
+        "read": {
+          "ids": [],
+          "offset": 0,
+          "operation": "none",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": [
+          "703832c7f4d84646"
+        ]
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "6f0173b86c91a64b6a63ec2e2fb3fb599fa4b908d412f8ba89825a7faae6bb3b",
+      "conversation": {
+        "id": "3115c4d9188b460a9cf8993bc629f438",
+        "phase": "assembly",
+        "request_sha256": "4c5f9086470cfae4a4279b5ec98b8dc94dd3734548525d477cba408004894afd",
+        "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+        "turn": 5
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 398208,
+          "input_tokens": 596413,
+          "output_tokens": 30896,
+          "reasoning_output_tokens": 25965
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "3115c4d9188b460a9cf8993bc629f438",
+          "phase": "assembly",
+          "previous_request_sha256": "6018fe17500e269eb31f2067b73f5b6b4d2a2a98e3fcf9fd28fcd70857b7b095",
+          "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+          "turn": 5
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r2-t1",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "703832c7f4d84646",
+              "f2ddc9b63af245be"
+            ],
+            "status": "applied",
+            "summary": "Retained T2’s faster warp mapping and adapted T1’s shared-source-tile idea for reuse across target warps in a CTA."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "execution_target_as_data",
+              "official_statement_as_data"
+            ],
+            "status": "applied",
+            "summary": "Used the supplied GH200 target and kept the shared allocation within the configured 4096-byte limit; assumed no additional hardware features."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [
+              "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html"
+            ],
+            "status": "applied",
+            "summary": "Reused the CUDA 12.6.3 shared-memory guidance: synchronize after staging and before reusing the tile."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "703832c7f4d84646",
+              "f2ddc9b63af245be",
+              "00f539728bdf4a2c"
+            ],
+            "status": "applied",
+            "summary": "T2 led the supplied search results; the unrolled integration was correct but slower. This distinct shared-tile combination still needs fresh correctness and timing checks."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "9bd20234fdc44658b04c5fdd0d91692f",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "4c5f9086470cfae4a4279b5ec98b8dc94dd3734548525d477cba408004894afd",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "1be439e2bef24a80978f41176eca48ad"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 627309,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "4c5f9086470cfae4a4279b5ec98b8dc94dd3734548525d477cba408004894afd",
+      "selection_id": "memory-select-e1-r2-t1",
+      "token_accounting": "exact",
+      "tokens": 627309,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792757960.2764466
+  },
+  {
+    "id": 32,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "G locality SIMD OpenMP"
+    },
+    "created": 1792757960.3165834
+  },
+  {
+    "id": 33,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "398e25cd19064c6c4bb2ea3b338f1b24cfb52c5817c1817e03194205d4ea9b40",
+          "conversation": {
+            "id": "3115c4d9188b460a9cf8993bc629f438",
+            "phase": "assembly",
+            "request_sha256": "91970e24dacc4a83f06e464484632cd0a0027cd72294fc7e9bf0b8d55758d27f",
+            "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+            "turn": 6
+          },
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 398208,
+              "input_tokens": 701383,
+              "output_tokens": 37117,
+              "reasoning_output_tokens": 30209
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [
+            {
+              "applicability": "These are campaign-specific search measurements, not general performance guarantees.",
+              "claim": "T2 was correct at 0.00014804925230338682 seconds. A correct two-way-unrolled integration measured slower at 0.00016489150859877718 seconds. T1’s correct shared-memory kernel was slower standalone at 0.0009205335376977983 seconds, but its source-tile idea may complement T2’s warp mapping.",
+              "evidence_ids": [
+                "703832c7f4d84646",
+                "00f539728bdf4a2c",
+                "f2ddc9b63af245be"
+              ],
+              "next_experiment": "Measure this tiled T2 combination against the original T2 candidate, then independently confirm the best correct program."
+            }
+          ],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": {
+              "id": "3115c4d9188b460a9cf8993bc629f438",
+              "phase": "assembly",
+              "previous_request_sha256": "4c5f9086470cfae4a4279b5ec98b8dc94dd3734548525d477cba408004894afd",
+              "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+              "turn": 6
+            },
+            "effective_instructions_sha256": "2817158b0d8034b727087613562881c5ec5fc7cf7d1ff46e376c403fceeb967d",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "integrer-optimisations",
+                  "path": "assets/skills/integrer-optimisations/SKILL.md",
+                  "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "assembly",
+              "role": "Mother",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "44e22fac251348d2-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "integrer-optimisations",
+                "references": [
+                  "703832c7f4d84646",
+                  "f2ddc9b63af245be",
+                  "00f539728bdf4a2c"
+                ],
+                "status": "applied",
+                "summary": "Retained T2’s fastest correct mapping and adapted T1’s source staging; did not retain the slower unrolled integration."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [
+                  "execution_target_as_data",
+                  "official_statement_as_data"
+                ],
+                "status": "applied",
+                "summary": "Kept the GH200/NVRTC target and used a 4096-byte shared allocation within the supplied limit; no extra hardware features are assumed."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [
+                  "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html"
+                ],
+                "status": "applied",
+                "summary": "Reused the CUDA 12.6.3 shared-memory synchronization guidance for staging and reusing each source tile."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "703832c7f4d84646",
+                  "00f539728bdf4a2c",
+                  "f2ddc9b63af245be"
+                ],
+                "status": "applied",
+                "summary": "Used the supplied correctness-checked search outcomes to motivate this combination; its correctness and performance still require fresh controller evaluation."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "b513850477db4c569f5bdf85480e453d",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "91970e24dacc4a83f06e464484632cd0a0027cd72294fc7e9bf0b8d55758d27f",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "1be439e2bef24a80978f41176eca48ad"
+          },
+          "mother_assembly": true,
+          "observed_tokens": 738500,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "91970e24dacc4a83f06e464484632cd0a0027cd72294fc7e9bf0b8d55758d27f",
+          "token_accounting": "exact",
+          "tokens": 738500,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "postprocess",
+      "contract_rejected": false,
+      "development_evaluations": 1,
+      "experiment_id": "44e22fac251348d2",
+      "harness_attempts": 1,
+      "journal": "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/44e22fac251348d2/node-harness.json",
+      "llm_calls": 1,
+      "memory_reads": 0,
+      "observed_tokens": 738500,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 1,
+      "token_accounting": "exact"
+    },
+    "created": 1792758025.7464263
+  },
+  {
+    "id": 34,
+    "kind": "mother_memory_integration",
+    "payload": {
+      "base_id": "703832c7f4d84646",
+      "final": true,
+      "idea_ids": [
+        "f2ddc9b63af245be"
+      ],
+      "input_commits": [
+        "35a01569b665d075a531a8a46539ad8a6bd7f13f"
+      ],
+      "input_ids": [
+        "703832c7f4d84646"
+      ],
+      "mission_id": "44e22fac251348d2",
+      "mother": {
+        "budget_phase": "postprocess",
+        "conversation": {
+          "id": "3115c4d9188b460a9cf8993bc629f438",
+          "phase": "assembly",
+          "request_sha256": "91970e24dacc4a83f06e464484632cd0a0027cd72294fc7e9bf0b8d55758d27f",
+          "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+          "turn": 6
+        },
+        "final_synthesis": true,
+        "model_calls": 1,
+        "phase": "assembly",
+        "request_sha256": "91970e24dacc4a83f06e464484632cd0a0027cd72294fc7e9bf0b8d55758d27f",
+        "status": "complete",
+        "usage_charged_to_g_mission": "44e22fac251348d2-h01"
+      },
+      "outcome": {
+        "binary_sha256": "a58dcd6f9b663714abc5d2e622d4a68be9b711a9681ad3e9d9e375767b5a161f",
+        "cache_key": "2728050b2f94f3976f4bfa13fbf10eb7fce1cfc9358ee65ac5048d06eec2b9b3",
+        "commit": "899d97eb59256f07950066076c34090e084b6516",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.00013629413860508368,
+        "reason": "",
+        "score": 0.9311513137923716,
+        "status": "valid",
+        "times": [
+          0.0001359609024706132,
+          0.00013662807855330868,
+          0.00013629343479132917
+        ],
+        "tree_hash": "e2ea2b4dfd478b0ec8f69b019676388512afa2c0"
+      },
+      "pair": 1,
+      "retained_ids": [
+        "703832c7f4d84646"
+      ],
+      "round": 2,
+      "selection": {
+        "action": "integrate",
+        "base_id": "703832c7f4d84646",
+        "idea_ids": [
+          "f2ddc9b63af245be"
+        ],
+        "rationale": "Use the correct, fastest measured warp-per-target kernel as the base and adapt T1’s source-tile reuse rather than copying its slower standalone mapping. Each CTA stages 256 sources (x, y, z, mass; 4096 bytes) and reuses them across its eight target warps. This is a new combination, so its correctness and speed must be established by the controller.",
+        "read": {
+          "ids": [],
+          "offset": 0,
+          "operation": "none",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": [
+          "703832c7f4d84646"
+        ]
+      },
+      "status": "complete",
+      "step": 2
+    },
+    "created": 1792758037.1082969
+  },
+  {
+    "id": 35,
+    "kind": "postprocess_finished",
+    "payload": {
+      "active_mission_id": "44e22fac251348d2",
+      "best_reference_id": "44e22fac251348d2",
+      "budget_phase": "postprocess",
+      "completed_at": 1792758037.1087894,
+      "context_compaction": "bounded-retrieval-and-codex-cli-automatic",
+      "elapsed_seconds": 348.1156072616577,
+      "integration_policy": "memory-guided-v1",
+      "limits": {
+        "code_calls_per_round": 6,
+        "code_slots": 2,
+        "postprocess_slots": 10,
+        "rounds": 2,
+        "selection_calls_per_round": 4,
+        "selection_slots": 8
+      },
+      "mission_id": "44e22fac251348d2",
+      "mother": {
+        "budget_phase": "postprocess",
+        "conversation": {
+          "id": "3115c4d9188b460a9cf8993bc629f438",
+          "phase": "assembly",
+          "request_sha256": "91970e24dacc4a83f06e464484632cd0a0027cd72294fc7e9bf0b8d55758d27f",
+          "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+          "turn": 6
+        },
+        "final_synthesis": true,
+        "model_calls": 1,
+        "phase": "assembly",
+        "request_sha256": "91970e24dacc4a83f06e464484632cd0a0027cd72294fc7e9bf0b8d55758d27f",
+        "status": "complete",
+        "usage_charged_to_g_mission": "44e22fac251348d2-h01"
+      },
+      "mother_required": true,
+      "outcome": {
+        "binary_sha256": "a58dcd6f9b663714abc5d2e622d4a68be9b711a9681ad3e9d9e375767b5a161f",
+        "cache_key": "2728050b2f94f3976f4bfa13fbf10eb7fce1cfc9358ee65ac5048d06eec2b9b3",
+        "commit": "899d97eb59256f07950066076c34090e084b6516",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.00013629413860508368,
+        "reason": "",
+        "score": 0.9311513137923716,
+        "status": "valid",
+        "times": [
+          0.0001359609024706132,
+          0.00013662807855330868,
+          0.00013629343479132917
+        ],
+        "tree_hash": "e2ea2b4dfd478b0ec8f69b019676388512afa2c0"
+      },
+      "search_stop_reason": "budget_exhausted",
+      "selections": [
+        {
+          "error": "A selection read cannot freeze integration inputs",
+          "id": "memory-select-e1-r1-t1",
+          "round": 1,
+          "slot_id": "7798fbf2acb94474bcbf596b0ed983f6",
+          "status": "rejected",
+          "turn": 1
+        },
+        {
+          "error": "A selection read cannot freeze integration inputs",
+          "id": "memory-select-e1-r1-t2",
+          "round": 1,
+          "slot_id": "23edb49e29614f16b1afe621f0b73a7b",
+          "status": "rejected",
+          "turn": 2
+        },
+        {
+          "decision": {
+            "action": "integrate",
+            "base_id": "703832c7f4d84646",
+            "idea_ids": [],
+            "rationale": "Integrate T2 alone as the measured base and sole source. It is correct and has the best supplied result: mean_seconds 0.00014804925230338682 versus 0.0009205335376977983 for T1 and 0.0018433244440074987 for baseline. Its warp-per-target mapping is an alternative to T1’s shared-memory approach, so I will not assume their gains combine without code-level evidence. T3 failed correctness and is excluded. This is a search result, not independent confirmation; compile and check this integration afresh.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "703832c7f4d84646"
+            ]
+          },
+          "id": "memory-select-e1-r1-t3",
+          "round": 1,
+          "slot_id": "040f075849fc48ecb3a94ec61d34cb78",
+          "status": "complete",
+          "turn": 3
+        },
+        {
+          "decision": {
+            "action": "integrate",
+            "base_id": "703832c7f4d84646",
+            "idea_ids": [
+              "f2ddc9b63af245be"
+            ],
+            "rationale": "Use the correct, fastest measured warp-per-target kernel as the base and adapt T1’s source-tile reuse rather than copying its slower standalone mapping. Each CTA stages 256 sources (x, y, z, mass; 4096 bytes) and reuses them across its eight target warps. This is a new combination, so its correctness and speed must be established by the controller.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "703832c7f4d84646"
+            ]
+          },
+          "id": "memory-select-e1-r2-t1",
+          "round": 2,
+          "slot_id": "9808b08e0464409dbaab1866d34a86e4",
+          "status": "complete",
+          "turn": 1
+        }
+      ],
+      "slot_id": "c6e9f456dcb642d99c8045708aa0950e",
+      "started_at": 1792757688.9931822,
+      "status": "complete",
+      "steps": [
+        {
+          "base_id": "703832c7f4d84646",
+          "final": false,
+          "idea_ids": [],
+          "input_commits": [
+            "35a01569b665d075a531a8a46539ad8a6bd7f13f"
+          ],
+          "input_ids": [
+            "703832c7f4d84646"
+          ],
+          "mission_id": "00f539728bdf4a2c",
+          "mother": {
+            "budget_phase": "postprocess",
+            "conversation": {
+              "id": "3115c4d9188b460a9cf8993bc629f438",
+              "phase": "assembly",
+              "request_sha256": "6018fe17500e269eb31f2067b73f5b6b4d2a2a98e3fcf9fd28fcd70857b7b095",
+              "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+              "turn": 4
+            },
+            "final_synthesis": true,
+            "model_calls": 1,
+            "phase": "assembly",
+            "request_sha256": "6018fe17500e269eb31f2067b73f5b6b4d2a2a98e3fcf9fd28fcd70857b7b095",
+            "status": "complete",
+            "usage_charged_to_g_mission": "00f539728bdf4a2c-h01"
+          },
+          "outcome": {
+            "binary_sha256": "96521c19c6f364877bd83521dbfe1c299cf59b370e612e9bf89c35a867432910",
+            "cache_key": "d17c9504dec955b4f493bb3cfef88b3c43ca7b577fc05f80352f6c3e74731213",
+            "commit": "b49f0fd86a329bfb47a370600f2df775c44e455d",
+            "correct": true,
+            "logs": [
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/build.log",
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/correctness.log",
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/sample-0.log",
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/sample-1.log",
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/00f539728bdf4a2c/search/attempt-001/sample-2.log"
+            ],
+            "mean_seconds": 0.00016489150859877718,
+            "reason": "",
+            "score": 0.9178915452868603,
+            "status": "valid",
+            "times": [
+              0.00016532377994695724,
+              0.00016521072043806378,
+              0.00016414002541131052
+            ],
+            "tree_hash": "361d78d113044d7c7711077076671bdae0904323"
+          },
+          "pair": 1,
+          "retained_ids": [
+            "703832c7f4d84646"
+          ],
+          "round": 1,
+          "selection": {
+            "action": "integrate",
+            "base_id": "703832c7f4d84646",
+            "idea_ids": [],
+            "rationale": "Integrate T2 alone as the measured base and sole source. It is correct and has the best supplied result: mean_seconds 0.00014804925230338682 versus 0.0009205335376977983 for T1 and 0.0018433244440074987 for baseline. Its warp-per-target mapping is an alternative to T1’s shared-memory approach, so I will not assume their gains combine without code-level evidence. T3 failed correctness and is excluded. This is a search result, not independent confirmation; compile and check this integration afresh.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "703832c7f4d84646"
+            ]
+          },
+          "status": "complete",
+          "step": 1
+        },
+        {
+          "base_id": "703832c7f4d84646",
+          "final": true,
+          "idea_ids": [
+            "f2ddc9b63af245be"
+          ],
+          "input_commits": [
+            "35a01569b665d075a531a8a46539ad8a6bd7f13f"
+          ],
+          "input_ids": [
+            "703832c7f4d84646"
+          ],
+          "mission_id": "44e22fac251348d2",
+          "mother": {
+            "budget_phase": "postprocess",
+            "conversation": {
+              "id": "3115c4d9188b460a9cf8993bc629f438",
+              "phase": "assembly",
+              "request_sha256": "91970e24dacc4a83f06e464484632cd0a0027cd72294fc7e9bf0b8d55758d27f",
+              "thread_id": "01a168aa-5f5e-7a11-923a-162d3cabee00",
+              "turn": 6
+            },
+            "final_synthesis": true,
+            "model_calls": 1,
+            "phase": "assembly",
+            "request_sha256": "91970e24dacc4a83f06e464484632cd0a0027cd72294fc7e9bf0b8d55758d27f",
+            "status": "complete",
+            "usage_charged_to_g_mission": "44e22fac251348d2-h01"
+          },
+          "outcome": {
+            "binary_sha256": "a58dcd6f9b663714abc5d2e622d4a68be9b711a9681ad3e9d9e375767b5a161f",
+            "cache_key": "2728050b2f94f3976f4bfa13fbf10eb7fce1cfc9358ee65ac5048d06eec2b9b3",
+            "commit": "899d97eb59256f07950066076c34090e084b6516",
+            "correct": true,
+            "logs": [
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/build.log",
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/correctness.log",
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/sample-0.log",
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/sample-1.log",
+              "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/logs/e1/44e22fac251348d2/search/attempt-001/sample-2.log"
+            ],
+            "mean_seconds": 0.00013629413860508368,
+            "reason": "",
+            "score": 0.9311513137923716,
+            "status": "valid",
+            "times": [
+              0.0001359609024706132,
+              0.00013662807855330868,
+              0.00013629343479132917
+            ],
+            "tree_hash": "e2ea2b4dfd478b0ec8f69b019676388512afa2c0"
+          },
+          "pair": 1,
+          "retained_ids": [
+            "703832c7f4d84646"
+          ],
+          "round": 2,
+          "selection": {
+            "action": "integrate",
+            "base_id": "703832c7f4d84646",
+            "idea_ids": [
+              "f2ddc9b63af245be"
+            ],
+            "rationale": "Use the correct, fastest measured warp-per-target kernel as the base and adapt T1’s source-tile reuse rather than copying its slower standalone mapping. Each CTA stages 256 sources (x, y, z, mass; 4096 bytes) and reuses them across its eight target warps. This is a new combination, so its correctness and speed must be established by the controller.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "703832c7f4d84646"
+            ]
+          },
+          "status": "complete",
+          "step": 2
+        }
+      ],
+      "unlimited_tokens": true,
+      "unlimited_wall_time": true
+    },
+    "created": 1792758037.1101677
+  },
+  {
+    "id": 36,
+    "kind": "packaged",
+    "payload": {
+      "commit": "899d97eb59256f07950066076c34090e084b6516",
+      "path": "/gpfs/scratch/nimarano/forest-engine-history-775521-1be439e2bef24a80978f41176eca48ad/results-780689/cuda-nbody/submission.zip",
+      "sha256": "08b30c137a12ec6cf2b8262b93572355e29ba17bb1f783eabfafdcc632dd5cad"
+    },
+    "created": 1792758109.7471354
+  }
+]

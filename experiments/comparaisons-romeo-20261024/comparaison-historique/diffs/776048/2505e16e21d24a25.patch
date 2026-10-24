@@ -1,0 +1,73 @@
+diff --git a/src/launch.json b/src/launch.json
+index 0e26fc2..6dcbfe3 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+ {
+-  "block": 128,
+-  "items_per_block": 128,
+-  "shared_memory_bytes": 3584
++  "block": 256,
++  "items_per_block": 256,
++  "shared_memory_bytes": 8192
+ }
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index 7ae41e4..9928195 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -5,8 +5,13 @@ struct Particle {
+     float mass;
+ };
+ 
+-// Each block stages a source tile in dynamic shared memory. Threads retain
+-// their one-target-per-thread mapping and traverse source tiles serially.
++// Compact shared-memory representation of fields used by the interaction.
++struct SourceParticle {
++    float x, y, z;
++    float mass;
++};
++
++// Each block stages 512 source particles for its 256 target threads.
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+     const int tid = threadIdx.x;
+     const int i = blockIdx.x * blockDim.x + tid;
+@@ -15,29 +20,32 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     Particle target;
+     if (active) target = in[i];
+ 
+-    extern __shared__ Particle source_tile[];
++    extern __shared__ SourceParticle source_tile[];
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
++    const int tile_capacity = 512;
+ 
+     float fx = 0.0f;
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+     for (int tile_base = 0; tile_base < n;) {
+-        const int source_index = tile_base + tid;
+-        if (source_index < n) source_tile[tid] = in[source_index];
+-        __syncthreads();
+-
+         int tile_count = n - tile_base;
+-        if (tile_count > blockDim.x) tile_count = blockDim.x;
++        if (tile_count > tile_capacity) tile_count = tile_capacity;
++
++        for (int source_offset = tid; source_offset < tile_count; source_offset += blockDim.x) {
++            const Particle source = in[tile_base + source_offset];
++            source_tile[source_offset] = {source.x, source.y, source.z, source.mass};
++        }
++        __syncthreads();
+ 
+         if (active) {
+             for (int k = 0; k < tile_count; ++k) {
+                 const int j = tile_base + k;
+                 if (i == j) continue;
+ 
+-                const Particle source = source_tile[k];
++                const SourceParticle source = source_tile[k];
+                 const float dx = source.x - target.x;
+                 const float dy = source.y - target.y;
+                 const float dz = source.z - target.z;

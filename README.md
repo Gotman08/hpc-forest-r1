@@ -98,6 +98,13 @@ Un exemple synthétique de matrices a été choisi à tort lors du premier contr
 Ses reçus sont conservés comme diagnostics du transport et sont exclus de toute
 comparaison avec les résultats des sujets officiels.
 
+Les [rapports, CSV et sources des comparaisons ROMEO](experiments/comparaisons-romeo-20261024/README.md)
+rassemblent les speedups publiés, les références remesurées, les résultats de
+Forest avant et après reprises, les historiques et diagnostics des moteurs,
+les classeurs Excel, les tableaux de bord et les schémas d'architecture.
+Les programmes, scripts de reproduction et preuves conservés disposent
+d'un manifeste d'intégrité ; les valeurs des résultats restent inchangées.
+
 ## Fin de recherche
 
 La durée cible est configurable (`30m`, `2h`, `5h`, `24h`, etc.). Les nouveaux

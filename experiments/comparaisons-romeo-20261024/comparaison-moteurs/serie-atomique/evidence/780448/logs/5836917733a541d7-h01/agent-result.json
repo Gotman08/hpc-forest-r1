@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 192,\n  \"items_per_block\": 384,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    }
+  ],
+  "hypothesis": "Correct two-target-per-thread configurations with blocks of 96, 128, and 160 measured 0.002554, 0.002585, and 0.002567 seconds; the 256-thread parent measured 0.002745 seconds, all slower than the 0.001844-second baseline. Testing 192 threads (six warps) with 384 targets per block keeps source-register reuse and targets per thread fixed while testing whether intermediate CTA granularity balances scheduling overhead and parallelism. No speedup is assumed; the controller should check correctness and measure all scored sizes.",
+  "notes": "Only the launch configuration changes. The existing kernel maps each lane to target0 = blockIdx.x * (2 * blockDim.x) + threadIdx.x and target1 = target0 + blockDim.x, guards them independently, reuses source values, and writes each valid target once. No new correctness or performance result is claimed.",
+  "sources_kept": [],
+  "transformations": [
+    "Set block=192 and items_per_block=384, preserving two targets per thread and zero shared-memory allocation.",
+    "Retain the existing unique target mapping: target0 = blockIdx.x * (2 * blockDim.x) + threadIdx.x and target1 = target0 + blockDim.x, with independent bounds checks and one write per valid target.",
+    "Continue loading each source once per interaction-loop iteration and reusing its values across both target accumulations in registers."
+  ]
+}

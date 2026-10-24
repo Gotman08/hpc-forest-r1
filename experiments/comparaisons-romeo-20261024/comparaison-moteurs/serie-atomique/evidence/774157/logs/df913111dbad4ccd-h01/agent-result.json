@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float invDist3 = invDist * invDist * invDist;\n        float accelScale = in[j].mass * invDist3;\n\n        fx += accelScale * dx;\n        fy += accelScale * dy;\n        fz += accelScale * dz;\n    }\n\n    Particle p = in[i];\n    p.vx += fx * dt;\n    p.vy += fy * dt;\n    p.vz += fz * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Explicit single-precision reciprocal square root plus an inverse-distance-cubed scale can replace sqrt-and-divide work in each interaction. Accumulating acceleration directly cancels the target-mass multiply/divide while retaining one thread per target, source traversal, self-pair handling, update order, softening, and exact mass copying.",
+  "notes": "The baseline is valid with three timing samples averaging 0.0018526411283622502 seconds; no candidate measurements are available, so no speed or correctness claim is made. The controller should check numerical tolerances, nonfinite outputs, and the extreme-mass case before timing. That supplied extreme-mass case has n=1, so the unchanged self-pair skip prevents an interaction there; it does not independently test cancellation on an interacting extreme-mass target.",
+  "sources_kept": [],
+  "transformations": [
+    "Replace sqrtf and division by explicit rsqrtf(distSq) and a product forming the inverse-distance cubed.",
+    "Cancel the target-mass multiply/divide algebraically by accumulating source-mass-weighted acceleration directly.",
+    "Preserve float32 softening, the self-pair skip, per-target source loop, velocity-before-position update order, and Particle mass copying; do not change launch configuration or enable global fast math."
+  ]
+}

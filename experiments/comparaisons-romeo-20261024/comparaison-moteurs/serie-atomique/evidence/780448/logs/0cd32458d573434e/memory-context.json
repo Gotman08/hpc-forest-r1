@@ -1,0 +1,289 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "dad37db81aed4367a2a23a9e9dbc4fcf7c09be6d247163890943771ac4e7913f",
+    "tree_id": "e1:T2"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "962a42ac12d84de9",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "962a42ac12d84de9",
+        "facts": {
+          "commit": "0d5cd71a4b78cffcf1cd5af611f286925e198f2d",
+          "base_commit": "af3bd2984bbe3459d714f46f015826f92695c09f",
+          "parent_id": "8770c36638ae41c1",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 2,
+            "configuration_file_count": 1,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.004165440000434725,
+          "score": 0.30689784494912115
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected parent computes two targets per thread and measured a mean of 0.002585 s versus the baseline's 0.001844 s. This contrasting factor-four mapping tests whether further amortizing each source load across four targets improves performance, while retaining 128 lanes per block. The extra target state and accumulators, plus half as many blocks for a given N as the parent's mapping, may instead increase register pressure or reduce parallelism; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Set block=128 and items_per_block=512, with shared_memory_bytes=0.\",\"Map each thread to up to four distinct targets at offsets 0, blockDim.x, 2*blockDim.x, and 3*blockDim.x within its block's 512-target group.\",\"Load each source position and mass once per loop iteration and reuse those values across the valid target accumulations in registers.\",\"Guard every target in the final partial group and write each valid output exactly once; do not use shared memory or block-level multi-output assignment.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "962a42ac12d84de9-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "962a42ac12d84de9",
+        "facts": {
+          "commit": null,
+          "base_commit": "af3bd2984bbe3459d714f46f015826f92695c09f",
+          "parent_id": "8770c36638ae41c1",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected parent computes two targets per thread and measured a mean of 0.002585 s versus the baseline's 0.001844 s. This contrasting factor-four mapping tests whether further amortizing each source load across four targets improves performance, while retaining 128 lanes per block. The extra target state and accumulators, plus half as many blocks for a given N as the parent's mapping, may instead increase register pressure or reduce parallelism; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Set block=128 and items_per_block=512, with shared_memory_bytes=0.\",\"Map each thread to up to four distinct targets at offsets 0, blockDim.x, 2*blockDim.x, and 3*blockDim.x within its block's 512-target group.\",\"Load each source position and mass once per loop iteration and reuse those values across the valid target accumulations in registers.\",\"Guard every target in the final partial group and write each valid output exactly once; do not use shared memory or block-level multi-output assignment.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "afc9f522ff1c4546",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "afc9f522ff1c4546",
+        "facts": {
+          "commit": "83e3da500ae7c068891a52b7166c32ddb2b66f06",
+          "base_commit": "af3bd2984bbe3459d714f46f015826f92695c09f",
+          "parent_id": "8770c36638ae41c1",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 2,
+            "configuration_file_count": 1,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0025543433209776795,
+          "score": 0.4193028971638718
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected two-target/128-thread candidate measured 0.002585 s, faster than the tested two-target/256-thread candidate at 0.002745 s, but both were slower than the 0.001844 s baseline. Test a 96-thread, 192-target mapping: it keeps two targets per thread and source-register reuse, while increasing the number of CTAs by one third versus the selected parent for a fixed N. Three warp-aligned warps per CTA may improve scheduling/resource distribution, but smaller CTAs may add overhead or reduce latency hiding. No speedup is assumed; all scored sizes and correctness cases should be checked by the controller.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Set block=96, items_per_block=192, and shared_memory_bytes=0, maintaining exactly two targets per thread.\",\"Map each lane to blockIdx.x*(2*blockDim.x)+threadIdx.x and that target plus blockDim.x; independently guard both targets in partial groups.\",\"Load source position and mass once per source iteration and reuse them across both separate target accumulations in registers.\",\"Write each valid target exactly once; use no shared-memory source tiling or block-level multi-output assignment.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "afc9f522ff1c4546-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "afc9f522ff1c4546",
+        "facts": {
+          "commit": null,
+          "base_commit": "af3bd2984bbe3459d714f46f015826f92695c09f",
+          "parent_id": "8770c36638ae41c1",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The selected two-target/128-thread candidate measured 0.002585 s, faster than the tested two-target/256-thread candidate at 0.002745 s, but both were slower than the 0.001844 s baseline. Test a 96-thread, 192-target mapping: it keeps two targets per thread and source-register reuse, while increasing the number of CTAs by one third versus the selected parent for a fixed N. Three warp-aligned warps per CTA may improve scheduling/resource distribution, but smaller CTAs may add overhead or reduce latency hiding. No speedup is assumed; all scored sizes and correctness cases should be checked by the controller.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Set block=96, items_per_block=192, and shared_memory_bytes=0, maintaining exactly two targets per thread.\",\"Map each lane to blockIdx.x*(2*blockDim.x)+threadIdx.x and that target plus blockDim.x; independently guard both targets in partial groups.\",\"Load source position and mass once per source iteration and reuse them across both separate target accumulations in registers.\",\"Write each valid target exactly once; use no shared-memory source tiling or block-level multi-output assignment.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "a035fbf236b64245",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "a035fbf236b64245",
+        "facts": {
+          "commit": "01ec31f3f9f409b858c843e42a0930fafccc5b07",
+          "base_commit": "0d5cd71a4b78cffcf1cd5af611f286925e198f2d",
+          "parent_id": "962a42ac12d84de9",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {
+            "available": true,
+            "kind": "nonconfiguration_files_changed",
+            "changed_file_count": 2,
+            "configuration_file_count": 1,
+            "semantic_novelty": "not_established_by_file_hashes",
+            "identical_input_ids": [],
+            "identical_input_count": 0
+          }
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0033491151265502344,
+          "score": 0.35513643772037223
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "The measured two-target/128-thread candidate (0.002585 s) was faster than the four-target/128-thread selected parent (0.004165 s), while both were slower than baseline (0.001844 s); the two-target/256-thread trial was also slower (0.002745 s). Test an intermediate three-target mapping with 128 threads fixed, assigning 384 unique targets per block. Reusing each loaded source across three register-resident target accumulations may help relative to two targets, but added accumulators may raise register pressure and reduce occupancy. No speedup is assumed; the controller should assess correctness and all scored sizes.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Set block=128, items_per_block=384, and shared_memory_bytes=0.\",\"Map each thread to up to three unique targets at offsets 0, blockDim.x, and 2*blockDim.x within its 384-target block group.\",\"Load each source position and mass once per interaction-loop iteration and reuse those register values for the three valid target accumulations; keep each target's accumulators separate.\",\"Guard targets independently in partial groups and write each valid output exactly once; use no shared-memory tiling or block-level multi-output assignment.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "a035fbf236b64245-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "a035fbf236b64245",
+        "facts": {
+          "commit": null,
+          "base_commit": "0d5cd71a4b78cffcf1cd5af611f286925e198f2d",
+          "parent_id": "962a42ac12d84de9",
+          "source_ids": [],
+          "source_count": 0,
+          "source_change": {}
+        },
+        "measured_outcome": {
+          "status": "incorrect",
+          "correct": false,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "Protected correctness checks failed",
+        "model_interpretation": {
+          "claim": "The selected four-target, 128-thread mapping was correct but measured 0.004165 s, slower than the 0.001844 s baseline; the earlier two-target, 128-thread mapping measured 0.002585 s. Using two targets per thread with 64 threads and 128 targets per block tests whether smaller blocks and greater block-level parallelism improve performance, while still reusing each source load across two targets. The additional block count or reduced lanes per block may instead hurt; no speedup is assumed.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Set block=64 and items_per_block=128 with shared_memory_bytes=0.\",\"Map each thread to targets blockIdx.x*(2*blockDim.x)+threadIdx.x and that index plus blockDim.x.\",\"Load each source position and mass once per source iteration, then reuse those register values across the two target calculations.\",\"Guard each target independently for partial groups and write each valid output exactly once.\",\"Use no shared-memory source tiling or block-level multi-output assignment.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 19,
+    "next_offset": 6
+  },
+  "catalog": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "role": "T2",
+        "subject": "Per-thread target coarsen",
+        "objective": "Explore per-thread register coarsening only: each thread computes multiple distinct target particles while reusing source values in registers. Do not use shared-memory source tiling or block-level multi-output assignment, so this contrasts with T1. Set block and items_per_block to implement a",
+        "records": 18,
+        "results": {
+          "trials": 7,
+          "valid": 7,
+          "incorrect": 0,
+          "unmeasured": 0
+        },
+        "source_diversity": {
+          "observed": 7,
+          "distinct_programs": 7,
+          "configuration_only": 2,
+          "repeated_programs": 0
+        },
+        "best": {
+          "id": "afc9f522ff1c4546",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0025543433209776795,
+          "hypothesis_as_data": "The selected two-target/128-thread candidate measured 0.002585 s, faster than the tested two-target/256-thread candidate"
+        },
+        "latest": {
+          "id": "5836917733a541d7",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.002614293389359954,
+          "hypothesis_as_data": "Correct two-target-per-thread configurations with blocks of 96, 128, and 160 measured 0.002554, 0.002585, and 0.002567 s"
+        },
+        "alternative": {
+          "id": "5836917733a541d7",
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.002614293389359954,
+          "hypothesis_as_data": "Correct two-target-per-thread configurations with blocks of 96, 128, and 160 measured 0.002554, 0.002585, and 0.002567 s"
+        },
+        "text_truncated": true
+      }
+    ],
+    "offset": 0,
+    "total": 1,
+    "next_offset": null
+  },
+  "evidence_ids": [
+    "962a42ac12d84de9",
+    "962a42ac12d84de9-h01",
+    "afc9f522ff1c4546",
+    "afc9f522ff1c4546-h01",
+    "a035fbf236b64245",
+    "a035fbf236b64245-h01",
+    "5836917733a541d7"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "3078d048f6bcf8274efa622ca7a26bbac7c4a8ab",
+  "selected_parent_id": null
+}

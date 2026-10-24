@@ -1,0 +1,14 @@
+{
+  "files": [
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq);\n        float invDist = 1.0f / dist;\n        float invDist3 = invDist * invDist * invDist;\n        float accelScale = in[j].mass * invDist3;\n\n        fx += accelScale * dx;\n        fy += accelScale * dy;\n        fz += accelScale * dz;\n    }\n\n    Particle p = in[i];\n    p.vx += fx * dt;\n    p.vy += fy * dt;\n    p.vz += fz * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "The previous rsqrtf-based candidate passed all reported cases except one quadruple-size output, with a maximum absolute error of 0.0003108978271484375. Accumulated reciprocal-square-root rounding may contribute to that deviation. This candidate uses float sqrtf followed by a reciprocal while retaining the canceled target-mass factor and serial source traversal; correctness must be established before timing.",
+  "notes": "The supplied baseline is valid at a three-sample mean of 0.0018526411283622502 s. The previous candidate was incorrect, so it has no timing result to compare. The controller should check numerical tolerances, nonfinite outputs, exact mass copying, and the extreme-mass case before measuring performance. The kernel retains float softening, self-pair skipping, velocity-then-position update order, and one thread per target.",
+  "sources_kept": [],
+  "transformations": [
+    "Replaced rsqrtf(distSq) with sqrtf(distSq) followed by a float reciprocal to reduce reciprocal-square-root approximation error; retained the inverse-cube construction and target-mass cancellation."
+  ]
+}

@@ -1,0 +1,3914 @@
+[
+  {
+    "id": 1,
+    "kind": "workspace_created",
+    "payload": {
+      "base_commit": "193b38721d1a41cf72b2675c8ad0d639eeef2344",
+      "protocol_id": "479e4e7d906c6ae22b71757818736fb1f781e2a226741a7b11edda437d7bb952"
+    },
+    "created": 1792665633.7087257
+  },
+  {
+    "id": 2,
+    "kind": "cuda_nbody_fresh_campaign",
+    "payload": {
+      "effort": "max",
+      "job_id": "775521",
+      "metric": "geomean_cuda_event_seconds",
+      "model": "gpt-6-luna",
+      "old_candidates_imported": false,
+      "pipeline_complete": false,
+      "scope": "cuda-nbody-luna-max-memory-v1",
+      "search_policy": "ab-mcts-a",
+      "session_id": "21c416d16d78440a83e722965be34e7c",
+      "source_sha256": "566e9a4085ff08795269fdb76df607198f835c597ad2dfab4155ea4f0bc33291",
+      "subject": "cuda-nbody",
+      "target_seconds": 1800
+    },
+    "created": 1792665638.7356074
+  },
+  {
+    "id": 3,
+    "kind": "mother_usage",
+    "payload": {
+      "budget_phase": "search",
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "planning",
+        "request_sha256": "4ed6b6fc92d25d65cf7ed13a75f6376ef313e6e8a7bbd0019961564bd2a425ce",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 0
+      },
+      "final_synthesis": false,
+      "model_calls": 1,
+      "phase": "preparation",
+      "plan": {
+        "G": "After research closes, review each candidate together with its correctness results and measurements. Select by the official geometric-mean kernel time across N=4096, 8192, and 16384; do not assume individually measured gains will add. Reuse slower-trial ideas or bases only when useful, and compile and check every combined program afresh. Independently confirm final G using the prescribed protocol, retain the best independently confirmed valid program, and do not restart research.",
+        "analysis": "I choose N=3: the baseline exposes three complementary opportunities—reuse source-particle data across targets, reuse each loaded source across multiple target outputs, and reduce per-interaction arithmetic. The supplied kernel assigns one target to each thread and serially loops over all sources; it evaluates sqrtf and forms a mass_i-scaled force before dividing by mass_i. These suggest opportunities, but the measurements do not establish which is dominant. The only automatic result is a valid, correct baseline with three listed timings of 1.856535–1.856696 ms and a recorded mean of 1.856629 ms; there are no per-size results or candidate comparisons to support a speedup claim. Keep the exact Particle layout and entry point, one-kernel interface, softening, update order, exact mass preservation, and all-input correctness, including self-interaction exclusion, coincident positions, negative or zero dt, and the extreme-mass case. Test all stated sizes and the independent oracle; no test-specific specialization or fast-math option. Launch-configuration tuning belongs within each relevant algorithm rather than in a separate generic tree, since it is coupled to each mapping.",
+        "children": [
+          {
+            "objective": "Shared-memory source tiling, one target per thread",
+            "subject": "Explore staging source positions and mass in shared memory in source chunks so multiple target threads reuse each staged source. Keep the output mapping at one target per thread to distinguish this from register-blocked output work. Tune a valid block/items_per_block/shared_memory_bytes configuration and the shared tile layout; handle partial source and target tiles without letting inactive threads skip required barriers. Preserve i==j exclusion, the exact interface and all correctness requirements. Compare using the prescribed three-size geometric-mean kernel-time objective, and retain only candidates that pass the full correctness checks."
+          },
+          {
+            "objective": "Register-blocked target outputs",
+            "subject": "Explore assigning a small batch of target particles to each thread, with separate accumulators, so a source particle's loaded position and mass can be reused across those targets. This is an output-axis/register-reuse investigation, not merely another one-target-per-thread shared-memory tile. Tune the batch size and allowed launch configuration while monitoring register pressure and available parallelism. Cover all target tails and preserve the full state, self exclusion, numerical requirements, and exact masses. Measure against the prescribed objective and validate every candidate with the complete oracle/check suite."
+          },
+          {
+            "objective": "Per-interaction arithmetic efficiency",
+            "subject": "Explore lowering the cost of pair evaluation while retaining the one-target-per-thread mapping as a clear comparison: for example, algebraically cancel target mass in the acceleration expression and evaluate inverse distance with rsqrtf to form an inverse-cube factor. Test arithmetic ordering and only consider FMA or loop unrolling when measurements justify them. These transformations change floating-point rounding: preserve softening and self exclusion, use no global fast-math option, and reject any candidate that fails tolerances, oracle checks, or the nonfinite-output constraint, including extreme-mass and coincident-position cases. Compare on the official geometric-mean metric."
+          }
+        ]
+      },
+      "request_sha256": "4ed6b6fc92d25d65cf7ed13a75f6376ef313e6e8a7bbd0019961564bd2a425ce",
+      "response": {
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "planning",
+          "request_sha256": "4ed6b6fc92d25d65cf7ed13a75f6376ef313e6e8a7bbd0019961564bd2a425ce",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 0
+        },
+        "data": {
+          "G": "After research closes, review each candidate together with its correctness results and measurements. Select by the official geometric-mean kernel time across N=4096, 8192, and 16384; do not assume individually measured gains will add. Reuse slower-trial ideas or bases only when useful, and compile and check every combined program afresh. Independently confirm final G using the prescribed protocol, retain the best independently confirmed valid program, and do not restart research.",
+          "analysis": "I choose N=3: the baseline exposes three complementary opportunities—reuse source-particle data across targets, reuse each loaded source across multiple target outputs, and reduce per-interaction arithmetic. The supplied kernel assigns one target to each thread and serially loops over all sources; it evaluates sqrtf and forms a mass_i-scaled force before dividing by mass_i. These suggest opportunities, but the measurements do not establish which is dominant. The only automatic result is a valid, correct baseline with three listed timings of 1.856535–1.856696 ms and a recorded mean of 1.856629 ms; there are no per-size results or candidate comparisons to support a speedup claim. Keep the exact Particle layout and entry point, one-kernel interface, softening, update order, exact mass preservation, and all-input correctness, including self-interaction exclusion, coincident positions, negative or zero dt, and the extreme-mass case. Test all stated sizes and the independent oracle; no test-specific specialization or fast-math option. Launch-configuration tuning belongs within each relevant algorithm rather than in a separate generic tree, since it is coupled to each mapping.",
+          "children": [
+            {
+              "objective": "Shared-memory source tiling, one target per thread",
+              "subject": "Explore staging source positions and mass in shared memory in source chunks so multiple target threads reuse each staged source. Keep the output mapping at one target per thread to distinguish this from register-blocked output work. Tune a valid block/items_per_block/shared_memory_bytes configuration and the shared tile layout; handle partial source and target tiles without letting inactive threads skip required barriers. Preserve i==j exclusion, the exact interface and all correctness requirements. Compare using the prescribed three-size geometric-mean kernel-time objective, and retain only candidates that pass the full correctness checks."
+            },
+            {
+              "objective": "Register-blocked target outputs",
+              "subject": "Explore assigning a small batch of target particles to each thread, with separate accumulators, so a source particle's loaded position and mass can be reused across those targets. This is an output-axis/register-reuse investigation, not merely another one-target-per-thread shared-memory tile. Tune the batch size and allowed launch configuration while monitoring register pressure and available parallelism. Cover all target tails and preserve the full state, self exclusion, numerical requirements, and exact masses. Measure against the prescribed objective and validate every candidate with the complete oracle/check suite."
+            },
+            {
+              "objective": "Per-interaction arithmetic efficiency",
+              "subject": "Explore lowering the cost of pair evaluation while retaining the one-target-per-thread mapping as a clear comparison: for example, algebraically cancel target mass in the acceleration expression and evaluate inverse distance with rsqrtf to form an inverse-cube factor. Test arithmetic ordering and only consider FMA or loop unrolling when measurements justify them. These transformations change floating-point rounding: preserve softening and self exclusion, use no global fast-math option, and reject any candidate that fails tolerances, oracle checks, or the nonfinite-output constraint, including extreme-mass and coincident-position cases. Compare on the official geometric-mean metric."
+            }
+          ]
+        },
+        "error": null,
+        "infrastructure_error": false,
+        "model": "gpt-6-luna",
+        "nonce": "48897c1094d74efea91a9c8b9031e2cb",
+        "protocol": "hpc-forest-codex-mailbox-v1",
+        "reasoning_effort": "max",
+        "request_sha256": "4ed6b6fc92d25d65cf7ed13a75f6376ef313e6e8a7bbd0019961564bd2a425ce",
+        "session_id": "21c416d16d78440a83e722965be34e7c",
+        "usage": {
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "126be138fe9c026c4d8a3023b8af974547f50b25bc5a8ca4abd3df54e0d50c20",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 72320,
+              "input_tokens": 103263,
+              "output_tokens": 13996,
+              "reasoning_output_tokens": 12587
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [
+            {
+              "allowed": true,
+              "id": "item_2",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "documentation_catalog"
+            },
+            {
+              "allowed": true,
+              "id": "item_3",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_4",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            }
+          ],
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": {
+              "id": "6468f6b813734167a76a3a0ea25476c6",
+              "phase": "planning",
+              "previous_request_sha256": null,
+              "thread_id": null,
+              "turn": 0
+            },
+            "effective_instructions_sha256": "d006ee627599f40e7a36763a7437b9b88bc5e5fa43949478f5be1a94eb70d18b",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "planifier-optimisation",
+                  "path": "assets/skills/planifier-optimisation/SKILL.md",
+                  "sha256": "ace3ff2a1dfbddc126bba36c3a406f6f7259cfe241c81fa7672232fb2a82064e"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "planning",
+              "role": "Mother",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "mother-preparation-d9ed2e60e536449c",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "planifier-optimisation",
+                "references": [
+                  "automatic_observations_as_data.baseline",
+                  "target_as_data"
+                ],
+                "status": "applied",
+                "summary": "Selected three distinct research objectives based on the supplied kernel, fixed one-kernel interface, correctness constraints, target, and available baseline measurement; launch tuning is scoped to the algorithms it affects."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [
+                  "execution_target_as_data",
+                  "target_as_data"
+                ],
+                "status": "applied",
+                "summary": "Used the supplied GH200, NVRTC CUDA 12.6.3, aarch64, one-GPU/four-CPU target details. An exact SM identifier and further ROMEO inspection results were not supplied, so the plan avoids architecture-specific assumptions."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [
+                  "https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html"
+                ],
+                "status": "applied",
+                "summary": "Consulted NVIDIA guidance on shared-memory reuse. The available snapshot is publisher-current CUDA Best Practices Guide 13.4, not the target's CUDA 12.6.3; it supports only the general reuse rationale here, not a target-specific capability claim."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "automatic_observations_as_data.baseline"
+                ],
+                "status": "applied",
+                "summary": "Recorded the valid baseline's three timings and mean without inferring per-size performance or an optimization gain. Candidate selection must use comparable official measurements and correctness checks, followed by the prescribed five-repetition independent confirmation."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "48897c1094d74efea91a9c8b9031e2cb",
+            "observed_mcp_calls": [
+              {
+                "allowed": true,
+                "id": "item_2",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "documentation_catalog"
+              },
+              {
+                "allowed": true,
+                "id": "item_3",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "search_documentation"
+              },
+              {
+                "allowed": true,
+                "id": "item_4",
+                "server": "hpc_docs",
+                "status": "completed",
+                "tool": "search_documentation"
+              }
+            ],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "4ed6b6fc92d25d65cf7ed13a75f6376ef313e6e8a7bbd0019961564bd2a425ce",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "observed_tokens": 117259,
+          "reasoning_effort_requested": "max",
+          "token_accounting": "exact",
+          "tokens": 117259,
+          "tool_events": [
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call",
+            "mcp_tool_call"
+          ],
+          "tool_runtime_errors": []
+        }
+      },
+      "slot_id": "a3eda478d578495683b4c8bca848adb3",
+      "status": "complete"
+    },
+    "created": 1792665790.2373583
+  },
+  {
+    "id": 4,
+    "kind": "mother_forest_selected",
+    "payload": {
+      "base_commit": "193b38721d1a41cf72b2675c8ad0d639eeef2344",
+      "children": [
+        {
+          "objective": "Shared-memory source tiling, one target per thread",
+          "role": "T1",
+          "subject": "Explore staging source positions and mass in shared memory in source chunks so multiple target threads reuse each staged source. Keep the output mapping at one target per thread to distinguish this from register-blocked output work. Tune a valid block/items_per_block/shared_memory_bytes configuration and the shared tile layout; handle partial source and target tiles without letting inactive threads skip required barriers. Preserve i==j exclusion, the exact interface and all correctness requirements. Compare using the prescribed three-size geometric-mean kernel-time objective, and retain only candidates that pass the full correctness checks."
+        },
+        {
+          "objective": "Register-blocked target outputs",
+          "role": "T2",
+          "subject": "Explore assigning a small batch of target particles to each thread, with separate accumulators, so a source particle's loaded position and mass can be reused across those targets. This is an output-axis/register-reuse investigation, not merely another one-target-per-thread shared-memory tile. Tune the batch size and allowed launch configuration while monitoring register pressure and available parallelism. Cover all target tails and preserve the full state, self exclusion, numerical requirements, and exact masses. Measure against the prescribed objective and validate every candidate with the complete oracle/check suite."
+        },
+        {
+          "objective": "Per-interaction arithmetic efficiency",
+          "role": "T3",
+          "subject": "Explore lowering the cost of pair evaluation while retaining the one-target-per-thread mapping as a clear comparison: for example, algebraically cancel target mass in the acceleration expression and evaluate inverse distance with rsqrtf to form an inverse-cube factor. Test arithmetic ordering and only consider FMA or loop unrolling when measurements justify them. These transformations change floating-point rounding: preserve softening and self exclusion, use no global fast-math option, and reject any candidate that fails tolerances, oracle checks, or the nonfinite-output constraint, including extreme-mass and coincident-position cases. Compare on the official geometric-mean metric."
+        }
+      ],
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "planning",
+        "request_sha256": "4ed6b6fc92d25d65cf7ed13a75f6376ef313e6e8a7bbd0019961564bd2a425ce",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 0
+      },
+      "epoch": 1,
+      "mother_slot_id": "a3eda478d578495683b4c8bca848adb3",
+      "parallelism": 3,
+      "plan_sha256": "a2ce3bd2743f3c2f28415f9bc6429bff5d3beb2ae2fa1eb56e5da37baa1ee083",
+      "protocol": "hpc-forest-mother-forest-v1",
+      "request_sha256": "4ed6b6fc92d25d65cf7ed13a75f6376ef313e6e8a7bbd0019961564bd2a425ce",
+      "status": "complete"
+    },
+    "created": 1792665790.2394614
+  },
+  {
+    "id": 5,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": true,
+      "confirmation_seconds": 80.81649145608148,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 732.7024803999811,
+      "first_wave_continues_mother": true,
+      "inflight_roles": [],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2425.4049607999623,
+      "integration_steps": 2,
+      "mother_seconds": 138.77183294296265,
+      "next_work_seconds": 197.63430149992928,
+      "observed_at": 1792665790.2498667,
+      "pending_roles": [
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "predicted_drain_seconds": 158.10744119994342,
+      "remaining_seconds": 1648.4952490329742,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3149.026815320055,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:baseline": 1,
+        "mother": 1
+      },
+      "search_admission_deadline": 1792664289.7183003,
+      "selection_seconds": 960,
+      "target_deadline": 1792667438.7451158
+    },
+    "created": 1792665790.2528455
+  },
+  {
+    "id": 6,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "Shared-memory source tiling, one target per thread"
+    },
+    "created": 1792665790.280869
+  },
+  {
+    "id": 7,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "Register-blocked target outputs"
+    },
+    "created": 1792665790.3053796
+  },
+  {
+    "id": 8,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "Per-interaction arithmetic efficiency"
+    },
+    "created": 1792665790.332363
+  },
+  {
+    "id": 9,
+    "kind": "research_node_submitted",
+    "payload": {
+      "experiment_id": "85c1ff0376cc4045",
+      "ordinal": 1,
+      "role": "T1",
+      "submitted_at": 1792665790.33601
+    },
+    "created": 1792665790.3365135
+  },
+  {
+    "id": 10,
+    "kind": "research_node_submitted",
+    "payload": {
+      "experiment_id": "16bd9f82c0e34e9f",
+      "ordinal": 1,
+      "role": "T2",
+      "submitted_at": 1792665790.3378513
+    },
+    "created": 1792665790.3385613
+  },
+  {
+    "id": 11,
+    "kind": "research_node_submitted",
+    "payload": {
+      "experiment_id": "2a7cd6b7c3af45e9",
+      "ordinal": 1,
+      "role": "T3",
+      "submitted_at": 1792665790.3399858
+    },
+    "created": 1792665790.3404403
+  },
+  {
+    "id": 12,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "1be9e90f45305a432bc225c0e0028161d377a2fcde1ee461fcb547b2d5ec07c2",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 0,
+              "input_tokens": 12719,
+              "output_tokens": 4575,
+              "reasoning_output_tokens": 3324
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "b24e7bc9f6bc56fe72b56a2019066979da2c4aa9bdc694979880e82647e5887e",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T1",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "85c1ff0376cc4045-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Proposed one bounded source-tiling experiment while preserving the one-target-per-thread mapping, serial source order, and barrier participation for inactive lanes."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No architecture or compiler-specific feature is used; the proposal uses basic CUDA shared memory and block barriers."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No version-dependent API or hardware instruction is involved in this basic shared-memory tiling candidate."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Recorded the available baseline outcome and withheld any speedup claim pending controller correctness checks and measurements."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "1b67f5100c2e49c2af6f6d9258257284",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "45589ee90d7af81f33625bd09e2af4be0fd7ec8d952c573de5caa11f0b294dc0",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "observed_tokens": 17294,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "45589ee90d7af81f33625bd09e2af4be0fd7ec8d952c573de5caa11f0b294dc0",
+          "token_accounting": "exact",
+          "tokens": 17294,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "search",
+      "contract_rejected": false,
+      "development_evaluations": 1,
+      "experiment_id": "85c1ff0376cc4045",
+      "harness_attempts": 1,
+      "journal": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/85c1ff0376cc4045/node-harness.json",
+      "llm_calls": 1,
+      "memory_reads": 0,
+      "observed_tokens": 17294,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 1,
+      "token_accounting": "exact"
+    },
+    "created": 1792665845.2992334
+  },
+  {
+    "id": 13,
+    "kind": "research_node_settled",
+    "payload": {
+      "experiment_id": "85c1ff0376cc4045",
+      "ordinal": 1,
+      "role": "T1",
+      "settled_at": 1792665856.8308032
+    },
+    "created": 1792665856.8308167
+  },
+  {
+    "id": 14,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 70.99667689545703,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 731.4872054895386,
+      "inflight_roles": [
+        "T2",
+        "T3"
+      ],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2422.974410979077,
+      "integration_steps": 2,
+      "mother_seconds": 138.77183294296265,
+      "next_work_seconds": 109.95332741760649,
+      "observed_at": 1792665856.8368058,
+      "pending_roles": [
+        "T1"
+      ],
+      "predicted_drain_seconds": 87.96266193408519,
+      "remaining_seconds": 1581.9083099365234,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3133.7138598431675,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "mission:T1": 1,
+        "mother": 1
+      },
+      "search_admission_deadline": 1792664305.031256,
+      "selection_seconds": 960,
+      "target_deadline": 1792667438.7451158
+    },
+    "created": 1792665856.8375804
+  },
+  {
+    "id": 15,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "f036640d5f790658f3a39b83a6e85bba82d7e358761d8301e0126446adeb0492",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 0,
+              "input_tokens": 12701,
+              "output_tokens": 4810,
+              "reasoning_output_tokens": 3589
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "6692b42f364f244e850912e9c63f2dee9aebd6f764e9e9359da90f2665abed6a",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T2",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "16bd9f82c0e34e9f-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Proposed two target outputs per thread with independent accumulators and shared source values; performance remains to be measured."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No architecture-specific feature was selected; the target hardware and compiler details were not supplied."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "The proposal uses ordinary CUDA indexing and arithmetic and does not depend on an uncertain API or instruction."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Recorded the correct baseline mean and left candidate speed and correctness for controller evaluation."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "87796c0c721c490daaa2ff5e817f9a69",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "7eb8c06c86d822c80dd8c35a75a09fe9a265fec73927877532b9b62ff7b3ba48",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "observed_tokens": 17511,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "7eb8c06c86d822c80dd8c35a75a09fe9a265fec73927877532b9b62ff7b3ba48",
+          "token_accounting": "exact",
+          "tokens": 17511,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "search",
+      "contract_rejected": false,
+      "development_evaluations": 1,
+      "experiment_id": "16bd9f82c0e34e9f",
+      "harness_attempts": 1,
+      "journal": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/16bd9f82c0e34e9f/node-harness.json",
+      "llm_calls": 1,
+      "memory_reads": 0,
+      "observed_tokens": 17511,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 1,
+      "token_accounting": "exact"
+    },
+    "created": 1792665862.2267642
+  },
+  {
+    "id": 16,
+    "kind": "research_node_settled",
+    "payload": {
+      "experiment_id": "16bd9f82c0e34e9f",
+      "ordinal": 1,
+      "role": "T2",
+      "settled_at": 1792665880.2865129
+    },
+    "created": 1792665880.2865238
+  },
+  {
+    "id": 17,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 71.5083112285162,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 732.3228579023853,
+      "inflight_roles": [
+        "T3"
+      ],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2424.6457158047706,
+      "integration_steps": 2,
+      "mother_seconds": 138.77183294296265,
+      "next_work_seconds": 106.30551709211431,
+      "observed_at": 1792665880.2925515,
+      "pending_roles": [
+        "T2"
+      ],
+      "predicted_drain_seconds": 85.04441367369145,
+      "remaining_seconds": 1558.452564239502,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3136.442533791608,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mother": 1
+      },
+      "search_admission_deadline": 1792664302.302582,
+      "selection_seconds": 960,
+      "target_deadline": 1792667438.7451158
+    },
+    "created": 1792665880.2933974
+  },
+  {
+    "id": 18,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 71.5083112285162,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 732.3228579023853,
+      "inflight_roles": [
+        "T3"
+      ],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2424.6457158047706,
+      "integration_steps": 2,
+      "mother_seconds": 138.77183294296265,
+      "next_work_seconds": 83.05944351362996,
+      "observed_at": 1792665880.294365,
+      "pending_roles": [
+        "T1"
+      ],
+      "predicted_drain_seconds": 66.44755481090397,
+      "remaining_seconds": 1558.4507508277893,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3136.442533791608,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mother": 1
+      },
+      "search_admission_deadline": 1792664302.302582,
+      "selection_seconds": 960,
+      "target_deadline": 1792667438.7451158
+    },
+    "created": 1792665880.2950342
+  },
+  {
+    "id": 19,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "f8d864e2576c2b7ec137dbbc4dc1fb9ba9596bcef92c47244f1d1a993af7c4ec",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 4352,
+              "input_tokens": 12712,
+              "output_tokens": 5858,
+              "reasoning_output_tokens": 4837
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "f21c70702916afcd833009623e5967e2d9419decc5c93fc1c783a3dc7b9202db",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T3",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "2a7cd6b7c3af45e9-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Proposed one bounded arithmetic rewrite and left correctness and performance conclusions to controller measurements."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No architecture-specific instruction or launch-configuration change is proposed."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No version-specific API assumption is needed; rsqrtf performance and numerical impact remain subject to controller validation."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Recorded the correct baseline mean and made no candidate speedup claim; the candidate needs official validation and comparison."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "714f66674abd404b980a3faab1319428",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "c18ca00565e21e16c9d64d4f27d868ef226a6f8c6244951a5ef89e72dbeb4967",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "observed_tokens": 18570,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "c18ca00565e21e16c9d64d4f27d868ef226a6f8c6244951a5ef89e72dbeb4967",
+          "token_accounting": "exact",
+          "tokens": 18570,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        },
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "3f929ba13566df127d1fbff51a0a042224f610e33d5931988daad5e1c1ef7ce0",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 0,
+              "input_tokens": 14795,
+              "output_tokens": 7566,
+              "reasoning_output_tokens": 6691
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "f21c70702916afcd833009623e5967e2d9419decc5c93fc1c783a3dc7b9202db",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T3",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "2a7cd6b7c3af45e9-h02",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Selected a bounded target-coordinate reuse experiment and preserved arithmetic order; left correctness and speed to controller evaluation."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No hardware-specific instruction, launch change, or version-dependent feature was selected."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "The experiment uses only ordinary CUDA scalar loads and requires no uncertain API or instruction semantics."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Recorded the correct baseline timing as context and made no speedup claim; the candidate still requires controller correctness checks and measurement."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "937b7526113a4e19be0b7ed7cea1853d",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "b5885aebc801f0ed491cb5bab1fab6b2ca81b840cdc98f33a79924c08ef95af7",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "observed_tokens": 22361,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "b5885aebc801f0ed491cb5bab1fab6b2ca81b840cdc98f33a79924c08ef95af7",
+          "token_accounting": "exact",
+          "tokens": 22361,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        },
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "502c456dbd2dd0c04b7ed24dbfb8ece6a5823714010b2468b5ab9e2dee6f5a8d",
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 0,
+              "input_tokens": 16982,
+              "output_tokens": 7150,
+              "reasoning_output_tokens": 6257
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": null,
+            "effective_instructions_sha256": "f21c70702916afcd833009623e5967e2d9419decc5c93fc1c783a3dc7b9202db",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "conduire-experience-optimisation",
+                  "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+                  "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "research",
+              "role": "T3",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "2a7cd6b7c3af45e9-h03",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "conduire-experience-optimisation",
+                "references": [],
+                "status": "applied",
+                "summary": "Proposed one bounded two-way unroll while preserving pair arithmetic and accumulation order; the controller will assess correctness and speed."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [],
+                "status": "not_needed",
+                "summary": "The experiment uses no architecture-specific instructions or launch/resource changes; no further environment fact was needed for this bounded source change."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No new intrinsic, library API, or hardware-specific behavior is introduced; the controller's CUDA build will validate the unroll hint."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "Recorded the correct baseline's three-sample mean and made no speedup claim without candidate measurements."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "580467c425e8486993ed72fd97791fff",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "dc554113be45522d94d1c0002153fbe4ac9c1031b474c5ae1f13fc1944727a73",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "observed_tokens": 24132,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "dc554113be45522d94d1c0002153fbe4ac9c1031b474c5ae1f13fc1944727a73",
+          "token_accounting": "exact",
+          "tokens": 24132,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "search",
+      "contract_rejected": false,
+      "development_evaluations": 3,
+      "experiment_id": "2a7cd6b7c3af45e9",
+      "harness_attempts": 3,
+      "journal": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/2a7cd6b7c3af45e9/node-harness.json",
+      "llm_calls": 3,
+      "memory_reads": 0,
+      "observed_tokens": 65063,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 3,
+      "token_accounting": "exact"
+    },
+    "created": 1792666037.7217765
+  },
+  {
+    "id": 20,
+    "kind": "research_node_settled",
+    "payload": {
+      "experiment_id": "2a7cd6b7c3af45e9",
+      "ordinal": 1,
+      "role": "T3",
+      "settled_at": 1792666042.687059
+    },
+    "created": 1792666042.6870728
+  },
+  {
+    "id": 21,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 70.11555720710507,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 731.4872054895386,
+      "inflight_roles": [],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2422.974410979077,
+      "integration_steps": 2,
+      "mother_seconds": 138.77183294296265,
+      "next_work_seconds": 315.3815354255494,
+      "observed_at": 1792666042.69293,
+      "pending_roles": [
+        "T3"
+      ],
+      "predicted_drain_seconds": 252.3052283404395,
+      "remaining_seconds": 1396.0521857738495,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3132.612460232728,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:T3": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:T3": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:T3": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:T3": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "generation:T3": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mission:T3": 1,
+        "mother": 1,
+        "research_wave:3": 1
+      },
+      "search_admission_deadline": 1792664306.1326556,
+      "selection_seconds": 960,
+      "target_deadline": 1792667438.7451158
+    },
+    "created": 1792666042.6936352
+  },
+  {
+    "id": 22,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 70.11555720710507,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 731.4872054895386,
+      "inflight_roles": [],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2422.974410979077,
+      "integration_steps": 2,
+      "mother_seconds": 138.77183294296265,
+      "next_work_seconds": 83.05944351362996,
+      "observed_at": 1792666042.6945796,
+      "pending_roles": [
+        "T1"
+      ],
+      "predicted_drain_seconds": 66.44755481090397,
+      "remaining_seconds": 1396.0505361557007,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3132.612460232728,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:T3": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:T3": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:T3": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:T3": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "generation:T3": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mission:T3": 1,
+        "mother": 1,
+        "research_wave:3": 1
+      },
+      "search_admission_deadline": 1792664306.1326556,
+      "selection_seconds": 960,
+      "target_deadline": 1792667438.7451158
+    },
+    "created": 1792666042.6952288
+  },
+  {
+    "id": 23,
+    "kind": "adaptive_admission",
+    "payload": {
+      "archive_seconds": 5.0,
+      "can_admit": false,
+      "confirmation_seconds": 70.11555720710507,
+      "estimation_policy": "independent_phase_medians",
+      "final_g_seconds": 731.4872054895386,
+      "inflight_roles": [],
+      "integration_estimate_source": "memory-guided-bounded-selection+code+evaluation",
+      "integration_seconds": 2422.974410979077,
+      "integration_steps": 2,
+      "mother_seconds": 138.77183294296265,
+      "next_work_seconds": 106.30551709211431,
+      "observed_at": 1792666042.6961665,
+      "pending_roles": [
+        "T2"
+      ],
+      "predicted_drain_seconds": 85.04441367369145,
+      "remaining_seconds": 1396.0489492416382,
+      "research_estimate_source": "generation_and_exclusive_evaluation",
+      "reserve_seconds": 3132.612460232728,
+      "safety_factor": 1.25,
+      "sample_counts": {
+        "baseline": 1,
+        "evaluation_benchmark:T1": 1,
+        "evaluation_benchmark:T2": 1,
+        "evaluation_benchmark:baseline": 1,
+        "evaluation_build:T1": 1,
+        "evaluation_build:T2": 1,
+        "evaluation_build:T3": 1,
+        "evaluation_build:baseline": 1,
+        "evaluation_check:T1": 1,
+        "evaluation_check:T2": 1,
+        "evaluation_check:T3": 1,
+        "evaluation_check:baseline": 1,
+        "evaluation_lock_wait:T1": 1,
+        "evaluation_lock_wait:T2": 1,
+        "evaluation_lock_wait:T3": 1,
+        "evaluation_lock_wait:baseline": 1,
+        "evaluation_work:T1": 1,
+        "evaluation_work:T2": 1,
+        "evaluation_work:T3": 1,
+        "evaluation_work:baseline": 1,
+        "generation:T1": 1,
+        "generation:T2": 1,
+        "generation:T3": 1,
+        "mission:T1": 1,
+        "mission:T2": 1,
+        "mission:T3": 1,
+        "mother": 1,
+        "research_wave:3": 1
+      },
+      "search_admission_deadline": 1792664306.1326556,
+      "selection_seconds": 960,
+      "target_deadline": 1792667438.7451158
+    },
+    "created": 1792666042.6968668
+  },
+  {
+    "id": 24,
+    "kind": "budget_stop",
+    "payload": {
+      "reason": "No independent research node fits before finalization"
+    },
+    "created": 1792666042.6975808
+  },
+  {
+    "id": 25,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "read",
+        "base_id": "",
+        "idea_ids": [],
+        "rationale": "T1 is the fastest measured correct candidate so far (0.001007746 s, score 0.64818), versus the valid baseline at 0.001856629 s. Inspect its source-file list before deciding whether another measured or developmental idea can complement it; T2 is valid but slower, and T3 is incorrect.",
+        "read": {
+          "ids": [
+            "85c1ff0376cc4045"
+          ],
+          "offset": 0,
+          "operation": "source",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": []
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "acc0d6c42a2006b76df528406b9a097dcf72c5cb49f4b68a768fadad6a665ce4",
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "assembly",
+        "request_sha256": "9a9481281338d3c000c2486e50be1f7d09e554627111cd8e0cb12bddb3f3c18c",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 1
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 72320,
+          "input_tokens": 148517,
+          "output_tokens": 14748,
+          "reasoning_output_tokens": 12989
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "previous_request_sha256": "4ed6b6fc92d25d65cf7ed13a75f6376ef313e6e8a7bbd0019961564bd2a425ce",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 1
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r1-t1",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "85c1ff0376cc4045",
+              "16bd9f82c0e34e9f"
+            ],
+            "status": "applied",
+            "summary": "Using measured correctness and timing, T1 is the tentative integration base; inspect source before combining."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "No hardware-specific decision is needed for this source inspection; the frozen target details remain available."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [],
+            "status": "not_needed",
+            "summary": "No version-sensitive API or hardware behavior is being evaluated in this read."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "85c1ff0376cc4045",
+              "16bd9f82c0e34e9f",
+              "baseline-e1"
+            ],
+            "status": "applied",
+            "summary": "T1 is measured correct and faster than the valid baseline; T2 is measured correct but slower, so it is not selected as a source without evidence of complementarity."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "46ec52442e7044eca7c8be22970b3daf",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "9a9481281338d3c000c2486e50be1f7d09e554627111cd8e0cb12bddb3f3c18c",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "21c416d16d78440a83e722965be34e7c"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 163265,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "9a9481281338d3c000c2486e50be1f7d09e554627111cd8e0cb12bddb3f3c18c",
+      "selection_id": "memory-select-e1-r1-t1",
+      "token_accounting": "exact",
+      "tokens": 163265,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792666065.2627518
+  },
+  {
+    "id": 26,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "read",
+        "base_id": "",
+        "idea_ids": [],
+        "rationale": "Inspect T1's measured-correct kernel before integration. Its source-load reuse and barrier behavior must be verified in the actual file, not inferred only from the model's summary.",
+        "read": {
+          "ids": [
+            "85c1ff0376cc4045"
+          ],
+          "offset": 0,
+          "operation": "source",
+          "path": "src/nbody_kernel.cu",
+          "query": ""
+        },
+        "source_ids": []
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "c855a41ddb301054c35decc961a8784553ba083998026116cc30a7793dcc14ff",
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "assembly",
+        "request_sha256": "a1cfa53fec98bae61dfd180331686129625de24b60d53bb847a091a6817adfde",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 2
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 117376,
+          "input_tokens": 198489,
+          "output_tokens": 15207,
+          "reasoning_output_tokens": 13171
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "previous_request_sha256": "9a9481281338d3c000c2486e50be1f7d09e554627111cd8e0cb12bddb3f3c18c",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 2
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r1-t2",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "85c1ff0376cc4045"
+            ],
+            "status": "applied",
+            "summary": "T1 remains the measured-correct candidate to inspect as a potential integration base."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "No new environment-dependent choice is required to inspect this candidate's source."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [],
+            "status": "not_needed",
+            "summary": "This read checks ordinary kernel implementation and does not depend on an unresolved API or hardware detail."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "85c1ff0376cc4045"
+            ],
+            "status": "applied",
+            "summary": "The measured outcome justifies inspecting T1, but its interpretation will be checked against the source before selection."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "b9d98c20d0134e189939b5dba065e090",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "a1cfa53fec98bae61dfd180331686129625de24b60d53bb847a091a6817adfde",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "21c416d16d78440a83e722965be34e7c"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 213696,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "a1cfa53fec98bae61dfd180331686129625de24b60d53bb847a091a6817adfde",
+      "selection_id": "memory-select-e1-r1-t2",
+      "token_accounting": "exact",
+      "tokens": 213696,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792666084.3296502
+  },
+  {
+    "id": 27,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "read",
+        "base_id": "",
+        "idea_ids": [
+          "16bd9f82c0e34e9f"
+        ],
+        "rationale": "T2 is slower alone than T1, but its two-target-per-thread reuse could interact with T1's shared source tile. Inspect the exact implementation before deciding whether that experiment is compatible and worthwhile.",
+        "read": {
+          "ids": [
+            "16bd9f82c0e34e9f"
+          ],
+          "offset": 0,
+          "operation": "source",
+          "path": "src/nbody_kernel.cu",
+          "query": ""
+        },
+        "source_ids": []
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "bbd6fa55ecd5a67899f8e1f89082bcc4fb150bf0c825e756d255d5b087ba93ad",
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "assembly",
+        "request_sha256": "9288fc77e0fd3b3ff5e2718f1d6318392bdb93a5359be2faa494e1c63776c126",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 3
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 222080,
+          "input_tokens": 311209,
+          "output_tokens": 17380,
+          "reasoning_output_tokens": 14957
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "previous_request_sha256": "a1cfa53fec98bae61dfd180331686129625de24b60d53bb847a091a6817adfde",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 3
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r1-t3",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "85c1ff0376cc4045",
+              "16bd9f82c0e34e9f"
+            ],
+            "status": "applied",
+            "summary": "Inspect T2's actual code to assess whether its slower standalone target-pairing idea can complement measured-correct T1."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "The compatibility question concerns kernel mappings and does not depend on additional environment facts."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [],
+            "status": "not_needed",
+            "summary": "No uncertain hardware or API behavior needs documentation for this source comparison."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "85c1ff0376cc4045",
+              "16bd9f82c0e34e9f"
+            ],
+            "status": "applied",
+            "summary": "T1 is faster measured evidence; T2 is correct but slower standalone, so only consider it for a fresh combined test if the actual mapping is compatible."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "c362c6c8b4154949a658e36a0259f3bb",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "9288fc77e0fd3b3ff5e2718f1d6318392bdb93a5359be2faa494e1c63776c126",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "21c416d16d78440a83e722965be34e7c"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 328589,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "9288fc77e0fd3b3ff5e2718f1d6318392bdb93a5359be2faa494e1c63776c126",
+      "selection_id": "memory-select-e1-r1-t3",
+      "token_accounting": "exact",
+      "tokens": 328589,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792666116.9080021
+  },
+  {
+    "id": 28,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "integrate",
+        "base_id": "85c1ff0376cc4045",
+        "idea_ids": [
+          "16bd9f82c0e34e9f"
+        ],
+        "rationale": "Use measured-correct T1 as the source base and adapt only T2's two-target-per-thread idea: retain T1's shared source tiles, but let each thread maintain separate accumulators for two adjacent target rows. Use block=128, items_per_block=256, and shared_memory_bytes=2048 (four arrays of 128 floats); each staged source is then reused for both target interactions. Preserve ascending source order for each target, independent tail guards and self-exclusion, and ensure all threads reach both barriers. T2 alone was valid but slower (0.002605 s, score 0.416) than T1 (0.001008 s, score 0.648), so its idea is an unverified complement, not a measured gain. Compile, check, and measure this combined candidate afresh; do not infer additive performance.",
+        "read": {
+          "ids": [],
+          "offset": 0,
+          "operation": "none",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": [
+          "85c1ff0376cc4045"
+        ]
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "2fbe8802dd2c151685be50d9eecd6478d5a70db9d4ae1a875f1e6f16b4983c3d",
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "assembly",
+        "request_sha256": "ad56feb837c6e17d945a3e0a9b3c789970f0b6a12729e48086b9bddfebd85c2c",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 4
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 279552,
+          "input_tokens": 373899,
+          "output_tokens": 20087,
+          "reasoning_output_tokens": 17172
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "previous_request_sha256": "9288fc77e0fd3b3ff5e2718f1d6318392bdb93a5359be2faa494e1c63776c126",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 4
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r1-t4",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "85c1ff0376cc4045",
+              "16bd9f82c0e34e9f"
+            ],
+            "status": "applied",
+            "summary": "Selected T1 as the measured-correct base and T2's slower standalone target-pairing idea as a distinct combination experiment."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "The combination uses standard shared memory and launch parameters already within the supplied frozen interface; no new hardware-specific assumption is required."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [],
+            "status": "not_needed",
+            "summary": "No unresolved version-specific API or instruction question is introduced by this mapping combination."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "85c1ff0376cc4045",
+              "16bd9f82c0e34e9f",
+              "baseline-e1"
+            ],
+            "status": "applied",
+            "summary": "Compared only recorded valid outcomes; T1 is the fastest measured base, while T2 is included solely as an unverified compatibility hypothesis requiring a fresh controller measurement and correctness check."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "73dd6b9a4b4e47dfb2f573e4e3976cd0",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "ad56feb837c6e17d945a3e0a9b3c789970f0b6a12729e48086b9bddfebd85c2c",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "21c416d16d78440a83e722965be34e7c"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 393986,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "ad56feb837c6e17d945a3e0a9b3c789970f0b6a12729e48086b9bddfebd85c2c",
+      "selection_id": "memory-select-e1-r1-t4",
+      "token_accounting": "exact",
+      "tokens": 393986,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792666152.624259
+  },
+  {
+    "id": 29,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "G locality SIMD OpenMP"
+    },
+    "created": 1792666152.660684
+  },
+  {
+    "id": 30,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "2c6eda883102042fa57d0e3c49ed6a7198de99cc7c5aea8dce2a35076bc8d523",
+          "conversation": {
+            "id": "6468f6b813734167a76a3a0ea25476c6",
+            "phase": "assembly",
+            "request_sha256": "4d0b080930d7a3184d605257e310d521329b701826a0b46efc6cb5f996de1bbc",
+            "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+            "turn": 5
+          },
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 279552,
+              "input_tokens": 448826,
+              "output_tokens": 26460,
+              "reasoning_output_tokens": 21591
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [
+            {
+              "applicability": "The current candidate retains T1's one-source-tile-per-block staging while changing target mapping; measure this combination afresh rather than extrapolating T1's timing.",
+              "claim": "The measured T1 shared-tile candidate was valid and correct at 0.001007745896 seconds, versus the valid baseline at 0.001856629033 seconds; this does not establish that a changed block size or output mapping will be faster.",
+              "evidence_ids": [
+                "85c1ff0376cc4045",
+                "baseline-e1"
+              ],
+              "next_experiment": "Measure the combined candidate with the prescribed correctness checks and repeated timings."
+            },
+            {
+              "applicability": "Treat two-target-per-thread reuse as an unverified integration hypothesis; its standalone result does not predict its interaction with T1's shared-memory tile.",
+              "claim": "The measured T2 two-target-per-thread candidate was valid and correct but slower than T1 at 0.002604581723 seconds; do not retain it without a fresh combined measurement.",
+              "evidence_ids": [
+                "16bd9f82c0e34e9f",
+                "85c1ff0376cc4045"
+              ],
+              "next_experiment": "Compare this combined implementation against T1 under the official timing and correctness protocol."
+            }
+          ],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": {
+              "id": "6468f6b813734167a76a3a0ea25476c6",
+              "phase": "assembly",
+              "previous_request_sha256": "ad56feb837c6e17d945a3e0a9b3c789970f0b6a12729e48086b9bddfebd85c2c",
+              "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+              "turn": 5
+            },
+            "effective_instructions_sha256": "2817158b0d8034b727087613562881c5ec5fc7cf7d1ff46e376c403fceeb967d",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "integrer-optimisations",
+                  "path": "assets/skills/integrer-optimisations/SKILL.md",
+                  "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "assembly",
+              "role": "Mother",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "79c03ae33d024935-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "integrer-optimisations",
+                "references": [
+                  "85c1ff0376cc4045",
+                  "16bd9f82c0e34e9f"
+                ],
+                "status": "applied",
+                "summary": "Combined T1's measured-correct shared-memory source tile with T2's adapted two-target register-reuse idea; only T1 is retained as a source program."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [
+                  "target_as_data"
+                ],
+                "status": "not_needed",
+                "summary": "This candidate uses the supplied fixed launch interface and ordinary CUDA shared memory, without a new hardware-specific assumption."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No unresolved version-specific API or instruction behavior is introduced by this experiment."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "85c1ff0376cc4045",
+                  "16bd9f82c0e34e9f",
+                  "baseline-e1"
+                ],
+                "status": "applied",
+                "summary": "T1 is the fastest measured correct base; T2 is slower standalone, so the combined outcome must be freshly checked and measured without assuming additive gains."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "1b7781d5388b41548d08dfd5decab6b2",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "4d0b080930d7a3184d605257e310d521329b701826a0b46efc6cb5f996de1bbc",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "mother_assembly": true,
+          "observed_tokens": 475286,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "4d0b080930d7a3184d605257e310d521329b701826a0b46efc6cb5f996de1bbc",
+          "token_accounting": "exact",
+          "tokens": 475286,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "postprocess",
+      "contract_rejected": false,
+      "development_evaluations": 1,
+      "experiment_id": "79c03ae33d024935",
+      "harness_attempts": 1,
+      "journal": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/79c03ae33d024935/node-harness.json",
+      "llm_calls": 1,
+      "memory_reads": 0,
+      "observed_tokens": 475286,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 1,
+      "token_accounting": "exact"
+    },
+    "created": 1792666221.3967588
+  },
+  {
+    "id": 31,
+    "kind": "mother_memory_integration",
+    "payload": {
+      "base_id": "85c1ff0376cc4045",
+      "final": false,
+      "idea_ids": [
+        "16bd9f82c0e34e9f"
+      ],
+      "input_commits": [
+        "f72219ea2565b835d8194d5b5375ba54d7027201"
+      ],
+      "input_ids": [
+        "85c1ff0376cc4045"
+      ],
+      "mission_id": "79c03ae33d024935",
+      "mother": {
+        "budget_phase": "postprocess",
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "request_sha256": "4d0b080930d7a3184d605257e310d521329b701826a0b46efc6cb5f996de1bbc",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 5
+        },
+        "final_synthesis": true,
+        "model_calls": 1,
+        "phase": "assembly",
+        "request_sha256": "4d0b080930d7a3184d605257e310d521329b701826a0b46efc6cb5f996de1bbc",
+        "status": "complete",
+        "usage_charged_to_g_mission": "79c03ae33d024935-h01"
+      },
+      "outcome": {
+        "binary_sha256": "eb756ca904aa1f18e3db3029ea81ede2e6eb3b816c1f9a4df7698bc1dd595085",
+        "cache_key": "6c8c97ed99e6b0cc8bf986fe80ff51221e32f81482735514057031ea7ad4ec03",
+        "commit": "561cf3ca4d53c427ce539c1abbe513c2812e5565",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.0016469496543974765,
+        "reason": "",
+        "score": 0.5299236005606913,
+        "status": "valid",
+        "times": [
+          0.001646921072835517,
+          0.0016469323237320727,
+          0.0016469955666248396
+        ],
+        "tree_hash": "b9651071f39f4141a9ad9255bc4d590abb77527c"
+      },
+      "pair": 1,
+      "retained_ids": [
+        "85c1ff0376cc4045"
+      ],
+      "round": 1,
+      "selection": {
+        "action": "integrate",
+        "base_id": "85c1ff0376cc4045",
+        "idea_ids": [
+          "16bd9f82c0e34e9f"
+        ],
+        "rationale": "Use measured-correct T1 as the source base and adapt only T2's two-target-per-thread idea: retain T1's shared source tiles, but let each thread maintain separate accumulators for two adjacent target rows. Use block=128, items_per_block=256, and shared_memory_bytes=2048 (four arrays of 128 floats); each staged source is then reused for both target interactions. Preserve ascending source order for each target, independent tail guards and self-exclusion, and ensure all threads reach both barriers. T2 alone was valid but slower (0.002605 s, score 0.416) than T1 (0.001008 s, score 0.648), so its idea is an unverified complement, not a measured gain. Compile, check, and measure this combined candidate afresh; do not infer additive performance.",
+        "read": {
+          "ids": [],
+          "offset": 0,
+          "operation": "none",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": [
+          "85c1ff0376cc4045"
+        ]
+      },
+      "status": "complete",
+      "step": 1
+    },
+    "created": 1792666233.755835
+  },
+  {
+    "id": 32,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "read",
+        "base_id": "",
+        "idea_ids": [],
+        "rationale": "The first integration is correct but slower than T1 (0.001646950 s versus 0.001007746 s), so the two-target idea did not improve the measured base. Inspect the next diverse archive page for a distinct compatible transformation before selecting another experiment; research remains closed.",
+        "read": {
+          "ids": [],
+          "offset": 6,
+          "operation": "search",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": []
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "bd73418d16bcdcb6cab39a0c509ecfe5b5adda0ded395aa6171a53acfd609eba",
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "assembly",
+        "request_sha256": "c7f29ea6d643f79fb988897ca6da792a416799003a91a949e46348877f4a6000",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 6
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 342016,
+          "input_tokens": 533409,
+          "output_tokens": 27570,
+          "reasoning_output_tokens": 22371
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "previous_request_sha256": "4d0b080930d7a3184d605257e310d521329b701826a0b46efc6cb5f996de1bbc",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 6
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r2-t1",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "79c03ae33d024935",
+              "85c1ff0376cc4045"
+            ],
+            "status": "applied",
+            "summary": "The first combination regressed versus T1, so search archived evidence for a different complementary idea rather than retaining its unverified mapping."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "No new hardware-dependent choice is needed to inspect archived results."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [],
+            "status": "not_needed",
+            "summary": "This selection read introduces no uncertain API or instruction claim."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "79c03ae33d024935",
+              "85c1ff0376cc4045",
+              "baseline-e1"
+            ],
+            "status": "applied",
+            "summary": "The valid first integration (0.001646950 s) is slower than valid T1 (0.001007746 s), although faster than baseline (0.001856629 s); further candidates require fresh validation and measurement."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "819b33d9363c40ce8f03cc3dfa9359c7",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "c7f29ea6d643f79fb988897ca6da792a416799003a91a949e46348877f4a6000",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "21c416d16d78440a83e722965be34e7c"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 560979,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "c7f29ea6d643f79fb988897ca6da792a416799003a91a949e46348877f4a6000",
+      "selection_id": "memory-select-e1-r2-t1",
+      "token_accounting": "exact",
+      "tokens": 560979,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792666255.4783423
+  },
+  {
+    "id": 33,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "read",
+        "base_id": "",
+        "idea_ids": [],
+        "rationale": "The first combination did not beat T1, but the archive page revealed a distinct arithmetic transformation and a separate incorrect target-hoisting attempt. Read the remaining archive page before selecting whether a safe, freshly tested adaptation is worthwhile; do not treat either failed development result as verified code.",
+        "read": {
+          "ids": [],
+          "offset": 12,
+          "operation": "search",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": []
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "5aba79c0dc34eb6d7f9140a8aedb9178fc0b3c0fea9c693e2df2471c64dbb0a4",
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "assembly",
+        "request_sha256": "5562a0ce26f8490f97ce84300036ea0bb71f05c764f6192d574a4466cedeafcd",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 7
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 517760,
+          "input_tokens": 717143,
+          "output_tokens": 28401,
+          "reasoning_output_tokens": 22852
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "previous_request_sha256": "c7f29ea6d643f79fb988897ca6da792a416799003a91a949e46348877f4a6000",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 7
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r2-t2",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "2a7cd6b7c3af45e9",
+              "79c03ae33d024935",
+              "85c1ff0376cc4045"
+            ],
+            "status": "applied",
+            "summary": "The first combination regressed versus T1; inspect remaining archived evidence for alternative ideas before committing another experiment."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "No additional hardware details are needed for this archive lookup."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [],
+            "status": "not_needed",
+            "summary": "No API or architecture-specific choice is being made during this read."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "79c03ae33d024935",
+              "85c1ff0376cc4045"
+            ],
+            "status": "applied",
+            "summary": "The first integration is valid but slower than T1; any alternative must be freshly checked and measured rather than inferred from failed development records."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "7e4c576f27d44c8cbc043f35ddc973b3",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "5562a0ce26f8490f97ce84300036ea0bb71f05c764f6192d574a4466cedeafcd",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "21c416d16d78440a83e722965be34e7c"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 745544,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "5562a0ce26f8490f97ce84300036ea0bb71f05c764f6192d574a4466cedeafcd",
+      "selection_id": "memory-select-e1-r2-t2",
+      "token_accounting": "exact",
+      "tokens": 745544,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792666278.034224
+  },
+  {
+    "id": 34,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "read",
+        "base_id": "",
+        "idea_ids": [
+          "2a7cd6b7c3af45e9-h01"
+        ],
+        "rationale": "The remaining archive contains a potentially valuable rsqrtf/direct-acceleration transformation, but its development candidate failed correctness. Inspect that exact source to identify whether there is a safely isolatable idea for a fresh T1-based test; do not treat the failed code as verified.",
+        "read": {
+          "ids": [
+            "2a7cd6b7c3af45e9-h01"
+          ],
+          "offset": 0,
+          "operation": "source",
+          "path": "src/nbody_kernel.cu",
+          "query": ""
+        },
+        "source_ids": []
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "95f4b1228f55db7d3876b48025b5140143b5c1a92df6bedc1bc87676b95cadc8",
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "assembly",
+        "request_sha256": "3b758cd7c98041c160bc635626b4c223509eef5cdadb5c516957ef692fe9f545",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 8
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 609664,
+          "input_tokens": 813786,
+          "output_tokens": 29642,
+          "reasoning_output_tokens": 23727
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "previous_request_sha256": "5562a0ce26f8490f97ce84300036ea0bb71f05c764f6192d574a4466cedeafcd",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 8
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r2-t3",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "85c1ff0376cc4045",
+              "2a7cd6b7c3af45e9-h01"
+            ],
+            "status": "applied",
+            "summary": "T1 remains the best measured base; inspect the failed arithmetic variant before deciding whether any part is worth adapting."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "No additional hardware inspection is relevant to this source review."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [],
+            "status": "not_needed",
+            "summary": "This read concerns candidate arithmetic and failure diagnosis, not an unresolved API or hardware capability."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "85c1ff0376cc4045",
+              "79c03ae33d024935",
+              "2a7cd6b7c3af45e9-h01"
+            ],
+            "status": "applied",
+            "summary": "The first integration regressed against T1; the arithmetic idea is explicitly incorrect in development and requires careful source review before any fresh test."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "09caccecd8854837be4caecd5d57de80",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "3b758cd7c98041c160bc635626b4c223509eef5cdadb5c516957ef692fe9f545",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "21c416d16d78440a83e722965be34e7c"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 843428,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "3b758cd7c98041c160bc635626b4c223509eef5cdadb5c516957ef692fe9f545",
+      "selection_id": "memory-select-e1-r2-t3",
+      "token_accounting": "exact",
+      "tokens": 843428,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792666301.3476162
+  },
+  {
+    "id": 35,
+    "kind": "memory_selection_usage",
+    "payload": {
+      "assembly_decision": {
+        "action": "integrate",
+        "base_id": "85c1ff0376cc4045",
+        "idea_ids": [
+          "2a7cd6b7c3af45e9-h01"
+        ],
+        "rationale": "Return to measured-correct T1: the first integration was correct but slower (0.001646950 s versus T1's 0.001007746 s), so discard its two-target mapping. Test only the archived arithmetic idea on T1's one-target/shared-tile kernel: form the softened inverse-distance cube with rsqrtf, accumulate acceleration using source mass directly (G=1 and target mass cancels), then update velocity with acceleration*dt. Preserve the source order, self exclusion, softening, update order, and mass bits. The T3 development version of this idea failed protected checks; it is not verified source. Implement the algebra carefully, then require a fresh compile, full correctness/oracle checks, and official timing before accepting any gain.",
+        "read": {
+          "ids": [],
+          "offset": 0,
+          "operation": "none",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": [
+          "85c1ff0376cc4045"
+        ]
+      },
+      "backend": "codex-mailbox",
+      "cached_tokens_included_in_input": true,
+      "codex_jsonl_sha256": "abeb949c0abb036ace4de36751fd26716f57f21ae4b22e50b592d3fd8bc505b3",
+      "conversation": {
+        "id": "6468f6b813734167a76a3a0ea25476c6",
+        "phase": "assembly",
+        "request_sha256": "28265146a9f07375d7f822f45a09746faa49b7574bfa0ddcac28d5019dcd4084",
+        "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+        "turn": 9
+      },
+      "events": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 706176,
+          "input_tokens": 915871,
+          "output_tokens": 32497,
+          "reasoning_output_tokens": 26091
+        }
+      ],
+      "forbidden_tool_events": [],
+      "llm_calls": 1,
+      "mcp_tool_calls": [],
+      "model": "gpt-6-luna",
+      "model_requested": "gpt-6-luna",
+      "model_skills": {
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "previous_request_sha256": "3b758cd7c98041c160bc635626b4c223509eef5cdadb5c516957ef692fe9f545",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 9
+        },
+        "effective_instructions_sha256": "a0cb198432c9fc03cddc1db00e3179f9693e3a1f4c2267452a50b6b71a57e728",
+        "loading": "explicit_system_instructions",
+        "manifest": {
+          "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+          "loaded": [
+            {
+              "name": "integrer-optimisations",
+              "path": "assets/skills/integrer-optimisations/SKILL.md",
+              "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+            },
+            {
+              "name": "inspecter-environnement",
+              "path": "assets/skills/inspecter-environnement/SKILL.md",
+              "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+              "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+            },
+            {
+              "name": "evaluer-performances",
+              "path": "assets/skills/evaluer-performances/SKILL.md",
+              "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+            }
+          ],
+          "phase": "assembly",
+          "role": "Mother",
+          "version": "hpc-forest-project-skills-v1"
+        },
+        "mission_id": "memory-select-e1-r2-t4",
+        "model_declarations_are_execution_proof": false,
+        "model_reported": [
+          {
+            "name": "integrer-optimisations",
+            "references": [
+              "85c1ff0376cc4045",
+              "2a7cd6b7c3af45e9-h01",
+              "79c03ae33d024935"
+            ],
+            "status": "applied",
+            "summary": "Selected the best measured valid base T1 and adapted only the failed T3 arithmetic idea, excluding the slower two-target mapping."
+          },
+          {
+            "name": "inspecter-environnement",
+            "references": [
+              "target_as_data"
+            ],
+            "status": "not_needed",
+            "summary": "The candidate uses the frozen target and ordinary CUDA math, with no new architecture-specific assumption."
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "references": [],
+            "status": "not_needed",
+            "summary": "No version-sensitive API or instruction behavior is needed for this standard CUDA math transformation."
+          },
+          {
+            "name": "evaluer-performances",
+            "references": [
+              "85c1ff0376cc4045",
+              "79c03ae33d024935",
+              "2a7cd6b7c3af45e9-h01"
+            ],
+            "status": "applied",
+            "summary": "T1 remains the fastest measured valid candidate; the combination regressed, and the arithmetic idea has an incorrect development result, so the adapted candidate must pass fresh correctness and timing checks."
+          }
+        ],
+        "native_turn_completed": true,
+        "nonce": "5a8ba9fecc0e4ec2a6aae5cf3936a80c",
+        "observed_mcp_calls": [],
+        "report_error": null,
+        "report_status": "reported",
+        "request_sha256": "28265146a9f07375d7f822f45a09746faa49b7574bfa0ddcac28d5019dcd4084",
+        "schema": "hpc-forest-project-skills-v1",
+        "session_id": "21c416d16d78440a83e722965be34e7c"
+      },
+      "mother_assembly": true,
+      "observed_tokens": 948368,
+      "reasoning_effort": "max",
+      "reasoning_effort_requested": "max",
+      "request_sha256": "28265146a9f07375d7f822f45a09746faa49b7574bfa0ddcac28d5019dcd4084",
+      "selection_id": "memory-select-e1-r2-t4",
+      "token_accounting": "exact",
+      "tokens": 948368,
+      "tool_events": [],
+      "tool_runtime_errors": []
+    },
+    "created": 1792666336.4177136
+  },
+  {
+    "id": 36,
+    "kind": "F_retrieval",
+    "payload": {
+      "characters": 0,
+      "documents": [],
+      "llm_tokens": 0,
+      "query": "G locality SIMD OpenMP"
+    },
+    "created": 1792666336.4541779
+  },
+  {
+    "id": 37,
+    "kind": "generation_usage",
+    "payload": {
+      "attempt_usage": [
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "55d675ca3c31ca371e84e49c270b6c3615e3670530079668858c69e6daa84c27",
+          "conversation": {
+            "id": "6468f6b813734167a76a3a0ea25476c6",
+            "phase": "assembly",
+            "request_sha256": "5b79ebb4ac4510ef5fb9dc658d0085f1bf688cc366e7f6afd3e577b40309e1e0",
+            "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+            "turn": 10
+          },
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 706176,
+              "input_tokens": 1033536,
+              "output_tokens": 35332,
+              "reasoning_output_tokens": 27335
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [
+            {
+              "applicability": "Use T1 as the comparison base; this candidate changes only the pairwise arithmetic and acceleration accumulation.",
+              "claim": "T1's shared-memory tiled candidate was valid and correct at 0.001007745896 seconds, faster than the valid baseline at 0.001856629033 seconds.",
+              "evidence_ids": [
+                "85c1ff0376cc4045",
+                "baseline-e1"
+              ],
+              "next_experiment": "Measure the arithmetic adaptation against T1 and keep it only if correctness and official timing support it."
+            },
+            {
+              "applicability": "Do not infer that the two-target mapping or another combination will improve T1; measure each integration independently.",
+              "claim": "The T1 plus two-target integration was valid but slower at 0.001646949654 seconds than T1 at 0.001007745896 seconds.",
+              "evidence_ids": [
+                "79c03ae33d024935",
+                "85c1ff0376cc4045"
+              ],
+              "next_experiment": "Compare the current arithmetic-only adaptation with the retained T1 candidate."
+            },
+            {
+              "applicability": "This formulation adapts the idea but does not reuse the failed candidate source; full independent checks remain necessary.",
+              "claim": "The archived rsqrtf/direct-acceleration development candidate failed protected correctness checks, so its performance and correctness cannot be assumed for an adapted implementation.",
+              "evidence_ids": [
+                "2a7cd6b7c3af45e9-h01"
+              ],
+              "next_experiment": "Run the full correctness suite and CPU-oracle checks before considering its timing."
+            }
+          ],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": {
+              "id": "6468f6b813734167a76a3a0ea25476c6",
+              "phase": "assembly",
+              "previous_request_sha256": "28265146a9f07375d7f822f45a09746faa49b7574bfa0ddcac28d5019dcd4084",
+              "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+              "turn": 10
+            },
+            "effective_instructions_sha256": "2817158b0d8034b727087613562881c5ec5fc7cf7d1ff46e376c403fceeb967d",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "integrer-optimisations",
+                  "path": "assets/skills/integrer-optimisations/SKILL.md",
+                  "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "assembly",
+              "role": "Mother",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "fe8207f9ecac4c0b-h01",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "integrer-optimisations",
+                "references": [
+                  "85c1ff0376cc4045",
+                  "2a7cd6b7c3af45e9-h01"
+                ],
+                "status": "applied",
+                "summary": "Returned to the best measured base T1 and adapted only the archived arithmetic idea; the failed T3 implementation itself is not reused."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [
+                  "target_as_data"
+                ],
+                "status": "not_needed",
+                "summary": "The candidate uses the frozen GH200/NVRTC target and no new architecture-specific capability assumption."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No uncertain API behavior is introduced; the arithmetic candidate will be compiled and checked by the controller."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "85c1ff0376cc4045",
+                  "79c03ae33d024935",
+                  "2a7cd6b7c3af45e9-h01"
+                ],
+                "status": "applied",
+                "summary": "T1 remains the fastest measured valid candidate; the prior integration regressed and the arithmetic idea failed in development, so this adapted version requires fresh validation and timing."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "2c5172ac0e244604b923a28b6c7fb1af",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "5b79ebb4ac4510ef5fb9dc658d0085f1bf688cc366e7f6afd3e577b40309e1e0",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "mother_assembly": true,
+          "observed_tokens": 1068868,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "5b79ebb4ac4510ef5fb9dc658d0085f1bf688cc366e7f6afd3e577b40309e1e0",
+          "token_accounting": "exact",
+          "tokens": 1068868,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        },
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "97e7746e2c45f50aac69988c51edc3926b32d9f011534552ab11be7595acadf4",
+          "conversation": {
+            "id": "6468f6b813734167a76a3a0ea25476c6",
+            "phase": "assembly",
+            "request_sha256": "d7f25f512af31e204c883079a60358c24998465023e5e5402397524e0f9a692e",
+            "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+            "turn": 11
+          },
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 823680,
+              "input_tokens": 1168374,
+              "output_tokens": 41505,
+              "reasoning_output_tokens": 31931
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": {
+              "id": "6468f6b813734167a76a3a0ea25476c6",
+              "phase": "assembly",
+              "previous_request_sha256": "5b79ebb4ac4510ef5fb9dc658d0085f1bf688cc366e7f6afd3e577b40309e1e0",
+              "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+              "turn": 11
+            },
+            "effective_instructions_sha256": "2817158b0d8034b727087613562881c5ec5fc7cf7d1ff46e376c403fceeb967d",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "integrer-optimisations",
+                  "path": "assets/skills/integrer-optimisations/SKILL.md",
+                  "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "assembly",
+              "role": "Mother",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "fe8207f9ecac4c0b-h02",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "integrer-optimisations",
+                "references": [
+                  "85c1ff0376cc4045",
+                  "2a7cd6b7c3af45e9-h01",
+                  "fe8207f9ecac4c0b-h01"
+                ],
+                "status": "applied",
+                "summary": "Retained T1's measured-correct base and adapted the rsqrt idea after the prior direct-acceleration candidate's large-N error; the failed source itself is not reused."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [
+                  "target_as_data"
+                ],
+                "status": "not_needed",
+                "summary": "The source uses the existing frozen target and adds no new hardware-specific assumption."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No uncertain API or architecture feature is introduced by this arithmetic experiment."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "85c1ff0376cc4045",
+                  "79c03ae33d024935",
+                  "fe8207f9ecac4c0b-h01"
+                ],
+                "status": "applied",
+                "summary": "T1 remains the fastest measured valid candidate; the earlier integration regressed, and the previous rsqrt adaptation failed one large case, so this refinement requires complete fresh validation and measurement."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "f584ab0785014dcebc40c69277aa2c94",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "d7f25f512af31e204c883079a60358c24998465023e5e5402397524e0f9a692e",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "mother_assembly": true,
+          "observed_tokens": 1209879,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "d7f25f512af31e204c883079a60358c24998465023e5e5402397524e0f9a692e",
+          "token_accounting": "exact",
+          "tokens": 1209879,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        },
+        {
+          "backend": "codex-mailbox",
+          "cached_tokens_included_in_input": true,
+          "codex_jsonl_sha256": "4d574c84b9d0b4d414586087f9506fd894b436012c165d4ef5b26122e9b683d3",
+          "conversation": {
+            "id": "6468f6b813734167a76a3a0ea25476c6",
+            "phase": "assembly",
+            "request_sha256": "47e1dd6a29f7f09a06bbd59e42c0fcddf9814860cfa141a4aad5f47ec12fb1ad",
+            "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+            "turn": 12
+          },
+          "events": [
+            {
+              "cache_write_input_tokens": 0,
+              "cached_input_tokens": 958336,
+              "input_tokens": 1323770,
+              "output_tokens": 43917,
+              "reasoning_output_tokens": 33029
+            }
+          ],
+          "forbidden_tool_events": [],
+          "llm_calls": 1,
+          "mcp_tool_calls": [],
+          "memory_lessons": [],
+          "model": "gpt-6-luna",
+          "model_requested": "gpt-6-luna",
+          "model_skills": {
+            "conversation": {
+              "id": "6468f6b813734167a76a3a0ea25476c6",
+              "phase": "assembly",
+              "previous_request_sha256": "d7f25f512af31e204c883079a60358c24998465023e5e5402397524e0f9a692e",
+              "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+              "turn": 12
+            },
+            "effective_instructions_sha256": "2817158b0d8034b727087613562881c5ec5fc7cf7d1ff46e376c403fceeb967d",
+            "loading": "explicit_system_instructions",
+            "manifest": {
+              "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+              "loaded": [
+                {
+                  "name": "integrer-optimisations",
+                  "path": "assets/skills/integrer-optimisations/SKILL.md",
+                  "sha256": "058668ed35a94248af7364a346e10a6e6f61218079fd2340750a9c1fbb7fc4b3"
+                },
+                {
+                  "name": "inspecter-environnement",
+                  "path": "assets/skills/inspecter-environnement/SKILL.md",
+                  "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+                },
+                {
+                  "name": "consulter-documentation-technique",
+                  "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                  "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+                },
+                {
+                  "name": "evaluer-performances",
+                  "path": "assets/skills/evaluer-performances/SKILL.md",
+                  "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+                }
+              ],
+              "phase": "assembly",
+              "role": "Mother",
+              "version": "hpc-forest-project-skills-v1"
+            },
+            "mission_id": "fe8207f9ecac4c0b-h03",
+            "model_declarations_are_execution_proof": false,
+            "model_reported": [
+              {
+                "name": "integrer-optimisations",
+                "references": [
+                  "85c1ff0376cc4045",
+                  "2a7cd6b7c3af45e9-h01"
+                ],
+                "status": "applied",
+                "summary": "Retained T1's shared-memory base and adapted the arithmetic idea with a reciprocal-square-root refinement; the failed direct-acceleration code is not reused."
+              },
+              {
+                "name": "inspecter-environnement",
+                "references": [
+                  "target_as_data"
+                ],
+                "status": "not_needed",
+                "summary": "No new target-specific assumption is introduced beyond the supplied GH200 and NVRTC configuration."
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "references": [],
+                "status": "not_needed",
+                "summary": "No unresolved API or hardware capability is required for this standard CUDA math candidate."
+              },
+              {
+                "name": "evaluer-performances",
+                "references": [
+                  "85c1ff0376cc4045",
+                  "79c03ae33d024935"
+                ],
+                "status": "applied",
+                "summary": "T1 remains the best measured valid candidate; the prior combined mapping regressed, and the prior arithmetic attempt failed correctness, so this proposal must be freshly checked and timed."
+              }
+            ],
+            "native_turn_completed": true,
+            "nonce": "fa59185cc70e4b90bc4ff3c768fdea11",
+            "observed_mcp_calls": [],
+            "report_error": null,
+            "report_status": "reported",
+            "request_sha256": "47e1dd6a29f7f09a06bbd59e42c0fcddf9814860cfa141a4aad5f47ec12fb1ad",
+            "schema": "hpc-forest-project-skills-v1",
+            "session_id": "21c416d16d78440a83e722965be34e7c"
+          },
+          "mother_assembly": true,
+          "observed_tokens": 1367687,
+          "reasoning_effort": "max",
+          "reasoning_effort_requested": "max",
+          "request_sha256": "47e1dd6a29f7f09a06bbd59e42c0fcddf9814860cfa141a4aad5f47ec12fb1ad",
+          "token_accounting": "exact",
+          "tokens": 1367687,
+          "tool_events": [],
+          "tool_runtime_errors": []
+        }
+      ],
+      "automatic_measured_feedback_only": false,
+      "backend": "node-harness",
+      "budget_phase": "postprocess",
+      "contract_rejected": false,
+      "development_evaluations": 2,
+      "experiment_id": "fe8207f9ecac4c0b",
+      "harness_attempts": 3,
+      "journal": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/fe8207f9ecac4c0b/node-harness.json",
+      "llm_calls": 3,
+      "memory_reads": 0,
+      "observed_tokens": 3646434,
+      "research_actions": 0,
+      "research_enabled": true,
+      "source_attempts": 3,
+      "token_accounting": "exact"
+    },
+    "created": 1792666473.4188075
+  },
+  {
+    "id": 38,
+    "kind": "mother_memory_integration",
+    "payload": {
+      "base_id": "85c1ff0376cc4045",
+      "final": true,
+      "idea_ids": [
+        "2a7cd6b7c3af45e9-h01"
+      ],
+      "input_commits": [
+        "f72219ea2565b835d8194d5b5375ba54d7027201"
+      ],
+      "input_ids": [
+        "85c1ff0376cc4045"
+      ],
+      "mission_id": "fe8207f9ecac4c0b",
+      "mother": {
+        "budget_phase": "postprocess",
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "request_sha256": "47e1dd6a29f7f09a06bbd59e42c0fcddf9814860cfa141a4aad5f47ec12fb1ad",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 12
+        },
+        "final_synthesis": true,
+        "model_calls": 1,
+        "phase": "assembly",
+        "request_sha256": "47e1dd6a29f7f09a06bbd59e42c0fcddf9814860cfa141a4aad5f47ec12fb1ad",
+        "status": "complete",
+        "usage_charged_to_g_mission": "fe8207f9ecac4c0b-h03"
+      },
+      "outcome": {
+        "binary_sha256": "6d56e1ccb60f58430d0a801aafab3328f81fc01fe86ec931e2a6d29454206b53",
+        "cache_key": "2ea5b80447b4b4439f8b60dddc8596936da04a8c2db8e5236f3c9c9512855cb9",
+        "commit": "d8052b227330b6fce97abdfad06e9a90a21d6be5",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.0006987284184133177,
+        "reason": "",
+        "score": 0.7265633353562638,
+        "status": "valid",
+        "times": [
+          0.000698557419019453,
+          0.0006990167282356141,
+          0.000698611107984886
+        ],
+        "tree_hash": "26ee1583ce33bf9e58227d4c1dd1657a68c49de4"
+      },
+      "pair": 1,
+      "retained_ids": [
+        "85c1ff0376cc4045"
+      ],
+      "round": 2,
+      "selection": {
+        "action": "integrate",
+        "base_id": "85c1ff0376cc4045",
+        "idea_ids": [
+          "2a7cd6b7c3af45e9-h01"
+        ],
+        "rationale": "Return to measured-correct T1: the first integration was correct but slower (0.001646950 s versus T1's 0.001007746 s), so discard its two-target mapping. Test only the archived arithmetic idea on T1's one-target/shared-tile kernel: form the softened inverse-distance cube with rsqrtf, accumulate acceleration using source mass directly (G=1 and target mass cancels), then update velocity with acceleration*dt. Preserve the source order, self exclusion, softening, update order, and mass bits. The T3 development version of this idea failed protected checks; it is not verified source. Implement the algebra carefully, then require a fresh compile, full correctness/oracle checks, and official timing before accepting any gain.",
+        "read": {
+          "ids": [],
+          "offset": 0,
+          "operation": "none",
+          "path": "",
+          "query": ""
+        },
+        "source_ids": [
+          "85c1ff0376cc4045"
+        ]
+      },
+      "status": "complete",
+      "step": 2
+    },
+    "created": 1792666484.4571705
+  },
+  {
+    "id": 39,
+    "kind": "postprocess_finished",
+    "payload": {
+      "active_mission_id": "fe8207f9ecac4c0b",
+      "best_reference_id": "fe8207f9ecac4c0b",
+      "budget_phase": "postprocess",
+      "completed_at": 1792666484.4577546,
+      "context_compaction": "bounded-retrieval-and-codex-cli-automatic",
+      "elapsed_seconds": 441.7579896450043,
+      "integration_policy": "memory-guided-v1",
+      "limits": {
+        "code_calls_per_round": 6,
+        "code_slots": 2,
+        "postprocess_slots": 10,
+        "rounds": 2,
+        "selection_calls_per_round": 4,
+        "selection_slots": 8
+      },
+      "mission_id": "fe8207f9ecac4c0b",
+      "mother": {
+        "budget_phase": "postprocess",
+        "conversation": {
+          "id": "6468f6b813734167a76a3a0ea25476c6",
+          "phase": "assembly",
+          "request_sha256": "47e1dd6a29f7f09a06bbd59e42c0fcddf9814860cfa141a4aad5f47ec12fb1ad",
+          "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+          "turn": 12
+        },
+        "final_synthesis": true,
+        "model_calls": 1,
+        "phase": "assembly",
+        "request_sha256": "47e1dd6a29f7f09a06bbd59e42c0fcddf9814860cfa141a4aad5f47ec12fb1ad",
+        "status": "complete",
+        "usage_charged_to_g_mission": "fe8207f9ecac4c0b-h03"
+      },
+      "mother_required": true,
+      "outcome": {
+        "binary_sha256": "6d56e1ccb60f58430d0a801aafab3328f81fc01fe86ec931e2a6d29454206b53",
+        "cache_key": "2ea5b80447b4b4439f8b60dddc8596936da04a8c2db8e5236f3c9c9512855cb9",
+        "commit": "d8052b227330b6fce97abdfad06e9a90a21d6be5",
+        "correct": true,
+        "logs": [
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/build.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/correctness.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/sample-0.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/sample-1.log",
+          "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/sample-2.log"
+        ],
+        "mean_seconds": 0.0006987284184133177,
+        "reason": "",
+        "score": 0.7265633353562638,
+        "status": "valid",
+        "times": [
+          0.000698557419019453,
+          0.0006990167282356141,
+          0.000698611107984886
+        ],
+        "tree_hash": "26ee1583ce33bf9e58227d4c1dd1657a68c49de4"
+      },
+      "search_stop_reason": "budget_exhausted",
+      "selections": [
+        {
+          "decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "T1 is the fastest measured correct candidate so far (0.001007746 s, score 0.64818), versus the valid baseline at 0.001856629 s. Inspect its source-file list before deciding whether another measured or developmental idea can complement it; T2 is valid but slower, and T3 is incorrect.",
+            "read": {
+              "ids": [
+                "85c1ff0376cc4045"
+              ],
+              "offset": 0,
+              "operation": "source",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "id": "memory-select-e1-r1-t1",
+          "read_result": {
+            "commit": "f72219ea2565b835d8194d5b5375ba54d7027201",
+            "id": "85c1ff0376cc4045",
+            "items": [
+              {
+                "characters": 76,
+                "path": "src/launch.json",
+                "sha256": "116d7cbe9ce78844de9a977fe72bddb57cea5446224768c15497ebbd6c2de3a8"
+              },
+              {
+                "characters": 2352,
+                "path": "src/nbody_kernel.cu",
+                "sha256": "e7e0d535be54d67776e117e5f9178b9628c73ffae7a4217900414d6b8716fd86"
+              }
+            ],
+            "next_offset": null,
+            "offset": 0,
+            "offset_unit": "characters",
+            "schema": "hpc-forest-memory-v1",
+            "snapshot_digest": "ddde47213bb097ab5aee8038fe8b121d1524378ebdc3e7ba971fcf764ddfc847",
+            "total": 2
+          },
+          "round": 1,
+          "slot_id": "8611519a7bad4d838c7f1f7efb4cd087",
+          "status": "complete",
+          "turn": 1
+        },
+        {
+          "decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "Inspect T1's measured-correct kernel before integration. Its source-load reuse and barrier behavior must be verified in the actual file, not inferred only from the model's summary.",
+            "read": {
+              "ids": [
+                "85c1ff0376cc4045"
+              ],
+              "offset": 0,
+              "operation": "source",
+              "path": "src/nbody_kernel.cu",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "id": "memory-select-e1-r1-t2",
+          "read_result": {
+            "commit": "f72219ea2565b835d8194d5b5375ba54d7027201",
+            "file_sha256": "e7e0d535be54d67776e117e5f9178b9628c73ffae7a4217900414d6b8716fd86",
+            "id": "85c1ff0376cc4045",
+            "next_offset": null,
+            "offset_unit": "characters",
+            "path": "src/nbody_kernel.cu",
+            "schema": "hpc-forest-memory-v1",
+            "snapshot_digest": "ddde47213bb097ab5aee8038fe8b121d1524378ebdc3e7ba971fcf764ddfc847",
+            "text": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int tid = threadIdx.x;\n    const int i = blockIdx.x * blockDim.x + tid;\n    const bool target_valid = i < n;\n\n    Particle target;\n    if (target_valid) {\n        target = in[i];\n    }\n\n    extern __shared__ float shared[];\n    float* source_x = shared;\n    float* source_y = source_x + blockDim.x;\n    float* source_z = source_y + blockDim.x;\n    float* source_mass = source_z + blockDim.x;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int base = 0; base < n; base += blockDim.x) {\n        const int source_index = base + tid;\n        if (source_index < n) {\n            source_x[tid] = in[source_index].x;\n            source_y[tid] = in[source_index].y;\n            source_z[tid] = in[source_index].z;\n            source_mass[tid] = in[source_index].mass;\n        }\n\n        // Every thread, including inactive target lanes, participates in both barriers.\n        __syncthreads();\n\n        if (target_valid) {\n            int tile_count = n - base;\n            if (tile_count > blockDim.x) {\n                tile_count = blockDim.x;\n            }\n\n            for (int k = 0; k < tile_count; ++k) {\n                const int j = base + k;\n                if (i == j) continue;\n\n                const float dx = source_x[k] - target.x;\n                const float dy = source_y[k] - target.y;\n                const float dz = source_z[k] - target.z;\n\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * target.mass * source_mass[k]) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n\n        // Ensure all readers finish before the next source tile overwrites shared memory.\n        __syncthreads();\n    }\n\n    if (target_valid) {\n        Particle p = target;\n        p.vx += (fx / p.mass) * dt;\n        p.vy += (fy / p.mass) * dt;\n        p.vz += (fz / p.mass) * dt;\n\n        p.x += p.vx * dt;\n        p.y += p.vy * dt;\n        p.z += p.vz * dt;\n\n        out[i] = p;\n    }\n}\n",
+            "total_characters": 2352
+          },
+          "round": 1,
+          "slot_id": "8b715b1db48b4898bcc6dbe9372a9373",
+          "status": "complete",
+          "turn": 2
+        },
+        {
+          "error": "A selection read cannot freeze integration inputs",
+          "id": "memory-select-e1-r1-t3",
+          "round": 1,
+          "slot_id": "233c8bddf3e44f95a08fa21436299083",
+          "status": "rejected",
+          "turn": 3
+        },
+        {
+          "decision": {
+            "action": "integrate",
+            "base_id": "85c1ff0376cc4045",
+            "idea_ids": [
+              "16bd9f82c0e34e9f"
+            ],
+            "rationale": "Use measured-correct T1 as the source base and adapt only T2's two-target-per-thread idea: retain T1's shared source tiles, but let each thread maintain separate accumulators for two adjacent target rows. Use block=128, items_per_block=256, and shared_memory_bytes=2048 (four arrays of 128 floats); each staged source is then reused for both target interactions. Preserve ascending source order for each target, independent tail guards and self-exclusion, and ensure all threads reach both barriers. T2 alone was valid but slower (0.002605 s, score 0.416) than T1 (0.001008 s, score 0.648), so its idea is an unverified complement, not a measured gain. Compile, check, and measure this combined candidate afresh; do not infer additive performance.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "85c1ff0376cc4045"
+            ]
+          },
+          "id": "memory-select-e1-r1-t4",
+          "round": 1,
+          "slot_id": "32d653bc0ab647c38930695c6ff45fc2",
+          "status": "complete",
+          "turn": 4
+        },
+        {
+          "decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "The first integration is correct but slower than T1 (0.001646950 s versus 0.001007746 s), so the two-target idea did not improve the measured base. Inspect the next diverse archive page for a distinct compatible transformation before selecting another experiment; research remains closed.",
+            "read": {
+              "ids": [],
+              "offset": 6,
+              "operation": "search",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "id": "memory-select-e1-r2-t1",
+          "read_result": {
+            "items": [
+              {
+                "details_are_bounded": true,
+                "diagnostic": "",
+                "facts": {
+                  "base_commit": "193b38721d1a41cf72b2675c8ad0d639eeef2344",
+                  "commit": null,
+                  "parent_id": null,
+                  "source_count": 0,
+                  "source_ids": []
+                },
+                "id": "85c1ff0376cc4045-h01",
+                "kind": "development",
+                "measured_outcome": {
+                  "correct": true,
+                  "mean_seconds": null,
+                  "score": null,
+                  "status": "development_valid"
+                },
+                "mission_id": "85c1ff0376cc4045",
+                "model_interpretation": {
+                  "applicability": "",
+                  "claim": "Staging each source tile's x, y, z, and mass once per block in shared memory may let the block's target threads reuse those values while retaining one target per thread. Two block-wide barriers protect tile loading and reuse; inactive target lanes still reach both barriers. The source traversal and per-target accumulation order remain unchanged, but no speedup is assumed before measurement.",
+                  "evidence_ids": [],
+                  "next_experiment": "",
+                  "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Stage source x, y, z, and mass into four dynamic shared-memory arrays per block, loading one source per lane per tile.\",\"Keep one target particle per thread and preserve the original serial source accumulation order and self-interaction exclusion.\",\"Use unconditional block barriers before reading each tile and before overwriting it; inactive target lanes do not return early.\",\"Configure 256 threads per block and 4096 bytes of dynamic shared memory.\"]}"
+                },
+                "role": "T1",
+                "source_available": true,
+                "tree_id": "e1:T1"
+              },
+              {
+                "details_are_bounded": true,
+                "diagnostic": "",
+                "facts": {
+                  "base_commit": "193b38721d1a41cf72b2675c8ad0d639eeef2344",
+                  "commit": null,
+                  "parent_id": null,
+                  "source_count": 0,
+                  "source_ids": []
+                },
+                "id": "16bd9f82c0e34e9f-h01",
+                "kind": "development",
+                "measured_outcome": {
+                  "correct": true,
+                  "mean_seconds": null,
+                  "score": null,
+                  "status": "development_valid"
+                },
+                "mission_id": "16bd9f82c0e34e9f",
+                "model_interpretation": {
+                  "applicability": "",
+                  "claim": "Assigning two adjacent target particles to each thread should reuse each source particle's position and mass across both target interactions, reducing source-load work while retaining each target's original accumulation order.",
+                  "evidence_ids": [],
+                  "next_experiment": "",
+                  "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Map each thread to two adjacent output particles and keep separate force accumulators for each.\",\"Load each source particle's position and mass once per source-loop iteration, then reuse them for both target interactions.\",\"Use 128 threads per block while keeping 256 output items per block; guard the second target for odd-sized tails.\"]}"
+                },
+                "role": "T2",
+                "source_available": true,
+                "tree_id": "e1:T2"
+              },
+              {
+                "details_are_bounded": true,
+                "diagnostic": "Protected correctness checks failed",
+                "facts": {
+                  "base_commit": "193b38721d1a41cf72b2675c8ad0d639eeef2344",
+                  "commit": null,
+                  "parent_id": null,
+                  "source_count": 0,
+                  "source_ids": []
+                },
+                "id": "2a7cd6b7c3af45e9-h01",
+                "kind": "development",
+                "measured_outcome": {
+                  "correct": false,
+                  "mean_seconds": null,
+                  "score": null,
+                  "status": "incorrect"
+                },
+                "mission_id": "2a7cd6b7c3af45e9",
+                "model_interpretation": {
+                  "applicability": "",
+                  "claim": "For each non-self interaction, rsqrtf plus an inverse-distance cube can replace sqrtf and the distance-denominator division. Since G is 1 and target mass factors out of the summed force before the per-target division, accumulating acceleration directly also removes that target-mass multiplication per interaction and the final division. This changes floating-point rounding, so correctness and speed remain for the controller to establish.",
+                  "evidence_ids": [],
+                  "next_experiment": "",
+                  "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Use rsqrtf(distSq) and its cube to form the softened inverse-distance factor instead of sqrtf and division by distSq * dist.\",\"Accumulate acceleration directly after factoring out target mass and G=1, removing the target-mass multiplication from each interaction and the per-target force division.\"]}"
+                },
+                "role": "T3",
+                "source_available": true,
+                "tree_id": "e1:T3"
+              },
+              {
+                "details_are_bounded": true,
+                "diagnostic": "",
+                "facts": {
+                  "base_commit": null,
+                  "commit": null,
+                  "parent_id": null,
+                  "source_count": 0,
+                  "source_ids": []
+                },
+                "id": "lesson:79c03ae33d024935:0:0",
+                "kind": "lesson",
+                "measured_outcome": {
+                  "correct": null,
+                  "mean_seconds": null,
+                  "score": null,
+                  "status": null
+                },
+                "mission_id": "79c03ae33d024935",
+                "model_interpretation": {
+                  "applicability": "The current candidate retains T1's one-source-tile-per-block staging while changing target mapping; measure this combination afresh rather than extrapolating T1's timing.",
+                  "claim": "The measured T1 shared-tile candidate was valid and correct at 0.001007745896 seconds, versus the valid baseline at 0.001856629033 seconds; this does not establish that a changed block size or output mapping will be faster.",
+                  "evidence_ids": [
+                    "85c1ff0376cc4045",
+                    "baseline-e1"
+                  ],
+                  "next_experiment": "Measure the combined candidate with the prescribed correctness checks and repeated timings.",
+                  "transformations": "{}"
+                },
+                "role": "G",
+                "source_available": false,
+                "tree_id": "e1:G-merge-1-1"
+              },
+              {
+                "details_are_bounded": true,
+                "diagnostic": "Protected correctness checks failed",
+                "facts": {
+                  "base_commit": "193b38721d1a41cf72b2675c8ad0d639eeef2344",
+                  "commit": null,
+                  "parent_id": null,
+                  "source_count": 0,
+                  "source_ids": []
+                },
+                "id": "2a7cd6b7c3af45e9-h02",
+                "kind": "development",
+                "measured_outcome": {
+                  "correct": false,
+                  "mean_seconds": null,
+                  "score": null,
+                  "status": "incorrect"
+                },
+                "mission_id": "2a7cd6b7c3af45e9",
+                "model_interpretation": {
+                  "applicability": "",
+                  "claim": "Hoisting the target particle's coordinates into scalars before the source loop may avoid repeated target-coordinate loads or address work in pair evaluation. The interaction order and floating-point expressions remain unchanged, so this tests reuse without intentionally changing numerical rounding.",
+                  "evidence_ids": [],
+                  "next_experiment": "",
+                  "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Load the target particle's x, y, and z coordinates into scalar locals before the source loop and use those locals in each pair evaluation; preserve all pair arithmetic and accumulation order.\"]}"
+                },
+                "role": "T3",
+                "source_available": true,
+                "tree_id": "e1:T3"
+              },
+              {
+                "details_are_bounded": true,
+                "diagnostic": "",
+                "facts": {
+                  "base_commit": null,
+                  "commit": null,
+                  "parent_id": null,
+                  "source_count": 0,
+                  "source_ids": []
+                },
+                "id": "lesson:79c03ae33d024935:0:1",
+                "kind": "lesson",
+                "measured_outcome": {
+                  "correct": null,
+                  "mean_seconds": null,
+                  "score": null,
+                  "status": null
+                },
+                "mission_id": "79c03ae33d024935",
+                "model_interpretation": {
+                  "applicability": "Treat two-target-per-thread reuse as an unverified integration hypothesis; its standalone result does not predict its interaction with T1's shared-memory tile.",
+                  "claim": "The measured T2 two-target-per-thread candidate was valid and correct but slower than T1 at 0.002604581723 seconds; do not retain it without a fresh combined measurement.",
+                  "evidence_ids": [
+                    "16bd9f82c0e34e9f",
+                    "85c1ff0376cc4045"
+                  ],
+                  "next_experiment": "Compare this combined implementation against T1 under the official timing and correctness protocol.",
+                  "transformations": "{}"
+                },
+                "role": "G",
+                "source_available": false,
+                "tree_id": "e1:G-merge-1-1"
+              }
+            ],
+            "next_offset": 12,
+            "offset": 6,
+            "schema": "hpc-forest-memory-v1",
+            "total": 13
+          },
+          "round": 2,
+          "slot_id": "d6fb82e2362d405ca5e90b3bb1e12f25",
+          "status": "complete",
+          "turn": 1
+        },
+        {
+          "decision": {
+            "action": "read",
+            "base_id": "",
+            "idea_ids": [],
+            "rationale": "The first combination did not beat T1, but the archive page revealed a distinct arithmetic transformation and a separate incorrect target-hoisting attempt. Read the remaining archive page before selecting whether a safe, freshly tested adaptation is worthwhile; do not treat either failed development result as verified code.",
+            "read": {
+              "ids": [],
+              "offset": 12,
+              "operation": "search",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": []
+          },
+          "id": "memory-select-e1-r2-t2",
+          "read_result": {
+            "items": [
+              {
+                "details_are_bounded": true,
+                "diagnostic": "Protected correctness checks failed",
+                "facts": {
+                  "base_commit": "193b38721d1a41cf72b2675c8ad0d639eeef2344",
+                  "commit": null,
+                  "parent_id": null,
+                  "source_count": 0,
+                  "source_ids": []
+                },
+                "id": "2a7cd6b7c3af45e9-h03",
+                "kind": "development",
+                "measured_outcome": {
+                  "correct": false,
+                  "mean_seconds": null,
+                  "score": null,
+                  "status": "incorrect"
+                },
+                "mission_id": "2a7cd6b7c3af45e9",
+                "model_interpretation": {
+                  "applicability": "",
+                  "claim": "A bounded two-iteration loop unroll may reduce loop-control overhead and expose independent pair-evaluation work to the compiler, improving interaction throughput without changing the per-pair expressions or accumulation order. The controller must determine whether this helps on the target.",
+                  "evidence_ids": [],
+                  "next_experiment": "",
+                  "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Apply a compiler-directed unroll factor of two to the source-particle loop, retaining the original per-interaction arithmetic and source-order accumulation.\"]}"
+                },
+                "role": "T3",
+                "source_available": true,
+                "tree_id": "e1:T3"
+              }
+            ],
+            "next_offset": null,
+            "offset": 12,
+            "schema": "hpc-forest-memory-v1",
+            "total": 13
+          },
+          "round": 2,
+          "slot_id": "baeaadaf09dc493fb8850ac223bf4a38",
+          "status": "complete",
+          "turn": 2
+        },
+        {
+          "error": "A selection read cannot freeze integration inputs",
+          "id": "memory-select-e1-r2-t3",
+          "round": 2,
+          "slot_id": "5b4eca9e3a8e4d83939cab9a4c9db4de",
+          "status": "rejected",
+          "turn": 3
+        },
+        {
+          "decision": {
+            "action": "integrate",
+            "base_id": "85c1ff0376cc4045",
+            "idea_ids": [
+              "2a7cd6b7c3af45e9-h01"
+            ],
+            "rationale": "Return to measured-correct T1: the first integration was correct but slower (0.001646950 s versus T1's 0.001007746 s), so discard its two-target mapping. Test only the archived arithmetic idea on T1's one-target/shared-tile kernel: form the softened inverse-distance cube with rsqrtf, accumulate acceleration using source mass directly (G=1 and target mass cancels), then update velocity with acceleration*dt. Preserve the source order, self exclusion, softening, update order, and mass bits. The T3 development version of this idea failed protected checks; it is not verified source. Implement the algebra carefully, then require a fresh compile, full correctness/oracle checks, and official timing before accepting any gain.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "85c1ff0376cc4045"
+            ]
+          },
+          "id": "memory-select-e1-r2-t4",
+          "round": 2,
+          "slot_id": "100a8393a52f4bbcb9097e2620286281",
+          "status": "complete",
+          "turn": 4
+        }
+      ],
+      "slot_id": "5f4816bfe635497f87d315d850576b20",
+      "started_at": 1792666042.699765,
+      "status": "complete",
+      "steps": [
+        {
+          "base_id": "85c1ff0376cc4045",
+          "final": false,
+          "idea_ids": [
+            "16bd9f82c0e34e9f"
+          ],
+          "input_commits": [
+            "f72219ea2565b835d8194d5b5375ba54d7027201"
+          ],
+          "input_ids": [
+            "85c1ff0376cc4045"
+          ],
+          "mission_id": "79c03ae33d024935",
+          "mother": {
+            "budget_phase": "postprocess",
+            "conversation": {
+              "id": "6468f6b813734167a76a3a0ea25476c6",
+              "phase": "assembly",
+              "request_sha256": "4d0b080930d7a3184d605257e310d521329b701826a0b46efc6cb5f996de1bbc",
+              "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+              "turn": 5
+            },
+            "final_synthesis": true,
+            "model_calls": 1,
+            "phase": "assembly",
+            "request_sha256": "4d0b080930d7a3184d605257e310d521329b701826a0b46efc6cb5f996de1bbc",
+            "status": "complete",
+            "usage_charged_to_g_mission": "79c03ae33d024935-h01"
+          },
+          "outcome": {
+            "binary_sha256": "eb756ca904aa1f18e3db3029ea81ede2e6eb3b816c1f9a4df7698bc1dd595085",
+            "cache_key": "6c8c97ed99e6b0cc8bf986fe80ff51221e32f81482735514057031ea7ad4ec03",
+            "commit": "561cf3ca4d53c427ce539c1abbe513c2812e5565",
+            "correct": true,
+            "logs": [
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/build.log",
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/correctness.log",
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/sample-0.log",
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/sample-1.log",
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/79c03ae33d024935/search/attempt-001/sample-2.log"
+            ],
+            "mean_seconds": 0.0016469496543974765,
+            "reason": "",
+            "score": 0.5299236005606913,
+            "status": "valid",
+            "times": [
+              0.001646921072835517,
+              0.0016469323237320727,
+              0.0016469955666248396
+            ],
+            "tree_hash": "b9651071f39f4141a9ad9255bc4d590abb77527c"
+          },
+          "pair": 1,
+          "retained_ids": [
+            "85c1ff0376cc4045"
+          ],
+          "round": 1,
+          "selection": {
+            "action": "integrate",
+            "base_id": "85c1ff0376cc4045",
+            "idea_ids": [
+              "16bd9f82c0e34e9f"
+            ],
+            "rationale": "Use measured-correct T1 as the source base and adapt only T2's two-target-per-thread idea: retain T1's shared source tiles, but let each thread maintain separate accumulators for two adjacent target rows. Use block=128, items_per_block=256, and shared_memory_bytes=2048 (four arrays of 128 floats); each staged source is then reused for both target interactions. Preserve ascending source order for each target, independent tail guards and self-exclusion, and ensure all threads reach both barriers. T2 alone was valid but slower (0.002605 s, score 0.416) than T1 (0.001008 s, score 0.648), so its idea is an unverified complement, not a measured gain. Compile, check, and measure this combined candidate afresh; do not infer additive performance.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "85c1ff0376cc4045"
+            ]
+          },
+          "status": "complete",
+          "step": 1
+        },
+        {
+          "base_id": "85c1ff0376cc4045",
+          "final": true,
+          "idea_ids": [
+            "2a7cd6b7c3af45e9-h01"
+          ],
+          "input_commits": [
+            "f72219ea2565b835d8194d5b5375ba54d7027201"
+          ],
+          "input_ids": [
+            "85c1ff0376cc4045"
+          ],
+          "mission_id": "fe8207f9ecac4c0b",
+          "mother": {
+            "budget_phase": "postprocess",
+            "conversation": {
+              "id": "6468f6b813734167a76a3a0ea25476c6",
+              "phase": "assembly",
+              "request_sha256": "47e1dd6a29f7f09a06bbd59e42c0fcddf9814860cfa141a4aad5f47ec12fb1ad",
+              "thread_id": "01a16333-14b1-7aa0-86cd-c6a3dbbb85f6",
+              "turn": 12
+            },
+            "final_synthesis": true,
+            "model_calls": 1,
+            "phase": "assembly",
+            "request_sha256": "47e1dd6a29f7f09a06bbd59e42c0fcddf9814860cfa141a4aad5f47ec12fb1ad",
+            "status": "complete",
+            "usage_charged_to_g_mission": "fe8207f9ecac4c0b-h03"
+          },
+          "outcome": {
+            "binary_sha256": "6d56e1ccb60f58430d0a801aafab3328f81fc01fe86ec931e2a6d29454206b53",
+            "cache_key": "2ea5b80447b4b4439f8b60dddc8596936da04a8c2db8e5236f3c9c9512855cb9",
+            "commit": "d8052b227330b6fce97abdfad06e9a90a21d6be5",
+            "correct": true,
+            "logs": [
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/build.log",
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/correctness.log",
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/sample-0.log",
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/sample-1.log",
+              "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/logs/e1/fe8207f9ecac4c0b/search/attempt-001/sample-2.log"
+            ],
+            "mean_seconds": 0.0006987284184133177,
+            "reason": "",
+            "score": 0.7265633353562638,
+            "status": "valid",
+            "times": [
+              0.000698557419019453,
+              0.0006990167282356141,
+              0.000698611107984886
+            ],
+            "tree_hash": "26ee1583ce33bf9e58227d4c1dd1657a68c49de4"
+          },
+          "pair": 1,
+          "retained_ids": [
+            "85c1ff0376cc4045"
+          ],
+          "round": 2,
+          "selection": {
+            "action": "integrate",
+            "base_id": "85c1ff0376cc4045",
+            "idea_ids": [
+              "2a7cd6b7c3af45e9-h01"
+            ],
+            "rationale": "Return to measured-correct T1: the first integration was correct but slower (0.001646950 s versus T1's 0.001007746 s), so discard its two-target mapping. Test only the archived arithmetic idea on T1's one-target/shared-tile kernel: form the softened inverse-distance cube with rsqrtf, accumulate acceleration using source mass directly (G=1 and target mass cancels), then update velocity with acceleration*dt. Preserve the source order, self exclusion, softening, update order, and mass bits. The T3 development version of this idea failed protected checks; it is not verified source. Implement the algebra carefully, then require a fresh compile, full correctness/oracle checks, and official timing before accepting any gain.",
+            "read": {
+              "ids": [],
+              "offset": 0,
+              "operation": "none",
+              "path": "",
+              "query": ""
+            },
+            "source_ids": [
+              "85c1ff0376cc4045"
+            ]
+          },
+          "status": "complete",
+          "step": 2
+        }
+      ],
+      "unlimited_tokens": true,
+      "unlimited_wall_time": true
+    },
+    "created": 1792666484.4592795
+  },
+  {
+    "id": 40,
+    "kind": "packaged",
+    "payload": {
+      "commit": "d8052b227330b6fce97abdfad06e9a90a21d6be5",
+      "path": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-21c416d16d78440a83e722965be34e7c/results-775521/cuda-nbody/submission.zip",
+      "sha256": "705934c9067ab7329dbdef7d6492fa43f6a634e853b723d61ee680b5930587c6"
+    },
+    "created": 1792666531.8777542
+  }
+]

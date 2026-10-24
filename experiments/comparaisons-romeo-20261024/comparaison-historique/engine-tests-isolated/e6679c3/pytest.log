@@ -1,0 +1,180 @@
+........................................................................ [ 24%]
+.............................FFF........................................ [ 48%]
+........................................................................ [ 72%]
+........................................................................ [ 96%]
+.........                                                                [100%]
+================================== FAILURES ===================================
+___ test_shared_cases_do_not_block_and_binary_checker_rejects_wrong_program ___
+
+tmp_path = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-23/ce-que-je-voudrais-que-tu/work/engine-snapshots/tests-e6679c3/test_shared_cases_do_not_block0')
+
+    def test_shared_cases_do_not_block_and_binary_checker_rejects_wrong_program(tmp_path):
+        gcc = shutil.which("gcc")
+        if not gcc:
+            pytest.skip("gcc is unavailable")
+        root = official(tmp_path)
+        # Pure byte-copy fixture exercises the I/O adapter, not a contest algorithm.
+        (root / "echo.c").write_text(
+            "#include <stdio.h>\nint main(void){int c;while((c=getchar())!=EOF)putchar(c);return 0;}\n"
+        )
+        config = contract()
+        sample = case(value={"python": "import sys\nsys.stdout.buffer.write(bytes([255,0,128,42]))\n"})
+        config.update(
+            search_cases=[sample, {**sample, "name": "duplicate"}],
+            confirmation_cases=[sample],
+            benchmark_case=sample,
+        )
+>       receipt = c.prepare(config, root, tmp_path / "prepared", probe_timeout=5)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_contracts.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\hpc_forest\contracts.py:553: in prepare
+    "reference_binary_sha256": sha(reference / "solution"),
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\hpc_forest\contracts.py:68: in sha
+    with Path(path).open("rb") as stream:
+         ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-23/ce-que-je-voudrais-que-tu/work/engine-snapshots/tests-e6679c3/test_shared_cases_do_not_block0/prepared/reference-build/solution')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\nicol\\Documents\\Codex\\2026-10-23\\ce-que-je-voudrais-que-tu\\work\\engine-snapshots\\tests-e6679c3\\test_shared_cases_do_not_block0\\prepared\\reference-build\\solution'
+
+C:\Users\nicol\AppData\Roaming\uv\python\cpython-3.13.12-windows-x86_64-none\Lib\pathlib\_local.py:537: FileNotFoundError
+___ test_frozen_build_rejects_uninitialized_openmp_reduction[c-gcc-echo.c] ____
+
+tmp_path = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-23/ce-que-je-voudrais-que-tu/work/engine-snapshots/tests-e6679c3/test_frozen_build_rejects_unin0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000028EB6C6BA70>
+language = 'c', compiler = 'gcc', filename = 'echo.c'
+
+    @pytest.mark.parametrize("language,compiler,filename", [("c", "gcc", "echo.c"), ("c++", "g++", "echo.cpp")])
+    def test_frozen_build_rejects_uninitialized_openmp_reduction(
+        tmp_path, monkeypatch, language, compiler, filename
+    ):
+        if not shutil.which(compiler):
+            pytest.skip(f"{compiler} is unavailable")
+        monkeypatch.setenv("OMP_NUM_THREADS", "2")
+        root = tmp_path / "official"
+        root.mkdir()
+        # A counter fixture exercises compiler diagnostics, not any contest algorithm.
+        program = (
+            "#include <stdio.h>\nint main(void) { int counter = 0;\n"
+            "#pragma omp parallel for reduction(+:counter)\n"
+            "for (int i=0; i<4; ++i) counter += 1;\n"
+            'printf("%d\\n", counter); return counter != 4; }\n'
+        )
+        (root / filename).write_text(program)
+        config = contract()
+        config.update(
+            language=language,
+            source_files=[filename],
+            compiler_flags=[
+                "-O3", "-fopenmp", "-Werror=uninitialized", "-Werror=maybe-uninitialized"
+            ],
+        )
+>       receipt = c.prepare(config, root, tmp_path / "prepared", probe_timeout=5)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_contracts.py:200: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\hpc_forest\contracts.py:553: in prepare
+    "reference_binary_sha256": sha(reference / "solution"),
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\hpc_forest\contracts.py:68: in sha
+    with Path(path).open("rb") as stream:
+         ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-23/ce-que-je-voudrais-que-tu/work/engine-snapshots/tests-e6679c3/test_frozen_build_rejects_unin0/prepared/reference-build/solution')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\nicol\\Documents\\Codex\\2026-10-23\\ce-que-je-voudrais-que-tu\\work\\engine-snapshots\\tests-e6679c3\\test_frozen_build_rejects_unin0\\prepared\\reference-build\\solution'
+
+C:\Users\nicol\AppData\Roaming\uv\python\cpython-3.13.12-windows-x86_64-none\Lib\pathlib\_local.py:537: FileNotFoundError
+_ test_frozen_build_rejects_uninitialized_openmp_reduction[c++-g++-echo.cpp] __
+
+tmp_path = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-23/ce-que-je-voudrais-que-tu/work/engine-snapshots/tests-e6679c3/test_frozen_build_rejects_unin1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000028EB6C4B140>
+language = 'c++', compiler = 'g++', filename = 'echo.cpp'
+
+    @pytest.mark.parametrize("language,compiler,filename", [("c", "gcc", "echo.c"), ("c++", "g++", "echo.cpp")])
+    def test_frozen_build_rejects_uninitialized_openmp_reduction(
+        tmp_path, monkeypatch, language, compiler, filename
+    ):
+        if not shutil.which(compiler):
+            pytest.skip(f"{compiler} is unavailable")
+        monkeypatch.setenv("OMP_NUM_THREADS", "2")
+        root = tmp_path / "official"
+        root.mkdir()
+        # A counter fixture exercises compiler diagnostics, not any contest algorithm.
+        program = (
+            "#include <stdio.h>\nint main(void) { int counter = 0;\n"
+            "#pragma omp parallel for reduction(+:counter)\n"
+            "for (int i=0; i<4; ++i) counter += 1;\n"
+            'printf("%d\\n", counter); return counter != 4; }\n'
+        )
+        (root / filename).write_text(program)
+        config = contract()
+        config.update(
+            language=language,
+            source_files=[filename],
+            compiler_flags=[
+                "-O3", "-fopenmp", "-Werror=uninitialized", "-Werror=maybe-uninitialized"
+            ],
+        )
+>       receipt = c.prepare(config, root, tmp_path / "prepared", probe_timeout=5)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_contracts.py:200: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\hpc_forest\contracts.py:553: in prepare
+    "reference_binary_sha256": sha(reference / "solution"),
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\hpc_forest\contracts.py:68: in sha
+    with Path(path).open("rb") as stream:
+         ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-23/ce-que-je-voudrais-que-tu/work/engine-snapshots/tests-e6679c3/test_frozen_build_rejects_unin1/prepared/reference-build/solution')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\nicol\\Documents\\Codex\\2026-10-23\\ce-que-je-voudrais-que-tu\\work\\engine-snapshots\\tests-e6679c3\\test_frozen_build_rejects_unin1\\prepared\\reference-build\\solution'
+
+C:\Users\nicol\AppData\Roaming\uv\python\cpython-3.13.12-windows-x86_64-none\Lib\pathlib\_local.py:537: FileNotFoundError
+=========================== short test summary info ===========================
+FAILED tests/test_contracts.py::test_shared_cases_do_not_block_and_binary_checker_rejects_wrong_program
+FAILED tests/test_contracts.py::test_frozen_build_rejects_uninitialized_openmp_reduction[c-gcc-echo.c]
+FAILED tests/test_contracts.py::test_frozen_build_rejects_uninitialized_openmp_reduction[c++-g++-echo.cpp]
+3 failed, 294 passed in 88.16s (0:01:28)

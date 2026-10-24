@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float ax = 0.0f;\n    float ay = 0.0f;\n    float az = 0.0f;\n\n    // Chaque thread parcourt toutes les particules en mémoire globale.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        // Fusions explicites pour sommer les termes de distance au carré.\n        float distSq = fmaf(dx, dx, fmaf(dy, dy, fmaf(dz, dz, softening)));\n        float invDist = rsqrtf(distSq);\n        float invDist3 = invDist * invDist * invDist;\n\n        // La masse de la cible s'annule entre la force et la division par p.mass.\n        float acceleration = G * in[j].mass * invDist3;\n        ax += acceleration * dx;\n        ay += acceleration * dy;\n        az += acceleration * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += ax * dt;\n    p.vy += ay * dt;\n    p.vz += az * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Le kernel de base utilise déjà rsqrtf et annule algébriquement la masse de la particule cible. Cette candidate conserve ces choix, le branchement d'auto-interaction et le mapping mémoire, mais exprime la somme de distance au carré avec trois fmaf imbriqués. Cela peut réduire les opérations séparées et modifier favorablement l'arrondi; la correction et le gain restent à mesurer.",
+  "notes": "Le baseline est valide avec une moyenne mesurée de 0,001850 s. Le candidat précédent h01 a échoué un cas de correction; cette proposition ne préjuge donc ni de la correction ni de la performance. Le branchement i == j reste nécessaire pour éviter qu'une masse extrême au terme auto-adouci ne crée un produit infini par zéro.",
+  "sources_kept": [],
+  "transformations": [
+    "Remplacer la somme non explicitement fusionnée de dx² + dy² + dz² + softening par trois fmaf imbriqués, en conservant softening=0.001f.",
+    "Conserver rsqrtf, la masse de la source j après annulation de la masse cible, l'exclusion de l'auto-interaction, G=1.0f et l'ordre d'intégration Euler."
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "// Structure \"Array of Structures\" : intuitive but not ideal for GPU memory coalescing.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Naive CUDA N-body step: one output particle per thread.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n\n        // One Newton refinement improves rsqrtf accuracy without global fast math.\n        // rsqrtf(infinity) is zero; skip refinement to avoid infinity * zero.\n        if (invDist != 0.0f) {\n            float invDistSq = invDist * invDist;\n            float correction = fmaf(-0.5f * distSq, invDistSq, 1.5f);\n            invDist *= correction;\n        }\n\n        float invDist3 = (invDist * invDist) * invDist;\n        float f = (G * in[i].mass * in[j].mass) * invDist3;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Explicit Euler integration; preserve the original target-mass division.\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "Using a Newton-refined rsqrt reciprocal cube may replace the per-pair square root, denominator multiplication, and division with reciprocal-square-root and multiply operations. This candidate preserves the original force numerator, accumulation, and target-mass division to isolate the reciprocal formulation after the prior combined variant failed correctness; the controller must validate tolerance and the geometric-mean objective.",
+    "memory_lessons": [
+      {
+        "applicability": "A reciprocal-distance variant should be tested separately from target-mass cancellation when diagnosing numerical differences.",
+        "claim": "The prior candidate combining rsqrt-based inverse-distance cubing with target-mass cancellation failed one protected case at n=16384 (maximum absolute error 0.0003108978271484375). The combined change does not identify which transformation caused the failure.",
+        "evidence_ids": [
+          "7151826c81c94a83-h01"
+        ],
+        "next_experiment": "Measure this isolated, Newton-refined reciprocal formulation; only pursue target-mass factoring separately if it passes correctness."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Only src/nbody_kernel.cu is changed. No performance result is claimed: the valid baseline mean was 0.0018473421 seconds, and official correctness and geometric-mean timing remain for the controller.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Replace sqrtf plus the distance denominator multiplication and division with rsqrtf, one Newton refinement, and an inverse-distance cube.",
+      "Preserve the original force numerator, accumulation order, and target-mass division to isolate the reciprocal-distance change.",
+      "Skip Newton refinement when the reciprocal is zero, avoiding an infinity-times-zero intermediate for infinite squared distance."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "2caa963c595e4567932ed988d192a121",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "5426968e809822f9ee302491ecbb793556ce4bcd383c9c08681e6bcdebabe8b1",
+  "session_id": "f6148680db554271a678ad1101264c29",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "e6bfc7bab2118b74dca1ae7c38fb6baa0bd3b81e49f427de063969ed6d4cf70c",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4352,
+        "input_tokens": 16329,
+        "output_tokens": 10683,
+        "reasoning_output_tokens": 9534
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "f21c70702916afcd833009623e5967e2d9419decc5c93fc1c783a3dc7b9202db",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "30ef56a858b64784-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "7151826c81c94a83-h01",
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Proposed an isolated reciprocal-distance experiment with a refinement step, leaving force accumulation and target-mass division unchanged."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "This candidate makes no architecture-specific assumption; final compatibility and correctness are left to the controller."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "Uses standard CUDA math operations and makes no version-sensitive API claim."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "7151826c81c94a83-h01"
+          ],
+          "status": "applied",
+          "summary": "Recorded the measured baseline and prior correctness failure without claiming a speedup; official geometric-mean measurement is pending."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "2caa963c595e4567932ed988d192a121",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "5426968e809822f9ee302491ecbb793556ce4bcd383c9c08681e6bcdebabe8b1",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "f6148680db554271a678ad1101264c29"
+    },
+    "observed_tokens": 27012,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 27012,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

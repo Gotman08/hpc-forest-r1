@@ -1,0 +1,12 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "id": "fd180002914c485c",
+  "commit": "cdb78cfb1df6784664840ea10e3f2846900d125f",
+  "snapshot_digest": "00bbefacc3dcd2f6425b77b0e8a0bff8066375e55636463da8acea5fc9d0d1af",
+  "offset_unit": "characters",
+  "path": "src/nbody_kernel.cu",
+  "file_sha256": "f21b9f482373a1d0373c0cf507500de0cd5ea2d9b31c7b9842e06cab07c92e53",
+  "total_characters": 1580,
+  "text": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Skip the self interaction by traversing the two ranges around i.\n    #pragma unroll 4\n    for (int j = 0; j < i; ++j) {\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float inverseDistance = rsqrtf(distSq);\n        float f = (G * in[i].mass * in[j].mass) * inverseDistance * inverseDistance * inverseDistance;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    #pragma unroll 4\n    for (int j = i + 1; j < n; ++j) {\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float inverseDistance = rsqrtf(distSq);\n        float f = (G * in[i].mass * in[j].mass) * inverseDistance * inverseDistance * inverseDistance;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+  "next_offset": null
+}

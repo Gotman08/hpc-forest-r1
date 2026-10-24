@@ -1,0 +1,19 @@
+{
+  "action": "integrate",
+  "base_id": "baseline-e1",
+  "idea_ids": [
+    "0567c2ec54f94aa8",
+    "491b308cf0674636"
+  ],
+  "rationale": "All four tree records ended in infrastructure_error and provide no source or measurements; none is a verified input. Use the sole valid, correct measured base, baseline-e1, adapting only the shared-source reuse and force-arithmetic ideas. Candidate below is unconfirmed and must be compiled, checked, and measured. Keep launch.json at block=256, items_per_block=256, shared_memory_bytes=0.\n\nsrc/nbody_kernel.cu:\nstruct Particle{float x,y,z,vx,vy,vz,mass;};\nstruct Src{float x,y,z,m;};\nextern \"C\" __global__ void nbody_step_naive(const Particle* in,Particle* out,int n,float dt){\n int t=threadIdx.x,i=blockIdx.x*blockDim.x+t; bool ok=i<n; Particle p;\n if(ok)p=in[i];\n float fx=0,fy=0,fz=0; __shared__ Src tile[256];\n for(int b=0;b<n;b+=blockDim.x){\n  int j=b+t;\n  if(j<n)tile[t]={in[j].x,in[j].y,in[j].z,in[j].mass};\n  else tile[t]={0,0,0,0};\n  __syncthreads();\n  if(ok)for(int k=0;k<blockDim.x&&b+k<n;++k){\n   j=b+k;if(j==i)continue; Src s=tile[k];\n   float dx=s.x-p.x,dy=s.y-p.y,dz=s.z-p.z;\n   if(dx!=0||dy!=0||dz!=0){\n    float r=rsqrtf(dx*dx+dy*dy+dz*dz+0.001f);\n    float f=((s.m*r)*r)*r;\n    fx+=f*dx;fy+=f*dy;fz+=f*dz;\n   }\n  }\n  __syncthreads();\n }\n if(ok){p.vx+=fx*dt;p.vy+=fy*dt;p.vz+=fz*dt;\n  p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;out[i]=p;}\n}\n\nsrc/launch.json:\n{\"block\":256,\"items_per_block\":256,\"shared_memory_bytes\":0}",
+  "read": {
+    "ids": [],
+    "offset": 0,
+    "operation": "none",
+    "path": "",
+    "query": ""
+  },
+  "source_ids": [
+    "baseline-e1"
+  ]
+}

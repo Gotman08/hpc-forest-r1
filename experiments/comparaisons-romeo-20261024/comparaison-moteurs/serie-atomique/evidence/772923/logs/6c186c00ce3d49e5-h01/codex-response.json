@@ -1,0 +1,126 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale\n    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue; // Divergence de branche inutile dans la boucle\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float invDist3 = invDist * invDist * invDist;\n\n        float f = (G * in[i].mass * in[j].mass) * invDist3;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "Remplacer sqrtf puis la division par distSq * dist par rsqrtf(distSq) et trois multiplications peut réduire le coût mathématique par interaction sans activer fast math global. La cancellation de la masse cible est volontairement omise : avec des masses float32 extrêmes, elle peut changer les débordements, sous-débordements et arrondis de la voie actuelle.",
+    "notes": "Une seule modification arithmétique isolée est proposée. La boucle, son ordre d'accumulation, l'intégration et la copie de la masse de sortie restent inchangés; le softening garde distSq positif pour les positions coïncidentes. Aucune mesure ni vérification de correction de ce candidat n'est disponible ici : la correction complète doit précéder toute mesure officielle, notamment pour masses extrêmes, dt variés et tous les cas du contrat. Le baseline fourni était valide et correct, avec une moyenne de 0.0018545204 s sur trois répétitions (baseline-e1).",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Utiliser rsqrtf(distSq), puis invDist * invDist * invDist, à la place de sqrtf et de la division par distSq * dist.",
+      "Conserver les multiplications par les deux masses, la division par la masse cible après accumulation, l'ordre de boucle et l'intégration inchangés.",
+      "Ne pas activer fast math global ni spécialiser les tailles ou les entrées."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "87d2f8a00fdb405286108c2a4247b259",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "beb811f75162dae06f1e2abc81edb0abaacc57b9c7dbbd960ca3fca069a48831",
+  "session_id": "32bae04219c44d02be847a8dc9e8a555",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "28f359fa257043ad92300f791b91ddc54b80af5eb25410d3dfe94375b25c3cda",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 34432,
+        "input_tokens": 57872,
+        "output_tokens": 5526,
+        "reasoning_output_tokens": 4320
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "c1304884896b89844fc70884c63cb5d4446b69bcfb5109110ed9e47020860d56",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "6c186c00ce3d49e5-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Proposé un test borné de rsqrtf et laissé la cancellation cible hors de l'essai afin d'isoler le changement numérique."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "Aucun réglage dépendant de l'architecture ou des ressources n'est introduit; la cible et le protocole restent inchangés."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "applied",
+          "summary": "La synthèse documentaire CUDA fournie dans le contexte motive rsqrtf comme hypothèse à mesurer, tout en rappelant que l'ordre flottant et la correction doivent être vérifiés; aucune nouvelle consultation n'a été faite."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Le baseline valide sert de point de comparaison; aucune performance du candidat n'est revendiquée et le contrôle de correction doit précéder les mesures officielles."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "87d2f8a00fdb405286108c2a4247b259",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "beb811f75162dae06f1e2abc81edb0abaacc57b9c7dbbd960ca3fca069a48831",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "32bae04219c44d02be847a8dc9e8a555"
+    },
+    "observed_tokens": 63398,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 63398,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

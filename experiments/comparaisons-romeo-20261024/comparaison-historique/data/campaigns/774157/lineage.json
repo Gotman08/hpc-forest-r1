@@ -1,0 +1,973 @@
+[
+  {
+    "campaign": "774157",
+    "ordinal": 1,
+    "id": "943df5f6be5e4748",
+    "role": "T1",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792611627.752427,
+    "elapsed_seconds": 196.2856993675232,
+    "commit": "64709b9626c196c665c59656e49c858354af9b39",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "692185b5c32c3492",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0011063099445907706,
+    "score": 0.6248145042147332,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 39.952498980989596,
+    "best_research_before_seconds": null,
+    "beats_best_research": true,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/943df5f6be5e4748.patch",
+    "hypothesis": "The prior reciprocal/cancellation candidate missed one correctness check at n=16384. Refining the direct rsqrtf result may reduce reciprocal approximation error; retaining targetMass in each accumulated coefficient and dividing after the sum avoids relying on the previously unvalidated target-mass cancellation. This is a correctness-oriented hypothesis, not a measured result.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Keep one thread per output, the single-kernel ABI, self-interaction skip, float32 softening, update ordering, and exact mass copy.",
+        "Use direct rsqrtf(distSq), apply one Newton refinement, and form the reciprocal cube with multiplies.",
+        "Retain target-mass scaling in the interaction coefficient and divide the accumulated force by targetMass after summation, rather than keeping the cancellation from the failed candidates."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612025.4421806,
+    "measured_elapsed_seconds": 593.9754528999329,
+    "kernel_sha256": "405fac874dc316cccb9e8700111a40960122089eb4fe335540b596e282177606",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 2,
+    "id": "c6e77902a5e74242",
+    "role": "T2",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792611627.78732,
+    "elapsed_seconds": 196.3205921649933,
+    "commit": "f67c4bb298759f9f2016f3f6a613d20022f3793f",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "ad8c88acfd8b69d8",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00015133804606480545,
+    "score": 0.9240929842830317,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 91.78578162501022,
+    "best_research_before_seconds": 0.0011063099445907706,
+    "beats_best_research": true,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/c6e77902a5e74242.patch",
+    "hypothesis": "The baseline assigns one thread to each output and therefore serializes its source sum; the measured launch configuration creates only 16, 32, and 64 CTAs for the supplied larger sizes. Assigning a complete warp to each output exposes parallelism across source indices while retaining the original pair-force arithmetic. This may improve utilization, but the changed summation order and performance require controller validation.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Replaced one-thread-per-output work with one warp per output; each lane sums source indices lane + 32k and the warp reduces all three force components.",
+        "Preserved the original sqrtf-based pair arithmetic, softened distance, Euler integration, and full Particle output copy.",
+        "Handled self-interaction and invalid output warps without early returns, so every lane participates in full-warp shuffles and only valid lane-zero threads store.",
+        "Set the launch to 256 threads and 8 output particles per block, matching 8 warps per block."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792611752.3150232,
+    "measured_elapsed_seconds": 320.84829545021057,
+    "kernel_sha256": "fab8a650d5f2722598b4565e85cc9138d6a29904ad39355cdd467ba16f1222e9",
+    "launch": {
+      "block": 256,
+      "items_per_block": 8,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 3,
+    "id": "a1a2a6f0f51445f0",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792611627.8159213,
+    "elapsed_seconds": 196.34919357299805,
+    "commit": "803078a482b60f002987f3c8347f0039a5538219",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "a9c56225f5dffe56",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0010544926042892486,
+    "score": 0.6359907289702742,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 42.765003568670046,
+    "best_research_before_seconds": 0.00015133804606480545,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/a1a2a6f0f51445f0.patch",
+    "hypothesis": "Staging each source Particle once per 128-output CTA should reduce repeated global source loads while preserving ascending source order and the supplied force arithmetic. A 128-thread tile uses 3584 bytes of shared memory and launches more CTAs at large sizes than a 256-thread tile; these are performance hypotheses for controller measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Replaced direct global source reads in the force loop with ascending 128-record dynamic shared-memory tiles, cooperatively staged by CTA threads.",
+        "Kept inactive output lanes in the staging and consumption barriers; guarded partial source tiles and output tails without returning before synchronization.",
+        "Changed the launch block and items-per-block to 128 and requested 3584 bytes of dynamic shared memory."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792611772.3323438,
+    "measured_elapsed_seconds": 340.86561608314514,
+    "kernel_sha256": "76ca94304e5de9d2bc8396a8ee8f84049422d3a38baf9fbeaa92d11c127bef8a",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 3584
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 4,
+    "id": "8f8097de6798435a",
+    "role": "T2",
+    "parent_id": "c6e77902a5e74242",
+    "depth": 2,
+    "created": 1792611752.3272028,
+    "elapsed_seconds": 320.860475063324,
+    "commit": "2abea6588f188e8f31f43738762041e88e17f28c",
+    "base_commit": "f67c4bb298759f9f2016f3f6a613d20022f3793f",
+    "variant_id": "c40778dd28894ebc",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00015170264659961793,
+    "score": 0.9239240229389278,
+    "base_search_seconds": 0.00015133804606480545,
+    "gain_vs_base_pct": -0.24091796101051166,
+    "best_research_before_seconds": 0.00015133804606480545,
+    "beats_best_research": false,
+    "change_kind": "lancement seul",
+    "changed_paths": [
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/8f8097de6798435a.patch",
+    "hypothesis": "The parent’s warp-per-output mapping is already valid. Reducing the launch from eight to four warps per CTA, while matching items_per_block to four outputs, may reduce idle-thread and small-tail overhead; the tradeoff is a larger CTA count for larger N.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Set block to 128 threads (four complete warps) and items_per_block to four so the existing one-warp-per-output indexing remains consistent; retain zero shared memory and the parent kernel unchanged."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792611855.2640154,
+    "measured_elapsed_seconds": 423.7972877025604,
+    "kernel_sha256": "fab8a650d5f2722598b4565e85cc9138d6a29904ad39355cdd467ba16f1222e9",
+    "launch": {
+      "block": 128,
+      "items_per_block": 4,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 5,
+    "id": "127df14b9f84416d",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792611772.3430047,
+    "elapsed_seconds": 340.87627696990967,
+    "commit": "ec09df7bf134aff4fcb9281986e682b9237ff2fc",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "feda3ac9fc739f7a",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0009695353840151268,
+    "score": 0.6552060251734817,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 47.37625089219445,
+    "best_research_before_seconds": 0.00015133804606480545,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/127df14b9f84416d.patch",
+    "hypothesis": "Keeping 128 output threads per CTA preserves the prior tile's CTA count, while staging 256 sources per phase should halve synchronization rounds over each source sweep. The 7,168-byte shared tile is modest; the effect on runtime remains to be measured.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configuration en blocs de 128 threads, un thread par sortie.",
+        "Chargement coopératif de tiles sources de 256 particules en mémoire partagée dynamique (7 168 octets).",
+        "Maintien des barrières avant lecture et avant réutilisation du tile; les threads de la dernière sortie restent dans les barrières.",
+        "Gestion des tails sources et sorties sans changer l'ordre ascendant des sources ni l'ordre des opérations de force."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792611906.3712015,
+    "measured_elapsed_seconds": 474.9044737815857,
+    "kernel_sha256": "b87783897e7a1b27a4ab55f9256ca90ae1aac617f97fe9a19b90a2ec8ff863d4",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 7168
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 6,
+    "id": "c623d142c61e4271",
+    "role": "T2",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792611855.276257,
+    "elapsed_seconds": 423.8095293045044,
+    "commit": "19a3d40146b087e64888327c1cc4ee153d72caee",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "b72e593d6e0e9d54",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00014788935243424016,
+    "score": 0.9256942225599143,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 91.9729673547491,
+    "best_research_before_seconds": 0.00015133804606480545,
+    "beats_best_research": true,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/c623d142c61e4271.patch",
+    "hypothesis": "The warp-per-output mapping has already produced correct measured candidates in the supplied observations. Using 16 warps per CTA instead of the previously described four-warps-per-CTA variant may reduce CTA scheduling overhead for larger N while preserving the same per-pair arithmetic and warp reduction. This launch configuration is a hypothesis and needs controller measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Assigned each warp one output particle; lanes accumulated interactions for source indices spaced by 32, skipping self-interaction and guarding the source-loop tail.",
+        "Reduced the three force components using warp shuffles and wrote the complete updated Particle from lane zero.",
+        "Set block to 512 threads (16 warps) and items_per_block to 16 to keep the launch mapping consistent."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612003.4153843,
+    "measured_elapsed_seconds": 571.9486565589905,
+    "kernel_sha256": "3d67d6362d372e02b0311bf96cf244fc33d01a6eb295d203473edda982324b41",
+    "launch": {
+      "block": 512,
+      "items_per_block": 16,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 7,
+    "id": "e13dcfc677534f32",
+    "role": "T3",
+    "parent_id": "a1a2a6f0f51445f0",
+    "depth": 2,
+    "created": 1792611906.3822417,
+    "elapsed_seconds": 474.91551399230957,
+    "commit": "88cb732c5a49a06c98d3bfc0fc7acefb3809f25a",
+    "base_commit": "803078a482b60f002987f3c8347f0039a5538219",
+    "variant_id": "b047e1b88c693c06",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0010577693637917102,
+    "score": 0.635272152003576,
+    "base_search_seconds": 0.0010544926042892486,
+    "gain_vs_base_pct": -0.3107427675768548,
+    "best_research_before_seconds": 0.00014788935243424016,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/e13dcfc677534f32.patch",
+    "hypothesis": "Keeping 128 output threads per CTA while staging 512 sources per phase should halve the synchronization rounds relative to the previously measured 256-source tile, while retaining ascending source order and the supplied force arithmetic. The 14,336-byte shared tile is bounded; whether fewer barriers outweigh the larger tile's resource cost needs measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Use a 512-record dynamic shared-memory source tile (14,336 bytes) while retaining 128 output threads per CTA.",
+        "Stage source records with a strided per-thread loop so tiles larger than the CTA are fully loaded; synchronize before use and before reusing the buffer.",
+        "Preserve source-tail handling, inactive-output participation in barriers, ascending j order, self-interaction skipping, and the existing force arithmetic."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612053.0753086,
+    "measured_elapsed_seconds": 621.608580827713,
+    "kernel_sha256": "f67ce163c2d40179b73c93128e996584b5b0e8118964ba644be37235160a5c3a",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 14336
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 8,
+    "id": "7f6db32f9b464521",
+    "role": "T2",
+    "parent_id": "8f8097de6798435a",
+    "depth": 3,
+    "created": 1792612003.4276583,
+    "elapsed_seconds": 571.9609305858612,
+    "commit": "2e3151cb9e75393128198e8915eca4a89fa40683",
+    "base_commit": "2abea6588f188e8f31f43738762041e88e17f28c",
+    "variant_id": "2225f097cef036b2",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00014929579725299265,
+    "score": 0.9250405366300142,
+    "base_search_seconds": 0.00015170264659961793,
+    "gain_vs_base_pct": 1.5865572556407415,
+    "best_research_before_seconds": 0.00014788935243424016,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/7f6db32f9b464521.patch",
+    "hypothesis": "Grouping four consecutive source terms per lane into each outer iteration should reduce loop-control overhead at larger N while preserving each lane's original source order, pair-force arithmetic, and warp reduction. The 16-warp/16-output launch is a previously measured valid configuration; this combined candidate still needs official validation and timing.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Group four successive source indices per lane in the main loop, using a scalar strided tail; accumulation order within each lane remains unchanged.",
+        "Keep self-interaction exclusion, complete Particle output updates, and full-warp reduction; skip source loops for invalid output warps.",
+        "Set block to 512 threads and items_per_block to 16, matching 16 warps to 16 output particles per CTA."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612226.3852823,
+    "measured_elapsed_seconds": 794.9185545444489,
+    "kernel_sha256": "1f7b6983d1c62244aa50f1e357e0cc9c8d66e324608ff162acf4b917cf28bd6f",
+    "launch": {
+      "block": 512,
+      "items_per_block": 16,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 9,
+    "id": "f50e21f64fbd4530",
+    "role": "T1",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792612025.4559803,
+    "elapsed_seconds": 593.9892525672913,
+    "commit": "596cd371ddb4984696e15809c938e1ed1e7fec97",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": null,
+    "status": "incorrect",
+    "reason": "Protected correctness checks failed",
+    "seconds": null,
+    "score": 0.0,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.00014788935243424016,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/f50e21f64fbd4530.patch",
+    "hypothesis": "A direct rsqrtf seed can form the reciprocal cube before a residual-based, first-order correction. This should reduce the serial multiply chain versus refining the reciprocal square root first, while keeping reciprocal-cube accuracy close to the refined path. Acceleration continues to depend on source mass only; the target-mass factor is canceled, and copying the input Particle preserves mass exactly. This performance and correctness hypothesis requires controller validation.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu",
+        "src/launch.json"
+      ],
+      "retained": [
+        "Compute the reciprocal cube directly from rsqrtf(distSq), then apply a first-order correction derived from the residual 1 - distSq * invDist^2 using FMA.",
+        "Retain self-interaction skipping, float32 softening, source-mass acceleration coefficient, exact mass copying, update semantics, single-kernel ABI, and existing launch settings."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612349.7596514,
+    "measured_elapsed_seconds": 918.2929236888885,
+    "kernel_sha256": "87d93bda2c052379842fa2cad431daadcff8f8791b749c661d909b26ef4b2533",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 10,
+    "id": "83e8ca4bbc4145e7",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792612053.087376,
+    "elapsed_seconds": 621.6206483840942,
+    "commit": "98ad9b864c9d85b5153718619462dd4eae8b3572",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "156d66d2e072ede3",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0009663466132583283,
+    "score": 0.6559498830430835,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 47.54932871383427,
+    "best_research_before_seconds": 0.00014788935243424016,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/83e8ca4bbc4145e7.patch",
+    "hypothesis": "With the 128-thread output CTA from prior T3 candidates, a 384-source shared tile should reduce synchronization rounds versus the best measured 256-source tile while using less shared memory than the slower measured 512-source tile. The force accumulation remains in ascending source order; the performance effect requires controller measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Use one output per thread in a 128-thread CTA and match items_per_block to that output span.",
+        "Stage up to 384 Particle records per phase in 10,752 bytes of dynamic shared memory, with each thread loading multiple records as needed.",
+        "Keep both synchronization points unconditional across the CTA, safely handle partial source and output tiles, and preserve ascending source order and the supplied force arithmetic."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612212.4890127,
+    "measured_elapsed_seconds": 781.0222849845886,
+    "kernel_sha256": "65f3ef549547b9feeda8c99d369265bfb1930f119c1ea38c680f75ea83b0585b",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 10752
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 11,
+    "id": "0543ac052dc04716",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792612212.5002897,
+    "elapsed_seconds": 781.0335619449615,
+    "commit": "c7d580e482857e319a96153348a20a4b1b156fed",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "e71ea2d661968d4b",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0009704230637369948,
+    "score": 0.6549992525167916,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 47.32807004625336,
+    "best_research_before_seconds": 0.00014788935243424016,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/0543ac052dc04716.patch",
+    "hypothesis": "A 448-record source tile uses 12,544 bytes of shared memory and, for N=16,384, reduces full source-tile synchronization rounds from 43 at the measured 384 tile to 37, while staying below the measured 512 tile's shared-memory footprint. Keeping 128 output threads preserves CTA parallelism and the ascending source accumulation order. This may amortize barriers better than 384 without the full cost of 512, but the partially occupied cooperative-load iteration and extra shared memory could erase that benefit; the controller must measure it.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Stage up to 448 source Particle records cooperatively in dynamic shared memory; each valid output thread consumes each staged source in ascending index order with the existing force arithmetic.",
+        "Use 128 threads and 128 output items per CTA, reserving 12,544 bytes of dynamic shared memory; handle source/output tails while ensuring all CTA threads reach both synchronization barriers."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612362.75607,
+    "measured_elapsed_seconds": 931.2893421649933,
+    "kernel_sha256": "14e91f4da3fbe46030ec59b7c9695653a41099f4a03cd8a2f995219916d78c75",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 12544
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 12,
+    "id": "914692762286487e",
+    "role": "T2",
+    "parent_id": "c6e77902a5e74242",
+    "depth": 2,
+    "created": 1792612226.3988354,
+    "elapsed_seconds": 794.9321076869965,
+    "commit": "7c358e6bebfe26447d456cd282f0e3bcb8572ad3",
+    "base_commit": "f67c4bb298759f9f2016f3f6a613d20022f3793f",
+    "variant_id": "c0bde3799be3f7c1",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00015897727506983752,
+    "score": 0.9205657190114697,
+    "base_search_seconds": 0.00015133804606480545,
+    "gain_vs_base_pct": -5.047791486458619,
+    "best_research_before_seconds": 0.00014788935243424016,
+    "beats_best_research": false,
+    "change_kind": "lancement seul",
+    "changed_paths": [
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/914692762286487e.patch",
+    "hypothesis": "Increasing to 32 warps per CTA may reduce CTA scheduling overhead compared with the current 8-warp configuration and the previously measured 16-warp candidate, while preserving the warp-per-output mapping and pair arithmetic. The larger CTA may also reduce occupancy, so the effect must be measured.",
+    "transformations": {
+      "files": [
+        "src/launch.json"
+      ],
+      "retained": [
+        "Set block to 1024 threads (32 warps) and items_per_block to 32 so each warp still maps to one output particle.",
+        "Kept shared_memory_bytes at 0 and did not change kernel arithmetic or summation order."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612313.5885007,
+    "measured_elapsed_seconds": 882.1217730045319,
+    "kernel_sha256": "fab8a650d5f2722598b4565e85cc9138d6a29904ad39355cdd467ba16f1222e9",
+    "launch": {
+      "block": 1024,
+      "items_per_block": 32,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 13,
+    "id": "e40943d49da94d90",
+    "role": "T2",
+    "parent_id": "c6e77902a5e74242",
+    "depth": 2,
+    "created": 1792612313.6010656,
+    "elapsed_seconds": 882.1343379020691,
+    "commit": "ed45fbaff36c66ea57ebea0435b850a134a266e8",
+    "base_commit": "f67c4bb298759f9f2016f3f6a613d20022f3793f",
+    "variant_id": "e0bab23a11d5ec24",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0001363666819378087,
+    "score": 0.9310847096811583,
+    "base_search_seconds": 0.00015133804606480545,
+    "gain_vs_base_pct": 9.892663818710702,
+    "best_research_before_seconds": 0.00014788935243424016,
+    "beats_best_research": true,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/e40943d49da94d90.patch",
+    "hypothesis": "A 16-warp CTA was the fastest measured warp-mapping configuration in the supplied history. Applying a two-iteration unroll hint at that launch size may reduce source-loop control overhead without changing the pair arithmetic or the per-lane order of accumulation; a prior four-iteration unroll candidate was slightly slower, so the effect remains to be measured.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Set block to 512 threads and items_per_block to 16 so each CTA maps 16 complete warps to 16 output particles.",
+        "Added a two-iteration unroll hint to the per-lane source loop, preserving its source stride, pair-force arithmetic, self-interaction check, and summation order."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612413.8912957,
+    "measured_elapsed_seconds": 982.424567937851,
+    "kernel_sha256": "a8ce2df3d5fc32f1fa6cd80ff7540e94e5ad923af02043583ed67d9224882544",
+    "launch": {
+      "block": 512,
+      "items_per_block": 16,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 14,
+    "id": "d129a2ab69114b6f",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792612362.7667696,
+    "elapsed_seconds": 931.3000419139862,
+    "commit": "bfd7a75d6602d2896c5e5ceb3727738394f1d081",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "2b14a2caab38e466",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0010043833436773433,
+    "score": 0.6471855121857368,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 45.484798226909575,
+    "best_research_before_seconds": 0.0001363666819378087,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/d129a2ab69114b6f.patch",
+    "hypothesis": "Using 256 output threads per CTA with the previously measured 384-source tile may increase source reuse per CTA versus a 128-output CTA and reduce the number of CTAs that reload each source tile. It keeps the ascending source accumulation order and uses 10,752 bytes of shared memory. Fewer CTAs may hurt occupancy, so the outcome needs controller measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Stage up to 384 Particle records per CTA in dynamic shared memory, reserving 384 * 28 = 10,752 bytes.",
+        "Configure 256 output threads per CTA so each loaded source tile is reused by up to 256 outputs.",
+        "Keep invalid output lanes active through cooperative loads and both CTA barriers; bound source-tail loads and calculations by the valid tile count.",
+        "Retain the original force formula, ascending source order, self-interaction skip, and per-output integration path."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612485.141039,
+    "measured_elapsed_seconds": 1053.6743111610413,
+    "kernel_sha256": "c8027fe052dd46ade3a3a86b0a9d015ef83c42e17c3f0a9c97ea496c5cc2fe32",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 10752
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 15,
+    "id": "1a75516fa2764876",
+    "role": "T2",
+    "parent_id": "c623d142c61e4271",
+    "depth": 2,
+    "created": 1792612413.903962,
+    "elapsed_seconds": 982.4372341632843,
+    "commit": "5558016fae17ae8a6ab273317c4f3752c72ff48f",
+    "base_commit": "19a3d40146b087e64888327c1cc4ee153d72caee",
+    "variant_id": "0cb1b0007e4d9116",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00016946789703984155,
+    "score": 0.9157655287738177,
+    "base_search_seconds": 0.00014788935243424016,
+    "gain_vs_base_pct": -14.591006215404455,
+    "best_research_before_seconds": 0.0001363666819378087,
+    "beats_best_research": false,
+    "change_kind": "lancement seul",
+    "changed_paths": [
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/1a75516fa2764876.patch",
+    "hypothesis": "A 24-warp CTA is a useful launch-geometry midpoint: it may reduce CTA count relative to 16 warps per CTA without the performance cost seen in the 32-warp candidate. The kernel derives output assignment from blockDim, so keeping items_per_block at 24 preserves one warp per output; performance and correctness still require controller measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json"
+      ],
+      "retained": [
+        "Set block to 768 threads and items_per_block to 24, maintaining one warp per output and consistent launch geometry.",
+        "Left the kernel source and shared-memory allocation unchanged to isolate CTA geometry."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612531.7353177,
+    "measured_elapsed_seconds": 1100.2685899734497,
+    "kernel_sha256": "3d67d6362d372e02b0311bf96cf244fc33d01a6eb295d203473edda982324b41",
+    "launch": {
+      "block": 768,
+      "items_per_block": 24,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 16,
+    "id": "46d61565c7ed487e",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792612485.154535,
+    "elapsed_seconds": 1053.6878073215485,
+    "commit": "ddf6fc4f58648ab33e48f4db2c163b38f21981f6",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "c5c779321608a65a",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.000962585380585037,
+    "score": 0.6568294554597268,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 47.75347821451127,
+    "best_research_before_seconds": 0.0001363666819378087,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/46d61565c7ed487e.patch",
+    "hypothesis": "A 512-record source tile lets each 128-output CTA reuse staged source data while reducing synchronization rounds for N=16,384 to 32, versus 37 for the prior 448 tile and 43 for the 384 tile. This uses 14,336 bytes of dynamic shared memory and preserves ascending source accumulation and the supplied force arithmetic. The larger tile may trade reduced barrier overhead for greater shared-memory pressure; its performance remains to be measured.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Stage source Particle records in dynamic shared memory in 512-record tiles; use cooperative strided loads and barriers before consumption and before reuse.",
+        "Keep one output per CTA thread, avoid early return for output-tail threads so all threads reach barriers, and guard partial source and output tiles.",
+        "Set the CTA output block to 128 and request 14,336 bytes of dynamic shared memory for the source tile."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612628.2776444,
+    "measured_elapsed_seconds": 1196.8109166622162,
+    "kernel_sha256": "9e5a65c082e96255038de68ec9f09bfa6dd2c356f31c35706a30820581e59935",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 14336
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 17,
+    "id": "30ed81897acb4b26",
+    "role": "T2",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792612531.7469373,
+    "elapsed_seconds": 1100.2802095413208,
+    "commit": "c74babf68caab82d626b8a75e2351636199b2c1a",
+    "base_commit": "2b1ef2e2f659e49cd5b3288a5550424bea60a3e5",
+    "variant_id": "12dd3c3671e59bc3",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00017139284406973717,
+    "score": 0.9148901618059222,
+    "base_search_seconds": 0.0018423913165687353,
+    "gain_vs_base_pct": 90.69726162252334,
+    "best_research_before_seconds": 0.0001363666819378087,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/30ed81897acb4b26.patch",
+    "hypothesis": "The supplied kernel assigns one thread to each output and serializes its source-particle sum. Assigning a full warp to each output parallelizes that sum and may improve utilization, especially at larger N; the changed reduction order and less-coalesced AoS source reads may offset the gain and require controller validation and measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Assign one warp to each output particle, with lanes traversing distinct source indices at a stride of 32.",
+        "Reduce the three accumulated force components with warp shuffle operations; lane 0 performs integration and writes the full output particle.",
+        "Configure 16 warps per block and 16 output particles per block."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612638.3883572,
+    "measured_elapsed_seconds": 1206.9216294288635,
+    "kernel_sha256": "fc1acc95cc1d8d7c4f5498ad4cc6ce8aa139dc9a6e91daaa4e575259fa1a9ed4",
+    "launch": {
+      "block": 512,
+      "items_per_block": 16,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 18,
+    "id": "3a770eb0bff44bf3",
+    "role": "T2",
+    "parent_id": "30ed81897acb4b26",
+    "depth": 2,
+    "created": 1792612638.4001615,
+    "elapsed_seconds": 1206.9334337711334,
+    "commit": "9cc952609f2732e7a743d3b07e3bd21d5052bbb9",
+    "base_commit": "c74babf68caab82d626b8a75e2351636199b2c1a",
+    "variant_id": "994a242723ef0ed0",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00017779205399284063,
+    "score": 0.9119921208224689,
+    "base_search_seconds": 0.00017139284406973717,
+    "gain_vs_base_pct": -3.733650583742998,
+    "best_research_before_seconds": 0.0001363666819378087,
+    "beats_best_research": false,
+    "change_kind": "lancement seul",
+    "changed_paths": [
+      "src/launch.json"
+    ],
+    "patch": "diffs/774157/3a770eb0bff44bf3.patch",
+    "hypothesis": "Reducing the CTA from 16 warps to 12 may ease per-CTA resource pressure and provide finer scheduling while retaining one warp per output. This tests launch granularity without changing pair arithmetic or reduction order.",
+    "transformations": {
+      "files": [
+        "src/launch.json"
+      ],
+      "retained": [
+        "Changed launch geometry from block=512 and items_per_block=16 to block=384 and items_per_block=12; shared memory remains zero. The kernel source and its per-output warp reduction are unchanged."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792612728.9957886,
+    "measured_elapsed_seconds": 1297.5290608406067,
+    "kernel_sha256": "fc1acc95cc1d8d7c4f5498ad4cc6ce8aa139dc9a6e91daaa4e575259fa1a9ed4",
+    "launch": {
+      "block": 384,
+      "items_per_block": 12,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 19,
+    "id": "5aa175847b2145d7",
+    "role": "G",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792612729.018109,
+    "elapsed_seconds": 1297.5513813495636,
+    "commit": "5ccc99221db417330f56c5a7e7c16b72a0c8016b",
+    "base_commit": "ed45fbaff36c66ea57ebea0435b850a134a266e8",
+    "variant_id": "50e73c61acbe8f6d",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00011918756910210916,
+    "score": 0.9392389620561459,
+    "base_search_seconds": 0.0001363666819378087,
+    "gain_vs_base_pct": 12.597734719052733,
+    "best_research_before_seconds": 0.0001363666819378087,
+    "beats_best_research": true,
+    "change_kind": "kernel seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "patch": "diffs/774157/5aa175847b2145d7.patch",
+    "hypothesis": "Combining the faster measured warp-per-output mapping with the individually validated reciprocal-square-root refinement may reduce the cost of each lane's source interactions. The combined program is unmeasured; the extra refinement arithmetic could also offset the savings.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Retained T2's one-warp-per-output source partition, warp reductions, two-iteration unroll hint, and compatible launch configuration.",
+        "Integrated T1's direct rsqrtf, one Newton refinement, reciprocal-cube multiplication, target-mass-scaled coefficient, and force division after reduction.",
+        "Preserved self-interaction skipping, float32 softening, velocity-then-position update order, exact mass copy, and the single-kernel ABI."
+      ]
+    },
+    "source_ids": [
+      "943df5f6be5e4748",
+      "e40943d49da94d90"
+    ],
+    "source_commits": [
+      "64709b9626c196c665c59656e49c858354af9b39",
+      "ed45fbaff36c66ea57ebea0435b850a134a266e8"
+    ],
+    "evaluated_at": null,
+    "measured_elapsed_seconds": null,
+    "kernel_sha256": "25d3dadbc1f11a6b15595e74b200c27cbdbe18bd157e1bbd2e00a97ba5dd6024",
+    "launch": {
+      "block": 512,
+      "items_per_block": 16,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "774157",
+    "ordinal": 20,
+    "id": "83808cc6f6df42b9",
+    "role": "G",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792612809.6633742,
+    "elapsed_seconds": 1378.19664645195,
+    "commit": "d03b3c48cb44ae96743978e193917906182b009d",
+    "base_commit": "5ccc99221db417330f56c5a7e7c16b72a0c8016b",
+    "variant_id": "50e73c61acbe8f6d",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00011936983009813785,
+    "score": 0.9391517003479487,
+    "base_search_seconds": null,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.0001363666819378087,
+    "beats_best_research": true,
+    "change_kind": "copie exacte",
+    "changed_paths": [],
+    "patch": "diffs/774157/83808cc6f6df42b9.patch",
+    "hypothesis": "Retaining the measured warp-per-output candidate is preferable to integrating the shared-memory candidate: both passed correctness, but the shared-memory version was about 8.1× slower in the supplied search measurements.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Preserve the parent’s warp-per-output mapping, refined reciprocal-square-root arithmetic, reductions, and launch configuration unchanged.",
+        "Exclude the shared-memory staging and launch changes from 46d61565c7ed487e because its measured mean was substantially slower."
+      ]
+    },
+    "source_ids": [
+      "5aa175847b2145d7"
+    ],
+    "source_commits": [
+      "5ccc99221db417330f56c5a7e7c16b72a0c8016b"
+    ],
+    "evaluated_at": null,
+    "measured_elapsed_seconds": null,
+    "kernel_sha256": "25d3dadbc1f11a6b15595e74b200c27cbdbe18bd157e1bbd2e00a97ba5dd6024",
+    "launch": {
+      "block": 512,
+      "items_per_block": 16,
+      "shared_memory_bytes": 0
+    }
+  }
+]

@@ -1,0 +1,159 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "{\n  \"block\": 128,\n  \"items_per_block\": 128,\n  \"shared_memory_bytes\": 2048\n}\n",
+        "path": "src/launch.json"
+      },
+      {
+        "content": "// Structure \"Array of Structures\" (AoS): each thread owns one target particle.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Only these source fields are needed to compute the force.\nstruct SourceParticle {\n    float x, y, z;\n    float mass;\n};\n\n// N-body step with one target per thread and CTA-level source tiling.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int i = blockIdx.x * blockDim.x + threadIdx.x;\n    const bool active = i < n;\n\n    Particle target;\n    if (active) {\n        target = in[i];\n    }\n\n    extern __shared__ SourceParticle source_tile[];\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int base = 0; base < n; base += blockDim.x) {\n        const int source_index = base + threadIdx.x;\n        int tile_count = n - base;\n        if (tile_count > blockDim.x) {\n            tile_count = blockDim.x;\n        }\n\n        if (source_index < n) {\n            SourceParticle source;\n            source.x = in[source_index].x;\n            source.y = in[source_index].y;\n            source.z = in[source_index].z;\n            source.mass = in[source_index].mass;\n            source_tile[threadIdx.x] = source;\n        }\n        __syncthreads();\n\n        if (active) {\n            for (int offset = 0; offset < tile_count; ++offset) {\n                const int j = base + offset;\n                if (i == j) continue;\n\n                const SourceParticle source = source_tile[offset];\n                const float dx = source.x - target.x;\n                const float dy = source.y - target.y;\n                const float dz = source.z - target.z;\n\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * target.mass * source.mass) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n    }\n\n    if (!active) return;\n\n    Particle p = target;\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "At the measured best 128-thread CTA/tile setting, each source is staged as a full 28-byte Particle even though force calculation uses only x, y, z, and mass. Staging a 16-byte source record should reduce per-block shared memory from 3,584 to 2,048 bytes and avoid staging unused velocity fields. The CTA mapping, source order, and arithmetic remain fixed; any performance benefit must be established by the official measurements.",
+    "memory_lessons": [
+      {
+        "applicability": "For this kernel, test source-record representation separately from tile-size changes while preserving the measured 128-thread mapping.",
+        "claim": "The 128-thread tile measured 0.00096318 seconds, faster than the measured 96-, 192-, 256-, and 512-thread tiles. This motivates holding tile size fixed for a contrasting staging-representation experiment.",
+        "evidence_ids": [
+          "31ec0039ab264db0",
+          "7dadbb46db0442ad",
+          "1d5d63a7720744f1",
+          "ba94d65d60514bb0",
+          "b076438362074b85"
+        ],
+        "next_experiment": "Measure the compact x/y/z/mass source tile against the full Particle tile under the official protocol."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "The proposal keeps one target per thread and preserves source interaction order and the partial-tile/output bounds. It reduces shared-memory allocation relative to the valid 128-thread parent; correctness and performance remain for the controller to evaluate.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Keep block and items_per_block at 128, with exactly one target per thread and the existing source-tile iteration and barriers.",
+      "Stage only source x, y, z, and mass in a compact four-float record, preserving source interaction order and force arithmetic.",
+      "Set dynamic shared-memory allocation to 2,048 bytes for 128 compact source records; retain partial-tile and output-bound handling."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "f132b88e63b644d8a695b7c101a0fa91",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "ffaa705e61c8340cdb345dd1d094222308f454a0a02052a6d9989d67d057e199",
+  "session_id": "bd4eb8bb1d38489bbad5765e53cb020c",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "12923e1b48d007c5f4a047da47c4cc2b0af8f4d899ea5ae5049bd2666fe613d6",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 26368,
+        "input_tokens": 28033,
+        "output_tokens": 6024,
+        "reasoning_output_tokens": 4550
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "312153914191ed4adba7f5c132d54f0a335d7d445b0797c190a6ee9712c6ab2c",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T1",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "bd91ae4cb4c84315-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "31ec0039ab264db0",
+            "7dadbb46db0442ad",
+            "1d5d63a7720744f1",
+            "ba94d65d60514bb0",
+            "b076438362074b85"
+          ],
+          "status": "applied",
+          "summary": "Used the measured tile-size results to choose a fixed-mapping experiment that changes only the staged source representation."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The change uses the already-tested 128-thread CTA and reduces its shared-memory allocation; it does not depend on an unverified architecture feature."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The proposal uses the existing CUDA shared-memory and barrier pattern and introduces no version-dependent API."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "31ec0039ab264db0",
+            "7dadbb46db0442ad",
+            "1d5d63a7720744f1",
+            "ba94d65d60514bb0",
+            "b076438362074b85"
+          ],
+          "status": "applied",
+          "summary": "Compared the measured, correct tile candidates to select the experiment; no performance gain is claimed before controller evaluation."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "f132b88e63b644d8a695b7c101a0fa91",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "ffaa705e61c8340cdb345dd1d094222308f454a0a02052a6d9989d67d057e199",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "bd4eb8bb1d38489bbad5765e53cb020c"
+    },
+    "observed_tokens": 34057,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 34057,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

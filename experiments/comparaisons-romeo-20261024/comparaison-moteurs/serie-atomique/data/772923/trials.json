@@ -1,0 +1,463 @@
+[
+  {
+    "id": "79f075cbacca441f",
+    "role": "T1",
+    "state": "completed",
+    "mission": {
+      "base_commit": "310402923c70833f271de7be978960f1f070b0f5",
+      "budget_phase": "search",
+      "delegation_parent": "R/T1",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Each destination thread currently rereads source-particle fields from global memory throughout its serial scan. Cooperatively loading each 256-particle source tile once per block and reusing it across destination threads should reduce repeated global loads while preserving ascending source order and the existing force arithmetic.",
+      "id": "79f075cbacca441f",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T1",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Added a thread-per-output kernel that cooperatively stages up to 256 source particles per tile in shared memory and reuses the tile across destination threads.",
+          "Kept all threads participating in tile barriers, including output-tail threads; source tails use a bounded tile count and self-interactions are skipped.",
+          "Retained the compatible 256/256 launch settings and unchanged serial accumulation order; made no extra launches or host-side changes."
+        ]
+      },
+      "tree_id": "e1:T1",
+      "trial_id": "01M5MASJ3FC97JYCC2HJAGZS5M",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/worktrees/79f075cbacca441f"
+    },
+    "result": {
+      "binary_sha256": "96ce93cac8a60f80fef1405fa3ad76bf2be6f5ead26fe3ef54238c3cd142a58a",
+      "cache_key": "c3f89ba362bb39cb4540570515bb34132e0593adffd7024f10e93c5f88212d0c",
+      "commit": "29f4d3c9b71ffded2740f5bba248d00b1fb505d3",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/79f075cbacca441f/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/79f075cbacca441f/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/79f075cbacca441f/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/79f075cbacca441f/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/79f075cbacca441f/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.001001336103643634,
+      "reason": "",
+      "score": 0.6493745062056236,
+      "status": "valid",
+      "times": [
+        0.0010012158157968506,
+        0.001001382282665675,
+        0.0010014102124683763
+      ],
+      "tree_hash": "7e8967d9641ae832f6951a86df2946bbce9f3cef"
+    },
+    "created": 1792757516.399433
+  },
+  {
+    "id": "71228eb5314942d5",
+    "role": "T2",
+    "state": "completed",
+    "mission": {
+      "base_commit": "310402923c70833f271de7be978960f1f070b0f5",
+      "budget_phase": "search",
+      "delegation_parent": "R/T2",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Assigning one 32-lane warp to each output particle parallelizes the source scan and reduces the three force components with warp shuffles. With 256 threads per block, items_per_block=8 matches the eight output-owning warps. This may shorten the serial source traversal for the larger cases; the tree reduction changes floating-point summation order, so correctness must be checked before interpreting timing.",
+      "id": "71228eb5314942d5",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T2",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/launch.json",
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Replaced one-thread-per-output serial source traversal with one 32-lane warp per output; each lane accumulates a strided source subset and the warp reduces force components using __shfl_down_sync.",
+          "Configured 256 threads and 8 output items per block, matching one output per warp; guarded output/source tails, skipped self-interactions, and restricted writes to lane zero while copying the original particle mass."
+        ]
+      },
+      "tree_id": "e1:T2",
+      "trial_id": "01M5MASJ4C0WHSAVYFE03HEY4Z",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/worktrees/71228eb5314942d5"
+    },
+    "result": {
+      "binary_sha256": "42b34264ffd215877bca65968c62aee5f5bac71cb2c62e0ccbcb58676913f25a",
+      "cache_key": "92555943803d46010c1797261f44866a76b2c2b5a454eeb3762fe39b1b965f50",
+      "commit": "35ce6c0e07e7abd3692effa08c0c444368e02456",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/71228eb5314942d5/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/71228eb5314942d5/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/71228eb5314942d5/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/71228eb5314942d5/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/71228eb5314942d5/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.00016558156352268372,
+      "reason": "",
+      "score": 0.9180330671858123,
+      "status": "valid",
+      "times": [
+        0.00016608747362986136,
+        0.00016542147929568145,
+        0.00016523573764250837
+      ],
+      "tree_hash": "7906edacdc26a3648a6e0dfd3ccfc2f6105f6a6e"
+    },
+    "created": 1792757516.4291127
+  },
+  {
+    "id": "6c186c00ce3d49e5",
+    "role": "T3",
+    "state": "completed",
+    "mission": {
+      "base_commit": "310402923c70833f271de7be978960f1f070b0f5",
+      "budget_phase": "search",
+      "delegation_parent": "R/T3",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Remplacer sqrtf puis la division par distSq * dist par rsqrtf(distSq) et trois multiplications peut réduire le coût mathématique par interaction sans activer fast math global. La cancellation de la masse cible est volontairement omise : avec des masses float32 extrêmes, elle peut changer les débordements, sous-débordements et arrondis de la voie actuelle.",
+      "id": "6c186c00ce3d49e5",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T3",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Utiliser rsqrtf(distSq), puis invDist * invDist * invDist, à la place de sqrtf et de la division par distSq * dist.",
+          "Conserver les multiplications par les deux masses, la division par la masse cible après accumulation, l'ordre de boucle et l'intégration inchangés.",
+          "Ne pas activer fast math global ni spécialiser les tailles ou les entrées."
+        ]
+      },
+      "tree_id": "e1:T3",
+      "trial_id": "01M5MASJ56W1D7JH9ZV2YDCVRE",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/worktrees/6c186c00ce3d49e5"
+    },
+    "result": {
+      "binary_sha256": "bb88c858853aa62fb38a730175c63c182668823823083315b638cb63e1296f98",
+      "cache_key": "e7153a6f33677107e8518e5aaae6e890e544d0514bb799791ce457b84b6bfda3",
+      "commit": "86ed7d0463d1d855e54cb7e1add39ec47417e86b",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/6c186c00ce3d49e5/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/6c186c00ce3d49e5/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/6c186c00ce3d49e5/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/6c186c00ce3d49e5/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/6c186c00ce3d49e5/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0010090199994766313,
+      "reason": "",
+      "score": 0.647632003802246,
+      "status": "valid",
+      "times": [
+        0.0010078226862223303,
+        0.0010113388251240672,
+        0.0010078984870834965
+      ],
+      "tree_hash": "d271ea080524d2e9d9de63ee5b8e6cc904f9c9a1"
+    },
+    "created": 1792757516.4545486
+  },
+  {
+    "id": "d653312aaffb40d9",
+    "role": "T1",
+    "state": "completed",
+    "mission": {
+      "base_commit": "310402923c70833f271de7be978960f1f070b0f5",
+      "budget_phase": "search",
+      "delegation_parent": "R/T1",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "With 512 outputs per block, each cooperatively loaded source tile is reused across twice as many destination threads as with the supplied successful 256-thread tiling experiment, reducing aggregate global source loads. The larger block and 14 KiB shared-memory allocation may affect occupancy, so the net performance effect requires official measurement.",
+      "id": "d653312aaffb40d9",
+      "ordinal": 2,
+      "parent_id": null,
+      "role": "T1",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/launch.json",
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Use one thread for each output particle, retaining the destination particle and force accumulators locally.",
+          "Cooperatively stage each source tile of blockDim.x particles in dynamic shared memory; synchronize before consumption and before the tile is overwritten.",
+          "Process valid sources in ascending index order, skip self-interaction, guard source and output tails, and ensure inactive output lanes still participate in barriers.",
+          "Set block and items_per_block to 512 and dynamic shared memory to 512 * sizeof(Particle), or 14336 bytes."
+        ]
+      },
+      "tree_id": "e1:T1",
+      "trial_id": "01M5MAZV2XBCVD0RXZATGGG5FJ",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/worktrees/d653312aaffb40d9"
+    },
+    "result": {
+      "binary_sha256": "354eca5d77687f017b34dfcfe89e534b530d4b34d07ef09a4ba7e02c2558e6c1",
+      "cache_key": "e25d340495b391ea718f322d43fc7e2d4594cd3757e88e140a3f98aaa177716c",
+      "commit": "bcb29d4390e943e203fa063b16298fdf7d2fb31f",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/d653312aaffb40d9/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/d653312aaffb40d9/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/d653312aaffb40d9/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/d653312aaffb40d9/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/d653312aaffb40d9/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0010880713869815294,
+      "reason": "",
+      "score": 0.6302336652423902,
+      "status": "valid",
+      "times": [
+        0.0010879557660119108,
+        0.0010881447662289797,
+        0.001088113628703698
+      ],
+      "tree_hash": "f998a719fea5d74d40b10c41c9e3149adc6d0c9d"
+    },
+    "created": 1792757722.205547
+  },
+  {
+    "id": "cd568c71cce6434b",
+    "role": "T2",
+    "state": "completed",
+    "mission": {
+      "base_commit": "35ce6c0e07e7abd3692effa08c0c444368e02456",
+      "budget_phase": "search",
+      "delegation_parent": "R/T2",
+      "depth": 2,
+      "epoch": 1,
+      "hypothesis": "Using 16 output warps per 512-thread block instead of 8 per 256-thread block may reduce block-scheduling overhead while retaining one 32-lane warp per output and the validated reduction logic.",
+      "id": "cd568c71cce6434b",
+      "ordinal": 2,
+      "parent_id": "71228eb5314942d5",
+      "role": "T2",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/launch.json"
+        ],
+        "retained": [
+          "Set block to 512 threads and items_per_block to 16, matching 16 output-owning warps per block."
+        ]
+      },
+      "tree_id": "e1:T2",
+      "trial_id": "01M5MAZV3SDW6F4E33XAZ2GS0Y",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/worktrees/cd568c71cce6434b"
+    },
+    "result": {
+      "binary_sha256": "9bdf43c0595032e0583c52f27e7565d4b8c44dee1c69a63175e3eee5bf8d6c57",
+      "cache_key": "40e6e9d7aa17412b1735c88220359c1213d29b9d7f84085e48a794fa830aa15a",
+      "commit": "e3bedd3feb5f7ad928502ad5bd17b4b31766f97e",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/cd568c71cce6434b/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/cd568c71cce6434b/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/cd568c71cce6434b/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/cd568c71cce6434b/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/cd568c71cce6434b/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0001598452242873165,
+      "reason": "",
+      "score": 0.9206473637107884,
+      "status": "valid",
+      "times": [
+        0.0001598131306107521,
+        0.00015944559278480584,
+        0.00016027694946639152
+      ],
+      "tree_hash": "114e428c9e3d982c1c4e6f40e8b785458a9ab273"
+    },
+    "created": 1792757722.2339778
+  },
+  {
+    "id": "b9ffa352d1be4325",
+    "role": "T3",
+    "state": "completed",
+    "mission": {
+      "base_commit": "310402923c70833f271de7be978960f1f070b0f5",
+      "budget_phase": "search",
+      "delegation_parent": "R/T3",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Keep explicit rsqrtf-based inverse-distance arithmetic, adding one Newton refinement step to its estimate, while restoring target-mass multiplication and final division. The prior globally cancelled mass path failed one protected case at N=16384; preserving those operations should avoid that risk while the refined reciprocal square root may improve numerical agreement. The extra refinement work may offset some speedup, so this remains a correctness-gated performance hypothesis.",
+      "id": "b9ffa352d1be4325",
+      "ordinal": 2,
+      "parent_id": null,
+      "role": "T3",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Replace the direct rsqrtf estimate with one guarded Newton refinement step using fmaf; retain the positive softening term and self-interaction skip.",
+          "Restore target.mass multiplication in each force scale and divide accumulated force by target.mass after the source loop."
+        ]
+      },
+      "tree_id": "e1:T3",
+      "trial_id": "01M5MAZV4NXPY46PCFHC59B4CY",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/worktrees/b9ffa352d1be4325"
+    },
+    "result": {
+      "binary_sha256": "55b69cb1934c06cfdb0c1b99e50f1d519e83294cd6a5a63ff37d66e929010071",
+      "cache_key": "62b0d6c22812b5da6148d7c5117aa9f16de2d3fdebc2695bc0147949d92b09b8",
+      "commit": "92c2c3d1d66486cc9acf607109ebbb89e29c14a3",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/b9ffa352d1be4325/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/b9ffa352d1be4325/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/b9ffa352d1be4325/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/b9ffa352d1be4325/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/b9ffa352d1be4325/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0010916023088098487,
+      "reason": "",
+      "score": 0.6294783315340758,
+      "status": "valid",
+      "times": [
+        0.0010936656652663261,
+        0.0010877886184714207,
+        0.0010933526426917992
+      ],
+      "tree_hash": "e61fffe64104b5b94d0b9387e0dcfff70467b778"
+    },
+    "created": 1792757722.2616444
+  },
+  {
+    "id": "ec2a1c1b82fc4991",
+    "role": "G",
+    "state": "completed",
+    "mission": {
+      "base_commit": "e3bedd3feb5f7ad928502ad5bd17b4b31766f97e",
+      "budget_phase": "postprocess",
+      "delegation_parent": "R/G",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Keeping the faster warp-per-output reduction while staging 512 source particles per block may let its 16 output warps reuse source data and reduce redundant global reads. Shared-memory and barrier overhead could offset that gain; the controller must measure this integrated candidate against the faster input.",
+      "id": "ec2a1c1b82fc4991",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "G",
+      "source_commits": [
+        "29f4d3c9b71ffded2740f5bba248d00b1fb505d3",
+        "e3bedd3feb5f7ad928502ad5bd17b4b31766f97e"
+      ],
+      "sources": [
+        "79f075cbacca441f",
+        "cd568c71cce6434b"
+      ],
+      "transformations": {
+        "files": [
+          "src/launch.json",
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Retained T2's 512-thread, 16-warp-per-block output ownership, per-lane force accumulation, warp reduction, and launch mapping.",
+          "Adapted T1's source staging into a static 512-particle shared-memory tile reused by the 16 output warps in each block; all threads participate in tile barriers, including inactive output warps.",
+          "Preserved T2's per-lane source ordering and arithmetic while handling partial source tiles and output tails."
+        ]
+      },
+      "tree_id": "e1:G-merge-1-1",
+      "trial_id": "01M5MBD48MCQPBJ0HZYW1VEJZS",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/worktrees/ec2a1c1b82fc4991"
+    },
+    "result": {
+      "binary_sha256": "bb3e6089e691221055277c81a3d64f06a93eed1a97a30f7ee9ebe30dc6034165",
+      "cache_key": "893bb9f3b0d78d1ef7dc65a9a4208b522846250bcca1f8fc4ff802d581090a6f",
+      "commit": "a068102f15be841596e16487f3d1ac731f56b6f5",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/ec2a1c1b82fc4991/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/ec2a1c1b82fc4991/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/ec2a1c1b82fc4991/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/ec2a1c1b82fc4991/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/ec2a1c1b82fc4991/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.00012438000260298044,
+      "reason": "",
+      "score": 0.9371469118850769,
+      "status": "valid",
+      "times": [
+        0.00012417709279342616,
+        0.00012440488109496028,
+        0.00012455803392055485
+      ],
+      "tree_hash": "9c001ad54a768c5c405352b099a3746e2431c152"
+    },
+    "created": 1792758157.5891914
+  },
+  {
+    "id": "63513b28c5484e1e",
+    "role": "G",
+    "state": "completed",
+    "mission": {
+      "base_commit": "a068102f15be841596e16487f3d1ac731f56b6f5",
+      "budget_phase": "postprocess",
+      "delegation_parent": "R/G",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Keeping the measured warp-per-output kernel and shared-source tiling while using T3's rsqrtf-based inverse-distance calculation may reduce arithmetic cost without changing launch mapping or source accumulation order. The integrated program is unmeasured and needs independent correctness and timing confirmation.",
+      "id": "63513b28c5484e1e",
+      "ordinal": 2,
+      "parent_id": null,
+      "role": "G",
+      "source_commits": [
+        "a068102f15be841596e16487f3d1ac731f56b6f5",
+        "86ed7d0463d1d855e54cb7e1add39ec47417e86b"
+      ],
+      "sources": [
+        "ec2a1c1b82fc4991",
+        "6c186c00ce3d49e5"
+      ],
+      "transformations": {
+        "files": [
+          "src/launch.json",
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Retained G's warp-per-output mapping, shared-memory source tiling, launch settings, and warp reduction.",
+          "Applied T3's explicit rsqrtf(distSq) and inverse-distance cubing to the interaction coefficient while retaining both masses, target-mass division, and the integration path.",
+          "Kept the source-tile and per-lane traversal structure unchanged; the combined candidate has not yet been measured."
+        ]
+      },
+      "tree_id": "e1:G-final",
+      "trial_id": "01M5MBH1MSWAWANG5TZBC2ZS2R",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/worktrees/63513b28c5484e1e"
+    },
+    "result": {
+      "binary_sha256": "00350f846a25cb18cb44161be8d9c363a70eaa58898dfc2b88d1d41d594fdddb",
+      "cache_key": "716207df5a0c9280f46f6eb946ad389cb46a6dfadfdc0d750865e2121ac4f142",
+      "commit": "ce878ad4627ad5ab02b91972b8e284fab6b512fb",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/63513b28c5484e1e/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/63513b28c5484e1e/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/63513b28c5484e1e/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/63513b28c5484e1e/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-32bae04219c44d02be847a8dc9e8a555/results-780687/cuda-nbody/logs/e1/63513b28c5484e1e/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 8.215307024082035e-05,
+      "reason": "",
+      "score": 0.957580319721037,
+      "status": "valid",
+      "times": [
+        8.299613772782489e-05,
+        8.1754535576677e-05,
+        8.170853741795916e-05
+      ],
+      "tree_hash": "ef109bb0dc20cb2635087c3ca86b944553385d4b"
+    },
+    "created": 1792758285.9775493
+  }
+]

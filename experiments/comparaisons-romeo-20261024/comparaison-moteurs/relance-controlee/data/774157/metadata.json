@@ -1,0 +1,994 @@
+{
+  "config": {
+    "backend": "codex",
+    "binary_tree": {
+      "enabled": false
+    },
+    "budget": {
+      "confirmation_seconds": 120,
+      "confirmation_slots": 3,
+      "generation_seconds": 600,
+      "infrastructure_retries": 0,
+      "max_depth": 0,
+      "max_workers": 1,
+      "mission_tokens": null,
+      "search_slots": null,
+      "tokens": null,
+      "wall_seconds": 1800
+    },
+    "codex": {
+      "executable": "codex",
+      "mailbox_dir": "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/mailbox",
+      "model": "gpt-6-luna",
+      "reasoning_effort": "max",
+      "session_id": "b97d411eca2740e582407b4221bd55e6",
+      "transport": "codex-mailbox"
+    },
+    "compiler": {
+      "flavor": "gcc-compatible",
+      "path": "/usr/bin/gcc",
+      "sha256": "f7e1e7952e6aa5f31a79366a8dcdd751a150ed65e949429d527e933b5e7cc028"
+    },
+    "completion": {
+      "confirm_final_g": true,
+      "policy": "finish-started",
+      "postprocess_tokens": null,
+      "reserve_policy": "adaptive",
+      "token_policy": "observe-only"
+    },
+    "forest": {
+      "conversation": "persistent",
+      "integration": "pairwise",
+      "policy": "mother",
+      "statement": "Optimize the supplied one-step gravitational N-body CUDA kernel for one NVIDIA GH200\non ROMEO ARM/aarch64. The only allocation used by official measurements is one GPU, four CPU cores.\nDevice-only C++17 is compiled with NVRTC CUDA 12.6.3, native compute capability from that GPU;\nno global fast-math option. You may use supported CUDA device intrinsics with correct outputs.\nPreserve the AoS Particle layout: seven float32 x,y,z,vx,vy,vz,mass (28 bytes).\nPreserve entry extern \"C\" __global__ void nbody_step_naive(const Particle*,Particle*,int,float).\nThe input buffer is read-only. Output one complete updated state per particle.\nThe supplied physics uses G=1, float32 softening 0.001, updated velocity then updated position.\nAll sizes, positive varying masses, nonzero velocities, coincident positions, zero/negative dt must work.\nAll output values are checked, not just the printed first particle. Nonfinite outputs are invalid.\nGPU original-reference comparison: atol 5e-5, rtol 2e-4; masses must remain exact.\nAn independent FP64 CPU oracle validates the reference, all small rows and 32 distributed large rows.\nSearch and independent confirmation use different input data. No benchmark-specific constants or input detection.\nThe sole primary objective is the geometric mean of CUDA-event kernel times for N=4096,8192,16384.\nCompilation, transfers and process startup are excluded. Each size has 10 warmups and 100 timed launches.\nSearch evaluates three independent timing repeats; final confirmation uses five fresh repeats with alternated candidates.\nCorrectness also includes N=1,2,31,127,257,4095 and extreme positive mass for a single isolated particle.\nOnly edit src/nbody_kernel.cu and src/launch.json. Additional self-contained device helpers may go inside the kernel file.\nThe trusted host harness launches exactly this one kernel. Host code, extra kernels requiring extra launches,\nhost preprocessing and new host buffers are outside this interface. Choose any valid device implementation yourself.\nlaunch.json must contain exactly block (1..1024), items_per_block (1..1048576), shared_memory_bytes (0..49152).\nThe host uses grid.x=ceil(N/items_per_block), block.x=block, other dimensions=1.\nThose settings allow any correct per-block ownership scheme; they are not a performance recommendation.\nOfficial docs and the user's existing ROMEO MCP are available. Consult relevant technical references and actual\ntarget facts when useful. Never request an additional allocation or modify the protected evaluator, oracle or timing.\nMother chooses any useful N complementary research objectives from the actual problem and code.\nThe controller admits individual trials and serializes GPU measurements to avoid interference. All N research trees\nstart concurrently and each continues after its own measured feedback without waiting for another tree's generation.\nAt closure the same Mother conversation assembles the source programs in measured pairs;\nresearch is permanently closed and no further models/trees may be launched. Final G is independently confirmed.\nOriginal user source, supplied as data:\n#include <cstdio>\n#include <cstdlib>\n#include <cmath>\n#include <cuda_runtime.h>\n\n// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\n__global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale\n    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue; // Divergence de branche inutile dans la boucle\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)\n\n        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n\nint main() {\n    const int N = 4096;\n    const float dt = 0.01f;\n    const size_t bytes = N * sizeof(Particle);\n\n    // Allocation CPU\n    Particle* h_particles = (Particle*)malloc(bytes);\n    for (int i = 0; i < N; i++) {\n        h_particles[i].x = (float)(rand() % 1000) / 100.0f;\n        h_particles[i].y = (float)(rand() % 1000) / 100.0f;\n        h_particles[i].z = (float)(rand() % 1000) / 100.0f;\n        h_particles[i].vx = 0.0f;\n        h_particles[i].vy = 0.0f;\n        h_particles[i].vz = 0.0f;\n        h_particles[i].mass = 1.0f + (float)(rand() % 100) / 10.0f;\n    }\n\n    // Allocation GPU\n    Particle *d_in, *d_out;\n    cudaMalloc(&d_in, bytes);\n    cudaMalloc(&d_out, bytes);\n\n    cudaMemcpy(d_in, h_particles, bytes, cudaMemcpyHostToDevice);\n\n    // Configuration d'exécution simple\n    int threadsPerBlock = 256;\n    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;\n\n    printf(\"Lancement du kernel N-Body naif pour %d particules...\\n\", N);\n    nbody_step_naive<<<blocksPerGrid, threadsPerBlock>>>(d_in, d_out, N, dt);\n    cudaDeviceSynchronize();\n\n    // Récupération des résultats\n    cudaMemcpy(h_particles, d_out, bytes, cudaMemcpyDeviceToHost);\n\n    printf(\"Exemple apres 1 pas de temps -> Particule 0 : pos=(%.3f, %.3f, %.3f), vel=(%.3f, %.3f, %.3f)\\n\",\n           h_particles[0].x, h_particles[0].y, h_particles[0].z,\n           h_particles[0].vx, h_particles[0].vy, h_particles[0].vz);\n\n    cudaFree(d_in);\n    cudaFree(d_out);\n    free(h_particles);\n\n    return 0;\n}\n"
+    },
+    "harness": {
+      "call_token_ceiling": null,
+      "enabled": true,
+      "max_attempts": 3,
+      "research": {
+        "allowed_hosts": [
+          "docs.nvidia.com",
+          "developer.nvidia.com",
+          "www.openmp.org",
+          "www.mpi-forum.org",
+          "gcc.gnu.org",
+          "clang.llvm.org",
+          "www.intel.com"
+        ],
+        "corpus": null,
+        "corpus_sha256": null,
+        "enabled": true
+      }
+    },
+    "method": "H",
+    "minimum_gain": 0.03,
+    "ollama": {
+      "base_url": "http://127.0.0.1:11434",
+      "context_tokens": 8192,
+      "max_output_tokens": 4096,
+      "model": "qwen2.5-coder:7b",
+      "num_threads": 4,
+      "temperature": 0.0
+    },
+    "problem": "cuda-nbody",
+    "protocol": {
+      "benchmark": [
+        "{python}",
+        "{trusted}/protocol.py",
+        "benchmark",
+        "{binary}",
+        "{phase}"
+      ],
+      "build": [
+        "{python}",
+        "{trusted}/protocol.py",
+        "build",
+        "{worktree}",
+        "{build}"
+      ],
+      "build_timeout_seconds": 120,
+      "check": [
+        "{python}",
+        "{trusted}/protocol.py",
+        "check",
+        "{binary}",
+        "{phase}"
+      ],
+      "confirmation_repetitions": 5,
+      "environment": {
+        "FOREST_CUDA_CACHE": "/scratch_p/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/cache",
+        "FOREST_CUDA_HARNESS": "/scratch_p/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/harness-build/cuda_test_harness",
+        "FOREST_GPU_TARGET": "NVIDIA GH200, one GPU; NVRTC CUDA 12.6.3",
+        "OMP_DYNAMIC": "FALSE",
+        "OMP_NUM_THREADS": "1",
+        "OMP_PROC_BIND": "TRUE",
+        "OPENBLAS_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "repetitions": 3,
+      "timeout_seconds": 240,
+      "warmups": 0
+    },
+    "roles": [
+      "A",
+      "B",
+      "C"
+    ],
+    "schedule": {
+      "cycles": null,
+      "integrations_per_cycle": 0,
+      "trials_per_role_per_cycle": 1
+    },
+    "seed": 23,
+    "skills": {
+      "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+      "enabled": true,
+      "version": "hpc-forest-project-skills-v1"
+    },
+    "submission": {
+      "kernel": "nbody_step_naive",
+      "kind": "cuda-kernel",
+      "launch": "src/launch.json",
+      "source": "src/nbody_kernel.cu"
+    },
+    "target_id": "romeo-cuda-nbody-780673"
+  },
+  "manifest": {
+    "config.json": "88f3e1fcb913c8e7458cdb53b093242616a42cb41543ad2f009f8038b2da3544",
+    "evaluator-source-commit.txt": "a63c40006dca637a2888d3f2481278b41724e21abb070bfdd4331748b2972b94",
+    "original.cu": "566e9a4085ff08795269fdb76df607198f835c597ad2dfab4155ea4f0bc33291",
+    "protocol.py": "3311797eec4fec382991af5fe8f8fedb76bdaa068facfe1258f688e051ffeb74",
+    "reference.cu": "ab22e9f1e077f75420e407b68a4285d97a5912340297d1a700f98f40697b00bc",
+    "result-schema.json": "d20ccdd5fa3fa17b32351cb7887b88d1fb17e7ab5ddfaf65c03ea64671b067ae",
+    "use_harness.py": "41efa5033b65c1c1868e19ceadc3b130987c87a3139d7d8f3015cc1951b08c54"
+  },
+  "identity": {
+    "compiler": {
+      "flavor": "gcc-compatible",
+      "path": "/usr/bin/gcc",
+      "sha256": "f7e1e7952e6aa5f31a79366a8dcdd751a150ed65e949429d527e933b5e7cc028"
+    },
+    "controller_implementation": "13564fba5f011d277b8447900c07f3adbc5adf6e929cdb1d2fa4fb5953d79072",
+    "cpus": 288,
+    "dependencies": {
+      "numpy": "2.5.4",
+      "scipy": "1.18.1",
+      "treequest": "0.3.2"
+    },
+    "environment": {
+      "FOREST_CUDA_CACHE": "/scratch_p/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/cache",
+      "FOREST_CUDA_HARNESS": "/scratch_p/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/harness-build/cuda_test_harness",
+      "FOREST_GPU_TARGET": "NVIDIA GH200, one GPU; NVRTC CUDA 12.6.3",
+      "OMP_DYNAMIC": "FALSE",
+      "OMP_NUM_THREADS": "1",
+      "OMP_PROC_BIND": "TRUE",
+      "OPENBLAS_NUM_THREADS": "1",
+      "PYTHONDONTWRITEBYTECODE": "1"
+    },
+    "hostname": "romeo-a041",
+    "machine": "aarch64",
+    "processor": "aarch64",
+    "python": "3.12.5 (main, Mar 13 2025, 11:06:50) [GCC 11.4.1 20231218 (Red Hat 11.4.1-3)]",
+    "python_executable": "/scratch_p/nimarano/hpc-forest-localmodels-20261015-r1/venv-r3/bin/python",
+    "system": "Linux-5.14.0-570.129.1.el9_6.aarch64+64k-aarch64-with-glibc2.34",
+    "target": "romeo-cuda-nbody-780673"
+  },
+  "protocol_id": "1b0eaaf1b11e4a37384b7b72e285a3837c3908ac62d39f36aa7995656bd7138a",
+  "current_epoch": 1,
+  "started": 1792756127.0324607,
+  "deadline": 1792757927.0324607,
+  "mother_enabled": true,
+  "mother_plan:preparation:1": {
+    "budget_phase": "search",
+    "conversation": {
+      "id": "2474dfb17cd041fd87415eb7ba516f51",
+      "phase": "planning",
+      "request_sha256": "63e3a317d123b5af43a53f8b6da018f58345db254c28be967165702de8530aab",
+      "thread_id": "01a16898-3d43-7ac1-a6dd-c59457e13df6",
+      "turn": 0
+    },
+    "final_synthesis": false,
+    "model_calls": 1,
+    "phase": "preparation",
+    "plan": {
+      "G": "À la clôture, assembler et mesurer les combinaisons prometteuses des programmes correctement validés; ne pas supposer les gains additifs. Préserver l’interface, la physique et les fichiers autorisés. Choisir selon la moyenne géométrique officielle, puis s’appuyer sur la confirmation indépendante finale.",
+      "analysis": "Je choisis N=3 pistes complémentaires à partir du code et des observations disponibles : réutiliser les particules sources entre threads, réduire le coût arithmétique de chaque interaction, et explorer une granularité de travail par thread différente. Le code actuel effectue une boucle O(N²), avec sqrt/division à chaque interaction et des lectures répétées des sources. Le baseline est valide et correct; les trois temps de recherche rapportés sont 1,85245, 1,85417 et 1,85183 ms (moyenne 1,85282 ms). Aucun résultat par taille ni candidat n’est fourni, donc aucune accélération n’est présumée. Le matériel, NVRTC 12.6.3, la mesure par événements CUDA et son protocole restent fixes. Le catalogue ROMEO armgpu confirme la disponibilité de CUDA 12.6.3 et indique un hôte Neoverse V2. Le guide CUDA 12.6.3 recommande explicitement rsqrtf pour la racine carrée réciproque et décrit l’usage de mémoire partagée pour éviter des transferts globaux redondants; ce sont des pistes à mesurer, pas des gains garantis. Toutes les pistes doivent préserver l’AoS, produire exactement un état complet par particule, et passer les vérifications de correction avant comparaison.",
+      "children": [
+        {
+          "objective": "Explorer le chargement coopératif par tuiles des particules sources en mémoire partagée, réutilisées par les threads qui calculent les cibles du bloc. Préserver l’AoS et, au départ, l’ordre de boucle et l’arithmétique de référence afin d’isoler le bénéfice de cette réutilisation. Comparer des tailles de bloc et de tuile ainsi que shared_memory_bytes et items_per_block cohérents avec le mappage. Tout thread doit participer aux barrières requises; traiter les tuiles partielles et ne jamais laisser un particle non écrit. Modifier uniquement src/nbody_kernel.cu et src/launch.json. Comparer la moyenne géométrique officielle seulement après validation complète, y compris les tailles limites, positions coïncidentes et oracle FP64.",
+          "subject": "Réutilisation des sources par tuiles en mémoire partagée"
+        },
+        {
+          "objective": "En gardant d’abord le mappage et la configuration de lancement de référence, mesurer une transformation arithmétique isolée : rsqrtf(distSq) et multiplications pour construire l’inverse de la distance au cube au lieu de sqrtf et d’une division par interaction. Évaluer séparément toute simplification algébrique de la masse cible, et la retenir uniquement si les sorties restent dans les tolérances et finies pour tous les cas. Pas de fast-math global, de constantes de test ni de détection d’entrée. Modifier uniquement les fichiers autorisés et mesurer l’impact sur la moyenne géométrique après validation.",
+          "subject": "Réduction du coût mathématique par interaction"
+        },
+        {
+          "objective": "Explorer des micro-tuiles de cibles conservées en registres : chaque thread traite plusieurs particules cibles, réutilisant une particule source chargée pendant la boucle. Garder initialement la formule flottante de référence et les lectures directes, sans mémoire partagée, pour distinguer cette piste des deux autres. Faire correspondre le mappage à block et items_per_block, puis vérifier qu’il écrit chaque état exactement une fois, y compris pour les tailles non multiples et les petits N. Modifier uniquement src/nbody_kernel.cu et src/launch.json; juger chaque candidat par la correction complète et la métrique officielle.",
+          "subject": "Granularité par thread et micro-tuiles de cibles"
+        }
+      ]
+    },
+    "request_sha256": "63e3a317d123b5af43a53f8b6da018f58345db254c28be967165702de8530aab",
+    "response": {
+      "conversation": {
+        "id": "2474dfb17cd041fd87415eb7ba516f51",
+        "phase": "planning",
+        "request_sha256": "63e3a317d123b5af43a53f8b6da018f58345db254c28be967165702de8530aab",
+        "thread_id": "01a16898-3d43-7ac1-a6dd-c59457e13df6",
+        "turn": 0
+      },
+      "data": {
+        "G": "À la clôture, assembler et mesurer les combinaisons prometteuses des programmes correctement validés; ne pas supposer les gains additifs. Préserver l’interface, la physique et les fichiers autorisés. Choisir selon la moyenne géométrique officielle, puis s’appuyer sur la confirmation indépendante finale.",
+        "analysis": "Je choisis N=3 pistes complémentaires à partir du code et des observations disponibles : réutiliser les particules sources entre threads, réduire le coût arithmétique de chaque interaction, et explorer une granularité de travail par thread différente. Le code actuel effectue une boucle O(N²), avec sqrt/division à chaque interaction et des lectures répétées des sources. Le baseline est valide et correct; les trois temps de recherche rapportés sont 1,85245, 1,85417 et 1,85183 ms (moyenne 1,85282 ms). Aucun résultat par taille ni candidat n’est fourni, donc aucune accélération n’est présumée. Le matériel, NVRTC 12.6.3, la mesure par événements CUDA et son protocole restent fixes. Le catalogue ROMEO armgpu confirme la disponibilité de CUDA 12.6.3 et indique un hôte Neoverse V2. Le guide CUDA 12.6.3 recommande explicitement rsqrtf pour la racine carrée réciproque et décrit l’usage de mémoire partagée pour éviter des transferts globaux redondants; ce sont des pistes à mesurer, pas des gains garantis. Toutes les pistes doivent préserver l’AoS, produire exactement un état complet par particule, et passer les vérifications de correction avant comparaison.",
+        "children": [
+          {
+            "objective": "Explorer le chargement coopératif par tuiles des particules sources en mémoire partagée, réutilisées par les threads qui calculent les cibles du bloc. Préserver l’AoS et, au départ, l’ordre de boucle et l’arithmétique de référence afin d’isoler le bénéfice de cette réutilisation. Comparer des tailles de bloc et de tuile ainsi que shared_memory_bytes et items_per_block cohérents avec le mappage. Tout thread doit participer aux barrières requises; traiter les tuiles partielles et ne jamais laisser un particle non écrit. Modifier uniquement src/nbody_kernel.cu et src/launch.json. Comparer la moyenne géométrique officielle seulement après validation complète, y compris les tailles limites, positions coïncidentes et oracle FP64.",
+            "subject": "Réutilisation des sources par tuiles en mémoire partagée"
+          },
+          {
+            "objective": "En gardant d’abord le mappage et la configuration de lancement de référence, mesurer une transformation arithmétique isolée : rsqrtf(distSq) et multiplications pour construire l’inverse de la distance au cube au lieu de sqrtf et d’une division par interaction. Évaluer séparément toute simplification algébrique de la masse cible, et la retenir uniquement si les sorties restent dans les tolérances et finies pour tous les cas. Pas de fast-math global, de constantes de test ni de détection d’entrée. Modifier uniquement les fichiers autorisés et mesurer l’impact sur la moyenne géométrique après validation.",
+            "subject": "Réduction du coût mathématique par interaction"
+          },
+          {
+            "objective": "Explorer des micro-tuiles de cibles conservées en registres : chaque thread traite plusieurs particules cibles, réutilisant une particule source chargée pendant la boucle. Garder initialement la formule flottante de référence et les lectures directes, sans mémoire partagée, pour distinguer cette piste des deux autres. Faire correspondre le mappage à block et items_per_block, puis vérifier qu’il écrit chaque état exactement une fois, y compris pour les tailles non multiples et les petits N. Modifier uniquement src/nbody_kernel.cu et src/launch.json; juger chaque candidat par la correction complète et la métrique officielle.",
+            "subject": "Granularité par thread et micro-tuiles de cibles"
+          }
+        ]
+      },
+      "error": null,
+      "infrastructure_error": false,
+      "model": "gpt-6-luna",
+      "nonce": "e120331c2e1148bdbb71a1da17b8c72c",
+      "protocol": "hpc-forest-codex-mailbox-v1",
+      "reasoning_effort": "max",
+      "request_sha256": "63e3a317d123b5af43a53f8b6da018f58345db254c28be967165702de8530aab",
+      "session_id": "b97d411eca2740e582407b4221bd55e6",
+      "usage": {
+        "cached_tokens_included_in_input": true,
+        "codex_jsonl_sha256": "c0b92f044e7bda19248650466ea7999b9c65929c0a16a237f17e531b7119d892",
+        "events": [
+          {
+            "cache_write_input_tokens": 0,
+            "cached_input_tokens": 528384,
+            "input_tokens": 597068,
+            "output_tokens": 13105,
+            "reasoning_output_tokens": 10823
+          }
+        ],
+        "forbidden_tool_events": [],
+        "llm_calls": 1,
+        "mcp_tool_calls": [
+          {
+            "allowed": true,
+            "id": "item_2",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "documentation_catalog"
+          },
+          {
+            "allowed": true,
+            "id": "item_3",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_4",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_5",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_6",
+            "server": "romeo",
+            "status": "completed",
+            "tool": "search_docs"
+          },
+          {
+            "allowed": true,
+            "id": "item_7",
+            "server": "romeo",
+            "status": "completed",
+            "tool": "romeo_software"
+          },
+          {
+            "allowed": true,
+            "id": "item_8",
+            "server": "romeo",
+            "status": "completed",
+            "tool": "romeo_software"
+          },
+          {
+            "allowed": true,
+            "id": "item_9",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_10",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "read_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_11",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "read_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_12",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "read_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_13",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_14",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_15",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          },
+          {
+            "allowed": true,
+            "id": "item_16",
+            "server": "hpc_docs",
+            "status": "completed",
+            "tool": "search_documentation"
+          }
+        ],
+        "model_requested": "gpt-6-luna",
+        "model_skills": {
+          "conversation": {
+            "id": "2474dfb17cd041fd87415eb7ba516f51",
+            "phase": "planning",
+            "previous_request_sha256": null,
+            "thread_id": null,
+            "turn": 0
+          },
+          "effective_instructions_sha256": "9797a5d44225d7dcf639db721573a883d7c28ae356011d94bb4260c676162c63",
+          "loading": "explicit_system_instructions",
+          "manifest": {
+            "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+            "loaded": [
+              {
+                "name": "planifier-optimisation",
+                "path": "assets/skills/planifier-optimisation/SKILL.md",
+                "sha256": "ace3ff2a1dfbddc126bba36c3a406f6f7259cfe241c81fa7672232fb2a82064e"
+              },
+              {
+                "name": "inspecter-environnement",
+                "path": "assets/skills/inspecter-environnement/SKILL.md",
+                "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+              },
+              {
+                "name": "consulter-documentation-technique",
+                "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+                "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+              },
+              {
+                "name": "evaluer-performances",
+                "path": "assets/skills/evaluer-performances/SKILL.md",
+                "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+              }
+            ],
+            "phase": "planning",
+            "role": "Mother",
+            "version": "hpc-forest-project-skills-v1"
+          },
+          "mission_id": "mother-preparation-93c6178d0f6f4597",
+          "model_declarations_are_execution_proof": false,
+          "model_reported": [
+            {
+              "name": "planifier-optimisation",
+              "references": [
+                "official_statement_as_data",
+                "automatic_observations_as_data.baseline"
+              ],
+              "status": "applied",
+              "summary": "Choix de trois pistes distinctes fondées sur le coût quadratique, le calcul par interaction et la réutilisation des données; le baseline valide fournit le seul repère mesuré."
+            },
+            {
+              "name": "inspecter-environnement",
+              "references": [
+                "target_as_data",
+                "ROMEO MCP romeo_software(arch=armgpu, search=cuda): CUDA 12.6.3 disponible; cible hôte Neoverse V2",
+                "https://romeo.univ-reims.fr/documentation/ressources/romeo_2025/utiliser_des_gpu"
+              ],
+              "status": "applied",
+              "summary": "Le matériel et le protocole sont figés par la tâche; le catalogue ROMEO confirme CUDA 12.6.3 sur armgpu. Aucun diagnostic GPU en direct supplémentaire n’est nécessaire pour ces pistes device-only."
+            },
+            {
+              "name": "consulter-documentation-technique",
+              "references": [
+                "https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-best-practices-guide/index.html"
+              ],
+              "status": "applied",
+              "summary": "Consultation du guide officiel CUDA 12.6.3, notamment sur rsqrtf et la réduction des transferts redondants par mémoire partagée; ces recommandations restent à valider sur le GH200."
+            },
+            {
+              "name": "evaluer-performances",
+              "references": [
+                "automatic_observations_as_data.baseline",
+                "official_statement_as_data"
+              ],
+              "status": "applied",
+              "summary": "Le baseline est correct et mesuré sur trois répétitions, mais aucun temps par taille ni résultat candidat n’est disponible. Exiger la validation de correction, comparer la moyenne géométrique officielle et confirmer indépendamment le choix final."
+            }
+          ],
+          "native_turn_completed": true,
+          "nonce": "e120331c2e1148bdbb71a1da17b8c72c",
+          "observed_mcp_calls": [
+            {
+              "allowed": true,
+              "id": "item_2",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "documentation_catalog"
+            },
+            {
+              "allowed": true,
+              "id": "item_3",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_4",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_5",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_6",
+              "server": "romeo",
+              "status": "completed",
+              "tool": "search_docs"
+            },
+            {
+              "allowed": true,
+              "id": "item_7",
+              "server": "romeo",
+              "status": "completed",
+              "tool": "romeo_software"
+            },
+            {
+              "allowed": true,
+              "id": "item_8",
+              "server": "romeo",
+              "status": "completed",
+              "tool": "romeo_software"
+            },
+            {
+              "allowed": true,
+              "id": "item_9",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_10",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "read_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_11",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "read_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_12",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "read_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_13",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_14",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_15",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            },
+            {
+              "allowed": true,
+              "id": "item_16",
+              "server": "hpc_docs",
+              "status": "completed",
+              "tool": "search_documentation"
+            }
+          ],
+          "report_error": null,
+          "report_status": "reported",
+          "request_sha256": "63e3a317d123b5af43a53f8b6da018f58345db254c28be967165702de8530aab",
+          "schema": "hpc-forest-project-skills-v1",
+          "session_id": "b97d411eca2740e582407b4221bd55e6"
+        },
+        "observed_tokens": 610173,
+        "reasoning_effort_requested": "max",
+        "token_accounting": "exact",
+        "tokens": 610173,
+        "tool_events": [
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call",
+          "mcp_tool_call"
+        ],
+        "tool_runtime_errors": []
+      }
+    },
+    "slot_id": "4c30773a6d0e40608dcc1e6ab29644a7",
+    "status": "complete"
+  },
+  "forest_plan:1": {
+    "base_commit": "22138f39a9036399442f78956289de1c33a07b3d",
+    "children": [
+      {
+        "objective": "Explorer le chargement coopératif par tuiles des particules sources en mémoire partagée, réutilisées par les threads qui calculent les cibles du bloc. Préserver l’AoS et, au départ, l’ordre de boucle et l’arithmétique de référence afin d’isoler le bénéfice de cette réutilisation. Comparer des tailles de bloc et de tuile ainsi que shared_memory_bytes et items_per_block cohérents avec le mappage. Tout thread doit participer aux barrières requises; traiter les tuiles partielles et ne jamais laisser un particle non écrit. Modifier uniquement src/nbody_kernel.cu et src/launch.json. Comparer la moyenne géométrique officielle seulement après validation complète, y compris les tailles limites, positions coïncidentes et oracle FP64.",
+        "role": "T1",
+        "subject": "Réutilisation des sources par tuiles en mémoire partagée"
+      },
+      {
+        "objective": "En gardant d’abord le mappage et la configuration de lancement de référence, mesurer une transformation arithmétique isolée : rsqrtf(distSq) et multiplications pour construire l’inverse de la distance au cube au lieu de sqrtf et d’une division par interaction. Évaluer séparément toute simplification algébrique de la masse cible, et la retenir uniquement si les sorties restent dans les tolérances et finies pour tous les cas. Pas de fast-math global, de constantes de test ni de détection d’entrée. Modifier uniquement les fichiers autorisés et mesurer l’impact sur la moyenne géométrique après validation.",
+        "role": "T2",
+        "subject": "Réduction du coût mathématique par interaction"
+      },
+      {
+        "objective": "Explorer des micro-tuiles de cibles conservées en registres : chaque thread traite plusieurs particules cibles, réutilisant une particule source chargée pendant la boucle. Garder initialement la formule flottante de référence et les lectures directes, sans mémoire partagée, pour distinguer cette piste des deux autres. Faire correspondre le mappage à block et items_per_block, puis vérifier qu’il écrit chaque état exactement une fois, y compris pour les tailles non multiples et les petits N. Modifier uniquement src/nbody_kernel.cu et src/launch.json; juger chaque candidat par la correction complète et la métrique officielle.",
+        "role": "T3",
+        "subject": "Granularité par thread et micro-tuiles de cibles"
+      }
+    ],
+    "conversation": {
+      "id": "2474dfb17cd041fd87415eb7ba516f51",
+      "phase": "planning",
+      "request_sha256": "63e3a317d123b5af43a53f8b6da018f58345db254c28be967165702de8530aab",
+      "thread_id": "01a16898-3d43-7ac1-a6dd-c59457e13df6",
+      "turn": 0
+    },
+    "epoch": 1,
+    "mother_slot_id": "4c30773a6d0e40608dcc1e6ab29644a7",
+    "parallelism": 3,
+    "plan_sha256": "abaddab5d3987a16f4b04b6bf8041e22597b6191beef4301a1e5a103c4468311",
+    "protocol": "hpc-forest-mother-forest-v1",
+    "request_sha256": "63e3a317d123b5af43a53f8b6da018f58345db254c28be967165702de8530aab",
+    "status": "complete"
+  },
+  "adaptive_budget:1": {
+    "archive_seconds": 5.0,
+    "can_admit": true,
+    "confirmation_seconds": 94.61386705127856,
+    "estimation_policy": "independent_phase_medians",
+    "final_g_seconds": 134.75123747438192,
+    "first_wave_continues_mother": true,
+    "inflight_roles": [],
+    "integration_estimate_source": "initial_model_seconds+exclusive_evaluation",
+    "integration_seconds": 269.50247494876385,
+    "integration_steps": 2,
+    "mother_seconds": 378.2916362285614,
+    "next_work_seconds": 205.3171405289322,
+    "observed_at": 1792756520.1077,
+    "pending_roles": [
+      "T1",
+      "T2",
+      "T3"
+    ],
+    "predicted_drain_seconds": 164.25371242314577,
+    "remaining_seconds": 1406.9247605800629,
+    "research_estimate_source": "generation_and_exclusive_evaluation",
+    "reserve_seconds": 471.3954275000531,
+    "safety_factor": 1.25,
+    "sample_counts": {
+      "baseline": 1,
+      "evaluation_benchmark:baseline": 1,
+      "evaluation_build:baseline": 1,
+      "evaluation_check:baseline": 1,
+      "evaluation_lock_wait:baseline": 1,
+      "evaluation_work:baseline": 1,
+      "mother": 1
+    },
+    "search_admission_deadline": 1792757455.6370332,
+    "target_deadline": 1792757927.0324607
+  },
+  "forest_wave:1:0": {
+    "admitted_at": 1792756520.108937,
+    "parent_mother_slot": "4c30773a6d0e40608dcc1e6ab29644a7",
+    "roles": [
+      "T1",
+      "T2",
+      "T3"
+    ],
+    "slots": {
+      "T1": "57411c9fb4454a8aa27016f18787224b",
+      "T2": "490c4a83b54f4f88a7b38466eb9e3ac4",
+      "T3": "74570277416c450aa9bf0881bc15ade1"
+    }
+  },
+  "research_initial_dispatch:1": {
+    "claimed_at": 1792756520.1921315,
+    "mission_ids": [
+      "edb83ac16a054055",
+      "961ece9226a149b2",
+      "4eabae6a5c434567"
+    ]
+  },
+  "plan_cursor:1": 1,
+  "research_scheduler:1": {
+    "one_pending_trial_per_tree": true,
+    "parallelism": 3,
+    "policy": "independent-v1",
+    "settled_nodes_by_tree": {
+      "T1": 1,
+      "T2": 1,
+      "T3": 1
+    },
+    "status": "infrastructure_error"
+  },
+  "research_pending:1": [],
+  "search_closed:1": 1792756784.9214952,
+  "mother_assembly_started:1": 1792756784.9670122,
+  "mother_conversation:1": {
+    "id": "2474dfb17cd041fd87415eb7ba516f51",
+    "phase": "assembly",
+    "request_sha256": "53d053fab7cec151c99d4950497aa2a6496ca13c4022ed26958133b2bdec9fce",
+    "thread_id": "01a16898-3d43-7ac1-a6dd-c59457e13df6",
+    "turn": 3
+  },
+  "mother_plan:final_synthesis:1": {
+    "budget_phase": "postprocess",
+    "conversation": {
+      "id": "2474dfb17cd041fd87415eb7ba516f51",
+      "phase": "assembly",
+      "request_sha256": "53d053fab7cec151c99d4950497aa2a6496ca13c4022ed26958133b2bdec9fce",
+      "thread_id": "01a16898-3d43-7ac1-a6dd-c59457e13df6",
+      "turn": 3
+    },
+    "final_synthesis": true,
+    "model_calls": 1,
+    "phase": "assembly",
+    "request_sha256": "53d053fab7cec151c99d4950497aa2a6496ca13c4022ed26958133b2bdec9fce",
+    "status": "complete",
+    "usage_charged_to_g_mission": "096bd0a3fa2549b5-h03"
+  },
+  "postprocess:1": {
+    "active_mission_id": "096bd0a3fa2549b5",
+    "budget_phase": "postprocess",
+    "completed_at": 1792757054.197082,
+    "context_compaction": "codex-cli-automatic",
+    "elapsed_seconds": 269.27511048316956,
+    "integration_policy": "pairwise",
+    "leaf_program_ids": [],
+    "missing_valid_roles": [
+      "T1",
+      "T2",
+      "T3"
+    ],
+    "mission_id": "096bd0a3fa2549b5",
+    "mother": {
+      "budget_phase": "postprocess",
+      "conversation": {
+        "id": "2474dfb17cd041fd87415eb7ba516f51",
+        "phase": "assembly",
+        "request_sha256": "53d053fab7cec151c99d4950497aa2a6496ca13c4022ed26958133b2bdec9fce",
+        "thread_id": "01a16898-3d43-7ac1-a6dd-c59457e13df6",
+        "turn": 3
+      },
+      "final_synthesis": true,
+      "model_calls": 1,
+      "phase": "assembly",
+      "request_sha256": "53d053fab7cec151c99d4950497aa2a6496ca13c4022ed26958133b2bdec9fce",
+      "status": "complete",
+      "usage_charged_to_g_mission": "096bd0a3fa2549b5-h03"
+    },
+    "mother_required": true,
+    "outcome": {
+      "binary_sha256": "1a35db8e6eb243b363a4254915b2d22519da65442709314a8e7b378d8efefabe",
+      "cache_key": "ddf0b06709589beefaa2ceeb8bf70fd2dd5c49262abfc091463036e3662acc04",
+      "commit": "61c335b52fdbf0c9de35f489578a3c8ea7923391",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0010038744960592367,
+      "reason": "",
+      "score": 0.6485883814533298,
+      "status": "valid",
+      "times": [
+        0.001003855556848868,
+        0.0010038877905777493,
+        0.001003880140751093
+      ],
+      "tree_hash": "f708d3d48c2241a8756485437eb107ad4188c713"
+    },
+    "search_stop_reason": "infrastructure_error",
+    "slot_id": "ad92ec8d3c46445e9e7244dc126d2535",
+    "started_at": 1792756784.9219716,
+    "status": "complete",
+    "steps": [
+      {
+        "final": true,
+        "input_commits": [
+          "22138f39a9036399442f78956289de1c33a07b3d"
+        ],
+        "input_ids": [
+          "baseline-e1"
+        ],
+        "mission_id": "096bd0a3fa2549b5",
+        "mother": {
+          "budget_phase": "postprocess",
+          "conversation": {
+            "id": "2474dfb17cd041fd87415eb7ba516f51",
+            "phase": "assembly",
+            "request_sha256": "53d053fab7cec151c99d4950497aa2a6496ca13c4022ed26958133b2bdec9fce",
+            "thread_id": "01a16898-3d43-7ac1-a6dd-c59457e13df6",
+            "turn": 3
+          },
+          "final_synthesis": true,
+          "model_calls": 1,
+          "phase": "assembly",
+          "request_sha256": "53d053fab7cec151c99d4950497aa2a6496ca13c4022ed26958133b2bdec9fce",
+          "status": "complete",
+          "usage_charged_to_g_mission": "096bd0a3fa2549b5-h03"
+        },
+        "outcome": {
+          "binary_sha256": "1a35db8e6eb243b363a4254915b2d22519da65442709314a8e7b378d8efefabe",
+          "cache_key": "ddf0b06709589beefaa2ceeb8bf70fd2dd5c49262abfc091463036e3662acc04",
+          "commit": "61c335b52fdbf0c9de35f489578a3c8ea7923391",
+          "correct": true,
+          "logs": [
+            "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/build.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/correctness.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/sample-0.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/sample-1.log",
+            "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/search/attempt-001/sample-2.log"
+          ],
+          "mean_seconds": 0.0010038744960592367,
+          "reason": "",
+          "score": 0.6485883814533298,
+          "status": "valid",
+          "times": [
+            0.001003855556848868,
+            0.0010038877905777493,
+            0.001003880140751093
+          ],
+          "tree_hash": "f708d3d48c2241a8756485437eb107ad4188c713"
+        },
+        "pair": 1,
+        "retained_ids": [
+          "baseline-e1"
+        ],
+        "round": 1,
+        "selected_id": "096bd0a3fa2549b5",
+        "status": "complete",
+        "step": 1
+      }
+    ],
+    "unlimited_tokens": true,
+    "unlimited_wall_time": true
+  },
+  "confirmation_started:1": 1792757054.2141566,
+  "confirmation_deadline:1": null,
+  "confirmation_extra_slot:1": false,
+  "confirmation_plan:1": [
+    {
+      "baseline": true,
+      "commit": "22138f39a9036399442f78956289de1c33a07b3d",
+      "id": "baseline-e1",
+      "slot_id": "3bf96dccdb5b44bcb841be7d61421a38",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/worktrees/confirm-e1-baseline-e1"
+    },
+    {
+      "baseline": false,
+      "commit": "61c335b52fdbf0c9de35f489578a3c8ea7923391",
+      "id": "096bd0a3fa2549b5",
+      "slot_id": "498af9667901468ea17874005c93dd9b",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/worktrees/confirm-e1-096bd0a3fa2549b5"
+    }
+  ],
+  "confirmation_attempts:1": 1,
+  "final_g_confirmation:1": {
+    "eligible_for_promotion": true,
+    "experiment_id": "096bd0a3fa2549b5",
+    "outcome": {
+      "binary_sha256": "1a35db8e6eb243b363a4254915b2d22519da65442709314a8e7b378d8efefabe",
+      "cache_key": "ddf0b06709589beefaa2ceeb8bf70fd2dd5c49262abfc091463036e3662acc04",
+      "commit": "61c335b52fdbf0c9de35f489578a3c8ea7923391",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/confirmation/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/confirmation/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/confirmation/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/confirmation/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/confirmation/attempt-001/sample-2.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/confirmation/attempt-001/sample-3.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-774157-b97d411eca2740e582407b4221bd55e6/results-780673/cuda-nbody/logs/e1/096bd0a3fa2549b5/confirmation/attempt-001/sample-4.log"
+      ],
+      "mean_seconds": 0.0010033874038773494,
+      "reason": "",
+      "score": 0.6488237128772777,
+      "status": "valid",
+      "times": [
+        0.001003168677683603,
+        0.001003263048104718,
+        0.0010033114929452968,
+        0.0010034958784067515,
+        0.0010036979222463776
+      ],
+      "tree_hash": "f708d3d48c2241a8756485437eb107ad4188c713"
+    },
+    "status": "confirmed"
+  },
+  "best_confirmed": {
+    "commit": "61c335b52fdbf0c9de35f489578a3c8ea7923391",
+    "epoch": 1,
+    "evaluation_digest": "6aa3c6a1cc9f6d3a7bbe60a433882cf84f7e865f5eb9d1716704b0b6437594ae",
+    "experiment_id": "096bd0a3fa2549b5",
+    "improvement_fraction": 0.45874930254106516,
+    "is_baseline": false,
+    "mean_seconds": 0.0010033874038773494,
+    "protocol_id": "1b0eaaf1b11e4a37384b7b72e285a3837c3908ac62d39f36aa7995656bd7138a",
+    "reference_seconds": 0.0018538311517898364
+  },
+  "status": "confirmed",
+  "confirmation_finished:1": 1792757096.2669554,
+  "timing_samples": {
+    "archive": [
+      0.04685936961323023
+    ],
+    "baseline": [
+      14.751721382141113
+    ],
+    "confirmation": [
+      41.992865324020386
+    ],
+    "evaluation_benchmark:G": [
+      5.679200639948249
+    ],
+    "evaluation_benchmark:baseline": [
+      9.159663307480514
+    ],
+    "evaluation_build:G": [
+      0.11040701624006033
+    ],
+    "evaluation_build:baseline": [
+      0.10798546578735113
+    ],
+    "evaluation_check:G": [
+      5.219932823441923
+    ],
+    "evaluation_check:baseline": [
+      5.439044620841742
+    ],
+    "evaluation_lock_wait:G": [
+      0.00010607670992612839
+    ],
+    "evaluation_lock_wait:baseline": [
+      0.0003636730834841728
+    ],
+    "evaluation_work:G": [
+      11.051134809851646
+    ],
+    "evaluation_work:baseline": [
+      14.751237474381924
+    ],
+    "generation:G": [
+      258.1166431903839
+    ],
+    "generation:T1": [
+      264.5877025127411
+    ],
+    "generation:T2": [
+      264.708518743515
+    ],
+    "generation:T3": [
+      264.70691084861755
+    ],
+    "mission:G": [
+      269.269122838974
+    ],
+    "mission:T1": [
+      264.67391657829285
+    ],
+    "mission:T2": [
+      264.7658865451813
+    ],
+    "mission:T3": [
+      264.7481756210327
+    ],
+    "mother": [
+      378.2916362285614
+    ],
+    "postprocess": [
+      269.27511048316956
+    ],
+    "research_wave:3": [
+      264.72503647673875
+    ]
+  },
+  "pipeline_finished:1": 1792757096.32398
+}

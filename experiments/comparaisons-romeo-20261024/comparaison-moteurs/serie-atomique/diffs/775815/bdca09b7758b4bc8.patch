@@ -1,0 +1,137 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..70cc759 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 128,
++  "items_per_block": 256,
++  "shared_memory_bytes": 0
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..bba3691 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,52 +1,82 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    if (i >= n) return;
++    // Two targets per thread: launch.json pairs block=128 with items_per_block=256.
++    constexpr int targets_per_thread = 2;
++    const int i0 = blockIdx.x * blockDim.x * targets_per_thread + threadIdx.x;
++    const int i1 = i0 + blockDim.x;
++    const bool has0 = i0 < n;
++    const bool has1 = i1 < n;
+ 
+-    const float G = 1.0f;
+-    const float softening = 0.001f;
+-
+-    float fx = 0.0f;
+-    float fy = 0.0f;
+-    float fz = 0.0f;
++    if (!has0 && !has1) return;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    Particle p0;
++    Particle p1;
++    if (has0) p0 = in[i0];
++    if (has1) p1 = in[i1];
+ 
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++    const float G = 1.0f;
++    const float softening = 0.001f;
++    float fx0 = 0.0f;
++    float fy0 = 0.0f;
++    float fz0 = 0.0f;
++    float fx1 = 0.0f;
++    float fy1 = 0.0f;
++    float fz1 = 0.0f;
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++    for (int j = 0; j < n; ++j) {
++        // Reuse this source particle for both target accumulators.
++        const float sx = in[j].x;
++        const float sy = in[j].y;
++        const float sz = in[j].z;
++        const float smass = in[j].mass;
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++        if (has0 && i0 != j) {
++            const float dx = sx - p0.x;
++            const float dy = sy - p0.y;
++            const float dz = sz - p0.z;
++            const float distSq = dx * dx + dy * dy + dz * dz + softening;
++            const float dist = sqrtf(distSq);
++            const float f = (G * p0.mass * smass) / (distSq * dist);
++            fx0 += f * dx;
++            fy0 += f * dy;
++            fz0 += f * dz;
++        }
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++        if (has1 && i1 != j) {
++            const float dx = sx - p1.x;
++            const float dy = sy - p1.y;
++            const float dz = sz - p1.z;
++            const float distSq = dx * dx + dy * dy + dz * dz + softening;
++            const float dist = sqrtf(distSq);
++            const float f = (G * p1.mass * smass) / (distSq * dist);
++            fx1 += f * dx;
++            fy1 += f * dy;
++            fz1 += f * dz;
++        }
+     }
+ 
+-    // Intégration d'Euler explicite
+-    Particle p = in[i];
+-    p.vx += (fx / p.mass) * dt;
+-    p.vy += (fy / p.mass) * dt;
+-    p.vz += (fz / p.mass) * dt;
+-
+-    p.x += p.vx * dt;
+-    p.y += p.vy * dt;
+-    p.z += p.vz * dt;
++    if (has0) {
++        p0.vx += (fx0 / p0.mass) * dt;
++        p0.vy += (fy0 / p0.mass) * dt;
++        p0.vz += (fz0 / p0.mass) * dt;
++        p0.x += p0.vx * dt;
++        p0.y += p0.vy * dt;
++        p0.z += p0.vz * dt;
++        out[i0] = p0;
++    }
+ 
+-    out[i] = p;
++    if (has1) {
++        p1.vx += (fx1 / p1.mass) * dt;
++        p1.vy += (fy1 / p1.mass) * dt;
++        p1.vz += (fz1 / p1.mass) * dt;
++        p1.x += p1.vx * dt;
++        p1.y += p1.vy * dt;
++        p1.z += p1.vz * dt;
++        out[i1] = p1;
++    }
+ }
+-

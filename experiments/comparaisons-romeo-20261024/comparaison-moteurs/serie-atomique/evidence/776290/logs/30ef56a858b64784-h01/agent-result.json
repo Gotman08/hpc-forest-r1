@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "content": "// Structure \"Array of Structures\" : intuitive but not ideal for GPU memory coalescing.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Naive CUDA N-body step: one output particle per thread.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n\n        // One Newton refinement improves rsqrtf accuracy without global fast math.\n        // rsqrtf(infinity) is zero; skip refinement to avoid infinity * zero.\n        if (invDist != 0.0f) {\n            float invDistSq = invDist * invDist;\n            float correction = fmaf(-0.5f * distSq, invDistSq, 1.5f);\n            invDist *= correction;\n        }\n\n        float invDist3 = (invDist * invDist) * invDist;\n        float f = (G * in[i].mass * in[j].mass) * invDist3;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Explicit Euler integration; preserve the original target-mass division.\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Using a Newton-refined rsqrt reciprocal cube may replace the per-pair square root, denominator multiplication, and division with reciprocal-square-root and multiply operations. This candidate preserves the original force numerator, accumulation, and target-mass division to isolate the reciprocal formulation after the prior combined variant failed correctness; the controller must validate tolerance and the geometric-mean objective.",
+  "notes": "Only src/nbody_kernel.cu is changed. No performance result is claimed: the valid baseline mean was 0.0018473421 seconds, and official correctness and geometric-mean timing remain for the controller.",
+  "sources_kept": [],
+  "transformations": [
+    "Replace sqrtf plus the distance denominator multiplication and division with rsqrtf, one Newton refinement, and an inverse-distance cube.",
+    "Preserve the original force numerator, accumulation order, and target-mass division to isolate the reciprocal-distance change.",
+    "Skip Newton refinement when the reciprocal is zero, avoiding an infinity-times-zero intermediate for infinite squared distance."
+  ]
+}

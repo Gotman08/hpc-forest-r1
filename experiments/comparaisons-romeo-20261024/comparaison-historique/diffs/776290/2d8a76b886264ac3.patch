@@ -1,0 +1,17 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index 4d17ebd..3982bdd 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -23,9 +23,10 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+         float dz = in[j].z - in[i].z;
+ 
+         float distSq = fmaf(dx, dx, fmaf(dy, dy, fmaf(dz, dz, softening)));
+-        float dist = sqrtf(distSq);
++        float invDist = rsqrtf(distSq);
++        float invDist3 = invDist * invDist * invDist;
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++        float f = (G * in[i].mass * in[j].mass) * invDist3;
+ 
+         fx += f * dx;
+         fy += f * dy;

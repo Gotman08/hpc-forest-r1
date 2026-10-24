@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 64,\n  \"items_per_block\": 192,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    }
+  ],
+  "hypothesis": "Garder trois cibles par thread conserve la réutilisation des champs source. Réduire block de 256 à 64, avec items_per_block=192 pour couvrir exactement trois cibles par thread, pourrait améliorer le compromis entre taille des blocs et parallélisme; les blocs plus nombreux peuvent aussi accroître le coût d’ordonnancement. Le candidat doit être mesuré avant toute conclusion.",
+  "notes": "Le noyau actuel calcule i0, i1 et i2 avec des strides de blockDim.x et garde chaque cible valide jusqu’à son écriture; le tile de 192 reste cohérent avec la nouvelle configuration, y compris en fin de grille. Les mesures antérieures sont des faits de recherche, pas une mesure de ce candidat : le parent à block=256 a été valide à 0,00353479 s de moyenne, et l’essai à trois cibles avec block=128 à 0,00336516 s; la baseline était à 0,00183666 s. La configuration block=64 a déjà été utilisée dans un essai valide, mais ce candidat n’a pas encore été évalué. La mesure des tailles officielles relève du contrôleur.",
+  "sources_kept": [],
+  "transformations": [
+    "Configurer block=64 et items_per_block=192 afin de conserver trois cibles par thread et d’aligner le tile sur la grille calculée par le contrôleur.",
+    "Laisser le noyau inchangé : ses gardes par cible et ses écritures séparées couvrent également les tiles incomplets."
+  ]
+}

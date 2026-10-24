@@ -1,0 +1,126 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..a3e468c 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 256,
++  "items_per_block": 256,
++  "shared_memory_bytes": 28672
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..8d9b9d0 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,52 +1,77 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
++// Structure "Array of Structures" (AoS).
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    if (i >= n) return;
++    const int i = blockIdx.x * blockDim.x + threadIdx.x;
++    const bool active = i < n;
++
++    constexpr int tile_capacity = 1024;
++    extern __shared__ Particle source_panel[];
++
++    Particle target;
++    if (active) {
++        target = in[i];
++    }
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+-
+     float fx = 0.0f;
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    // All threads stage each bounded panel, including threads without an output.
++    int panel_start = 0;
++    while (panel_start < n) {
++        int panel_count = n - panel_start;
++        if (panel_count > tile_capacity) {
++            panel_count = tile_capacity;
++        }
+ 
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++        for (int k = static_cast<int>(threadIdx.x); k < panel_count;
++             k += static_cast<int>(blockDim.x)) {
++            source_panel[k] = in[panel_start + k];
++        }
++        __syncthreads();
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        if (active) {
++            for (int k = 0; k < panel_count; ++k) {
++                const int j = panel_start + k;
++                if (i == j) continue;
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++                const Particle source = source_panel[k];
++                float dx = source.x - target.x;
++                float dy = source.y - target.y;
++                float dz = source.z - target.z;
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++                float distSq = dx * dx + dy * dy + dz * dz + softening;
++                float dist = sqrtf(distSq);
++                float f = (G * target.mass * source.mass) / (distSq * dist);
++
++                fx += f * dx;
++                fy += f * dy;
++                fz += f * dz;
++            }
++        }
++
++        // Ensure all readers finish before this panel storage is overwritten.
++        __syncthreads();
++        panel_start += panel_count;
+     }
+ 
+-    // Intégration d'Euler explicite
+-    Particle p = in[i];
+-    p.vx += (fx / p.mass) * dt;
+-    p.vy += (fy / p.mass) * dt;
+-    p.vz += (fz / p.mass) * dt;
++    if (active) {
++        Particle p = target;
++        p.vx += (fx / p.mass) * dt;
++        p.vy += (fy / p.mass) * dt;
++        p.vz += (fz / p.mass) * dt;
+ 
+-    p.x += p.vx * dt;
+-    p.y += p.vy * dt;
+-    p.z += p.vz * dt;
++        p.x += p.vx * dt;
++        p.y += p.vy * dt;
++        p.z += p.vz * dt;
+ 
+-    out[i] = p;
++        out[i] = p;
++    }
+ }
+-

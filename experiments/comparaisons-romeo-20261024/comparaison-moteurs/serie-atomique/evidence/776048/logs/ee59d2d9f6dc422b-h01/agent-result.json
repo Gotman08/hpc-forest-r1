@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 256,\n  \"shared_memory_bytes\": 7168\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int tid = threadIdx.x;\n    const int i = blockIdx.x * blockDim.x + tid;\n    const bool active = i < n;\n    const int tile_size = blockDim.x;\n\n    extern __shared__ Particle source_tile[];\n\n    Particle target;\n    if (active) {\n        target = in[i];\n    }\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int tile_base = 0; tile_base < n; tile_base += tile_size) {\n        const int source_index = tile_base + tid;\n        if (source_index < n) {\n            source_tile[tid] = in[source_index];\n        }\n        __syncthreads();\n\n        if (active) {\n            const int remaining = n - tile_base;\n            const int tile_count = remaining < tile_size ? remaining : tile_size;\n            for (int k = 0; k < tile_count; ++k) {\n                const int j = tile_base + k;\n                if (i == j) {\n                    continue;\n                }\n\n                const Particle source = source_tile[k];\n                const float dx = source.x - target.x;\n                const float dy = source.y - target.y;\n                const float dz = source.z - target.z;\n\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * target.mass * source.mass) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n    }\n\n    if (active) {\n        target.vx += (fx / target.mass) * dt;\n        target.vy += (fy / target.mass) * dt;\n        target.vz += (fz / target.mass) * dt;\n\n        target.x += target.vx * dt;\n        target.y += target.vy * dt;\n        target.z += target.vz * dt;\n\n        out[i] = target;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Avec 256 threads et une tuile de 256 Particle (7 168 octets), chaque bloc peut réutiliser les sources chargées en mémoire partagée entre ses cibles, ce qui pourrait réduire les relectures globales inter-warp. Les barrières et le calcul séquentiel des sources peuvent toutefois annuler ce bénéfice; le résultat reste à mesurer.",
+  "notes": "Un seul point de configuration est proposé : bloc/tuile de 256. Le parcours des sources conserve l'ordre, les tuiles partielles sont bornées et les threads inactifs participent aux barrières. La baseline est correcte et rapporte 0,00183666 s en moyenne sur trois répétitions, mais aucune mesure par taille n'est fournie; le contrôleur évaluera la correction et les trois tailles officielles. La limite partagée de la cible n'étant pas indiquée, la configuration demande 7 168 octets sans prétendre à un gain avant mesure.",
+  "sources_kept": [],
+  "transformations": [
+    "Remplacer les lectures globales de toutes les sources par des tuiles coopératives en mémoire partagée dynamique.",
+    "Conserver 256 threads par bloc et régler la tuile à 256 Particle, soit 7 168 octets de mémoire partagée.",
+    "Faire participer les threads inactifs aux synchronisations et ne lire que les éléments valides des tuiles terminales.",
+    "Charger la cible une fois et conserver l'ordre de calcul des interactions, l'exclusion i == j et le traitement des particules coïncidentes via le même adoucissement."
+  ]
+}

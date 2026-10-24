@@ -1,0 +1,110 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..062e925 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 128,
++  "items_per_block": 4,
++  "shared_memory_bytes": 0
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..d523a52 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,52 +1,65 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
++    constexpr int warp_width = 32;
++    const int lane = threadIdx.x & (warp_width - 1);
++    const int warps_per_block = blockDim.x / warp_width;
++    const int warp_in_block = threadIdx.x / warp_width;
++    const int i = blockIdx.x * warps_per_block + warp_in_block;
++
++    // All lanes in a warp share the same output index, so output tails are warp-uniform.
+     if (i >= n) return;
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
++    const Particle target = in[i];
+ 
+     float fx = 0.0f;
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
+-
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++    // Each lane handles a disjoint strided subset of source particles.
++    for (unsigned int j = static_cast<unsigned int>(lane);
++         j < static_cast<unsigned int>(n);
++         j += warp_width) {
++        if (j == static_cast<unsigned int>(i)) continue;
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        const Particle source = in[j];
++        const float dx = source.x - target.x;
++        const float dy = source.y - target.y;
++        const float dz = source.z - target.z;
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++        const float distSq = dx * dx + dy * dy + dz * dz + softening;
++        const float dist = sqrtf(distSq);
++        const float f = (G * target.mass * source.mass) / (distSq * dist);
+ 
+         fx += f * dx;
+         fy += f * dy;
+         fz += f * dz;
+     }
+ 
+-    // Intégration d'Euler explicite
+-    Particle p = in[i];
+-    p.vx += (fx / p.mass) * dt;
+-    p.vy += (fy / p.mass) * dt;
+-    p.vz += (fz / p.mass) * dt;
++    // Reduce the lane-local partial forces. All lanes of a valid output warp participate.
++    #pragma unroll
++    for (int offset = warp_width / 2; offset > 0; offset >>= 1) {
++        fx += __shfl_down_sync(0xffffffffu, fx, offset);
++        fy += __shfl_down_sync(0xffffffffu, fy, offset);
++        fz += __shfl_down_sync(0xffffffffu, fz, offset);
++    }
++
++    if (lane == 0) {
++        Particle p = target;
++        p.vx += (fx / p.mass) * dt;
++        p.vy += (fy / p.mass) * dt;
++        p.vz += (fz / p.mass) * dt;
+ 
+-    p.x += p.vx * dt;
+-    p.y += p.vy * dt;
+-    p.z += p.vz * dt;
++        p.x += p.vx * dt;
++        p.y += p.vy * dt;
++        p.z += p.vz * dt;
+ 
+-    out[i] = p;
++        out[i] = p;
++    }
+ }
+-

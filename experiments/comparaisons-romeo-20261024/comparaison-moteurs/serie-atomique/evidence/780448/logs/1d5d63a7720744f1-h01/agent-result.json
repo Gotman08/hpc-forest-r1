@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 192,\n  \"items_per_block\": 192,\n  \"shared_memory_bytes\": 5376\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    if (n <= 0) return;\n\n    extern __shared__ Particle source_tile[];\n\n    const unsigned int particle_count = static_cast<unsigned int>(n);\n    const unsigned int target_index = blockIdx.x * blockDim.x + threadIdx.x;\n    const bool valid_target = target_index < particle_count;\n\n    Particle target;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    if (valid_target) {\n        target = in[target_index];\n    }\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    for (unsigned int tile_start = 0; tile_start < particle_count; tile_start += blockDim.x) {\n        const unsigned int source_index = tile_start + threadIdx.x;\n        if (source_index < particle_count) {\n            source_tile[threadIdx.x] = in[source_index];\n        }\n        __syncthreads();\n\n        unsigned int tile_count = particle_count - tile_start;\n        if (tile_count > blockDim.x) {\n            tile_count = blockDim.x;\n        }\n\n        if (valid_target) {\n            for (unsigned int offset = 0; offset < tile_count; ++offset) {\n                const unsigned int j = tile_start + offset;\n                if (target_index == j) continue;\n\n                const Particle source = source_tile[offset];\n                const float dx = source.x - target.x;\n                const float dy = source.y - target.y;\n                const float dz = source.z - target.z;\n\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * target.mass * source.mass) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n\n        __syncthreads();\n    }\n\n    if (valid_target) {\n        target.vx += (fx / target.mass) * dt;\n        target.vy += (fy / target.mass) * dt;\n        target.vz += (fz / target.mass) * dt;\n\n        target.x += target.vx * dt;\n        target.y += target.vy * dt;\n        target.z += target.vz * dt;\n\n        out[target_index] = target;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Les essais mesurés ont donné 0,00096318 s pour un CTA/tile de 128, 0,00099616 s pour 256 et 0,00108797 s pour 512, tous corrects. Un bloc de 192 threads (6 warps) avec un tile source de 192 particules et 5 376 octets de mémoire partagée teste un point intermédiaire entre le meilleur bloc de 128 et le bloc de 256, pour évaluer si le compromis réutilisation/barrières et ressources s'améliore; aucun gain n'est présumé.",
+  "notes": "Le catalogue rapporte trois programmes distincts et aucun programme répété. Cette proposition contraste avec les tailles de tile déjà mesurées en testant 192; chaque thread conserve une seule cible, les sources sont traitées dans l'ordre ascendant, et les barrières restent uniformes pour les threads sans cible valide. Les 5 376 octets demandés sont inférieurs aux 14 336 octets de la configuration 512-thread déjà compilée et validée. Le contrôleur doit vérifier la correction avant toute mesure; aucune conclusion de performance nouvelle n'est disponible ici.",
+  "sources_kept": [],
+  "transformations": [
+    "Configurer block et items_per_block à 192 et réserver 5 376 octets de mémoire partagée pour 192 particules Particle.",
+    "Charger par tile jusqu'à 192 particules source en mémoire partagée et réutiliser ces données entre les threads de la CTA; chaque thread traite au plus une cible.",
+    "Conserver l'ordre ascendant des interactions, ignorer l'interaction cible-soi-même, gérer les tiles sources partiels et empêcher les lectures/écritures hors limites.",
+    "Faire participer tous les threads aux barrières de la CTA, y compris ceux sans cible valide, et garder la borne n <= 0 sans accès mémoire."
+  ]
+}

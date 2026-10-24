@@ -1,0 +1,99 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index 05170b8..bbb1111 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -7,14 +7,14 @@ struct Particle {
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+     constexpr int warpWidth = 32;
+     const unsigned int warpMask = 0xffffffffu;
++    const long long nWide = static_cast<long long>(n);
+ 
+-    // Each lane handles two targets, so the launch covers 512 targets per block.
+     const long long globalIndex0 =
+         static_cast<long long>(blockIdx.x) * static_cast<long long>(blockDim.x) * 2LL +
+         static_cast<long long>(threadIdx.x);
+     const long long globalIndex1 = globalIndex0 + static_cast<long long>(blockDim.x);
+-    const bool target0Valid = globalIndex0 < static_cast<long long>(n);
+-    const bool target1Valid = globalIndex1 < static_cast<long long>(n);
++    const bool target0Valid = globalIndex0 < nWide;
++    const bool target1Valid = globalIndex1 < nWide;
+     const int i0 = target0Valid ? static_cast<int>(globalIndex0) : 0;
+     const int i1 = target1Valid ? static_cast<int>(globalIndex1) : 0;
+ 
+@@ -37,16 +37,64 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     float fz1 = 0.0f;
+ 
+     const int lane = static_cast<int>(threadIdx.x) & (warpWidth - 1);
++    const long long fullTileEnd = (nWide / warpWidth) * warpWidth;
+ 
+-    // Even lanes without valid targets participate in every shuffle.
+-    for (long long tileBase = 0; tileBase < static_cast<long long>(n); tileBase += warpWidth) {
++    for (long long tileBase = 0; tileBase < fullTileEnd; tileBase += warpWidth) {
++        const int sourceIndex = static_cast<int>(tileBase + lane);
++        const Particle& source = in[sourceIndex];
++        const float sourceX = source.x;
++        const float sourceY = source.y;
++        const float sourceZ = source.z;
++        const float sourceMass = source.mass;
++
++        #pragma unroll
++        for (int sourceLane = 0; sourceLane < warpWidth; ++sourceLane) {
++            const long long sourceJ = tileBase + sourceLane;
++            const float xj = __shfl_sync(warpMask, sourceX, sourceLane);
++            const float yj = __shfl_sync(warpMask, sourceY, sourceLane);
++            const float zj = __shfl_sync(warpMask, sourceZ, sourceLane);
++            const float massJ = __shfl_sync(warpMask, sourceMass, sourceLane);
++            const int j = static_cast<int>(sourceJ);
++
++            if (target0Valid && i0 != j) {
++                const float dx = xj - p0.x;
++                const float dy = yj - p0.y;
++                const float dz = zj - p0.z;
++
++                const float distSq = dx * dx + dy * dy + dz * dz + softening;
++                const float dist = sqrtf(distSq);
++                const float f = (G * p0.mass * massJ) / (distSq * dist);
++
++                fx0 += f * dx;
++                fy0 += f * dy;
++                fz0 += f * dz;
++            }
++
++            if (target1Valid && i1 != j) {
++                const float dx = xj - p1.x;
++                const float dy = yj - p1.y;
++                const float dz = zj - p1.z;
++
++                const float distSq = dx * dx + dy * dy + dz * dz + softening;
++                const float dist = sqrtf(distSq);
++                const float f = (G * p1.mass * massJ) / (distSq * dist);
++
++                fx1 += f * dx;
++                fy1 += f * dy;
++                fz1 += f * dz;
++            }
++        }
++    }
++
++    if (fullTileEnd < nWide) {
++        const long long tileBase = fullTileEnd;
+         const long long sourceIndex = tileBase + lane;
+         float sourceX = 0.0f;
+         float sourceY = 0.0f;
+         float sourceZ = 0.0f;
+         float sourceMass = 0.0f;
+ 
+-        if (sourceIndex < static_cast<long long>(n)) {
++        if (sourceIndex < nWide) {
+             const Particle& source = in[static_cast<int>(sourceIndex)];
+             sourceX = source.x;
+             sourceY = source.y;
+@@ -57,7 +105,7 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+         #pragma unroll
+         for (int sourceLane = 0; sourceLane < warpWidth; ++sourceLane) {
+             const long long sourceJ = tileBase + sourceLane;
+-            if (sourceJ >= static_cast<long long>(n)) {
++            if (sourceJ >= nWide) {
+                 break;
+             }
+ 

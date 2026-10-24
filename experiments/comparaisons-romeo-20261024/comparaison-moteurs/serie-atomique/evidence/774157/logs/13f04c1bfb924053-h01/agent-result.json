@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 8,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int lane = threadIdx.x & 31;\n    const int warp_id = threadIdx.x >> 5;\n    const int warps_per_block = blockDim.x >> 5;\n    const int i = blockIdx.x * warps_per_block + warp_id;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    if (i < n) {\n        const Particle target = in[i];\n\n        // Each lane accumulates a disjoint strided subset of source particles.\n        #pragma unroll 4\n        for (int j = lane; j < n; j += 32) {\n            if (j == i) continue;\n\n            const float dx = in[j].x - target.x;\n            const float dy = in[j].y - target.y;\n            const float dz = in[j].z - target.z;\n\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * target.mass * in[j].mass) / (distSq * dist);\n\n            fx += f * dx;\n            fy += f * dy;\n            fz += f * dz;\n        }\n    }\n\n    // All lanes, including lanes for an out-of-range target warp, reach each reduction.\n    const unsigned int mask = 0xffffffffu;\n    for (int offset = 16; offset > 0; offset >>= 1) {\n        fx += __shfl_down_sync(mask, fx, offset);\n        fy += __shfl_down_sync(mask, fy, offset);\n        fz += __shfl_down_sync(mask, fz, offset);\n    }\n\n    if (lane == 0 && i < n) {\n        Particle p = in[i];\n        p.vx += (fx / p.mass) * dt;\n        p.vy += (fy / p.mass) * dt;\n        p.vz += (fz / p.mass) * dt;\n\n        p.x += p.vx * dt;\n        p.y += p.vy * dt;\n        p.z += p.vz * dt;\n\n        out[i] = p;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Assigning each target to one warp lets its 32 lanes parallelize the source traversal, then a warp shuffle reduction combines the three force components. A four-way unroll of each lane's strided loop may reduce loop-control cost; whether that offsets the reduction and unrolling overhead must be measured.",
+  "notes": "The launch configuration assigns 8 target warps to each 256-thread CTA. The N bound guards target and source tails; every lane reaches the reductions, self pairs are skipped, softening keeps distinct coincident pairs finite, and lane 0 copies and writes the complete output particle. No correctness or timing result is claimed for this candidate. Earlier observations reported a correct warp-oriented candidate at 0.0001530019 s (9218a96750bb4359) and a separate candidate at 0.0001166883 s (3001b0f6ac854db4); they do not establish the result for this source, which the controller must validate and measure.",
+  "sources_kept": [],
+  "transformations": [
+    "Map each warp to one target, with source indices distributed by lane and stride 32.",
+    "Reduce force x, y, and z with warp shuffles; only lane 0 integrates and stores the complete particle state.",
+    "Set items_per_block to 256/32 = 8 and use a four-way unroll directive for the lane-strided source loop."
+  ]
+}

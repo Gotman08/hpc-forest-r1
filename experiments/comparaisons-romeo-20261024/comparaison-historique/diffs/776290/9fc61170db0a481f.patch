@@ -1,0 +1,71 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index 299f3d7..38fea44 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -5,7 +5,7 @@ struct Particle {
+ };
+ 
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    const int tile_size = 256;
++    const int tile_size = 1024;
+     const int tid = (int)threadIdx.x;
+     const int first_target = (int)blockIdx.x * (2 * (int)blockDim.x) + tid;
+     const int second_target = first_target + (int)blockDim.x;
+@@ -31,28 +31,31 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     float fy1 = 0.0f;
+     float fz1 = 0.0f;
+ 
+-    __shared__ float tile_x[256];
+-    __shared__ float tile_y[256];
+-    __shared__ float tile_z[256];
+-    __shared__ float tile_mass[256];
++    __shared__ float tile_x[1024];
++    __shared__ float tile_y[1024];
++    __shared__ float tile_z[1024];
++    __shared__ float tile_mass[1024];
+ 
+-    for (int tile_start = 0; tile_start < n; tile_start += tile_size) {
+-        const int source_index = tile_start + tid;
+-        if (source_index < n) {
+-            tile_x[tid] = in[source_index].x;
+-            tile_y[tid] = in[source_index].y;
+-            tile_z[tid] = in[source_index].z;
+-            tile_mass[tid] = in[source_index].mass;
+-        } else {
+-            tile_x[tid] = 0.0f;
+-            tile_y[tid] = 0.0f;
+-            tile_z[tid] = 0.0f;
+-            tile_mass[tid] = 0.0f;
++    for (int tile_start = 0; tile_start < n;) {
++        const int remaining = n - tile_start;
++        const int tile_count = remaining < tile_size ? remaining : tile_size;
++
++        for (int tile_slot = tid; tile_slot < tile_size; tile_slot += (int)blockDim.x) {
++            if (tile_slot < tile_count) {
++                const Particle source = in[tile_start + tile_slot];
++                tile_x[tile_slot] = source.x;
++                tile_y[tile_slot] = source.y;
++                tile_z[tile_slot] = source.z;
++                tile_mass[tile_slot] = source.mass;
++            } else {
++                tile_x[tile_slot] = 0.0f;
++                tile_y[tile_slot] = 0.0f;
++                tile_z[tile_slot] = 0.0f;
++                tile_mass[tile_slot] = 0.0f;
++            }
+         }
+         __syncthreads();
+ 
+-        const int remaining = n - tile_start;
+-        const int tile_count = remaining < tile_size ? remaining : tile_size;
+         for (int k = 0; k < tile_count; ++k) {
+             const int j = tile_start + k;
+             const float sx = tile_x[k];
+@@ -85,6 +88,7 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+             }
+         }
+         __syncthreads();
++        tile_start += tile_count;
+     }
+ 
+     if (first_valid) {

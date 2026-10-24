@@ -1,0 +1,123 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..1c20ca2 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 128,
++  "items_per_block": 128,
++  "shared_memory_bytes": 2048
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..6f21153 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,44 +1,77 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
++// Structure "Array of Structures" (AoS) used for the particle state.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
++// Compact shared-memory record: force evaluation needs only position and mass.
++struct SourceParticle {
++    float x, y, z, mass;
++};
++
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    if (i >= n) return;
++    const int lane = threadIdx.x;
++    const int i = blockIdx.x * blockDim.x + lane;
++    const bool target_valid = i < n;
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+-
++    Particle target;
+     float fx = 0.0f;
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    if (target_valid) {
++        target = in[i];
++    }
++
++    extern __shared__ SourceParticle source_tile[];
+ 
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++    // Every lane helps stage sources, including lanes without an output target.
++    // The start barrier protects source reads; an end barrier is only needed
++    // when another tile will overwrite the shared-memory buffer.
++    int tile_start = 0;
++    while (tile_start < n) {
++        const int remaining = n - tile_start;
++        const int tile_count = remaining < blockDim.x ? remaining : blockDim.x;
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        if (lane < tile_count) {
++            const Particle source = in[tile_start + lane];
++            source_tile[lane] = {source.x, source.y, source.z, source.mass};
++        }
++        __syncthreads();
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++        if (target_valid) {
++            for (int k = 0; k < tile_count; ++k) {
++                const int j = tile_start + k;
++                if (i == j) continue;
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++                const SourceParticle source = source_tile[k];
++                const float dx = source.x - target.x;
++                const float dy = source.y - target.y;
++                const float dz = source.z - target.z;
++
++                const float distSq = dx * dx + dy * dy + dz * dz + softening;
++                const float dist = sqrtf(distSq);
++                const float f = (G * target.mass * source.mass) / (distSq * dist);
++
++                fx += f * dx;
++                fy += f * dy;
++                fz += f * dz;
++            }
++        }
++
++        const bool has_next_tile = remaining > tile_count;
++        if (has_next_tile) {
++            __syncthreads();
++        }
++        tile_start += tile_count;
+     }
+ 
+-    // Intégration d'Euler explicite
+-    Particle p = in[i];
++    if (!target_valid) return;
++
++    Particle p = target;
+     p.vx += (fx / p.mass) * dt;
+     p.vy += (fy / p.mass) * dt;
+     p.vz += (fz / p.mass) * dt;
+@@ -49,4 +82,3 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     out[i] = p;
+ }
+-

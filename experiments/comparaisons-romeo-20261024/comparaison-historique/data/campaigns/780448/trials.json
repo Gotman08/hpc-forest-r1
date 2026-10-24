@@ -1,0 +1,510 @@
+[
+  {
+    "id": "b4566ea4300e442d",
+    "role": "T1",
+    "mission": {
+      "base_commit": "7272bcbc4bcfc3bf1948e56d0b217298f36db076",
+      "budget_phase": "search",
+      "delegation_parent": "R/T1",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "At the baseline's 256-thread mapping and unchanged interaction formula, staging each 256-particle source tile in shared memory may reduce repeated global traffic across targets in the block. Its benefit is uncertain because staging and block synchronization add overhead, while direct accesses may already be served efficiently by cache. This candidate isolates shared-memory tiling; tile size and launch configuration can be varied separately in later experiments.",
+      "id": "b4566ea4300e442d",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T1",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Added a statically allocated 256-entry Particle shared-memory tile and cooperative source staging, keeping one thread per target and processing source particles in the original sequential order.",
+          "Handled partial tiles by loading and processing only valid source indices. Kept out-of-range target threads participating in all required block barriers, then skipped their output.",
+          "Kept launch.json unchanged at 256 threads and preserved the baseline force formula, sqrtf use, self-interaction check, and Euler update; the tile occupies 7168 bytes per block."
+        ]
+      },
+      "tree_id": "e1:T1",
+      "trial_id": "01M5KBJPEAFHRJWXM4DRZTNQXQ",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/b4566ea4300e442d"
+    },
+    "result": {
+      "binary_sha256": "a89fcff5187b1cab2178e222f135b83ccdf29196e98bc3bdc98ac50b4e345f8c",
+      "cache_key": "f0e70f8d9e02febdcfa1b0083fe5605e7f4ed025ae66dbc81d0887f0b7a99e8a",
+      "commit": "feb4a88bef84f8b1fc17b8c6de4cd5195e2abe36",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/b4566ea4300e442d/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/b4566ea4300e442d/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/b4566ea4300e442d/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/b4566ea4300e442d/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/b4566ea4300e442d/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.001086267056557909,
+      "reason": "",
+      "score": 0.6303125986133821,
+      "status": "valid",
+      "times": [
+        0.0010860654823564083,
+        0.0010869013824300446,
+        0.0010858343048872742
+      ],
+      "tree_hash": "3b07ef86f8be3c6447c662178d01335e63f6b607"
+    },
+    "created": 1792724785.6109715,
+    "state": "completed"
+  },
+  {
+    "id": "863a66f2a7c94930",
+    "role": "T2",
+    "mission": {
+      "base_commit": "7272bcbc4bcfc3bf1948e56d0b217298f36db076",
+      "budget_phase": "search",
+      "delegation_parent": "R/T2",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Pour isoler l'effet des FMA sans changer le parcours des sources, je remplace les FMA explicites de la somme des carrés et de l'accumulation par des multiplications et additions CUDA arrondies séparément. Cela teste si les différences d'arrondi contribuent aux échecs observés sur la grande taille; aucun gain de temps n'est présumé. Je conserve rsqrtf, le calcul de l'inverse du cube, l'annulation du facteur de masse cible et l'exclusion sûre de l'auto-interaction.",
+      "id": "863a66f2a7c94930",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T2",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Remplacer les FMA explicites dans la somme des carrés et l'accumulation par __fmul_rn et __fadd_rn afin d'arrondir séparément chaque opération.",
+          "Conserver rsqrtf et l'ordre (invDist * invDist) * invDist pour calculer l'inverse du cube.",
+          "Conserver la simplification du facteur de masse cible et le parcours des sources en j croissant.",
+          "Conserver le saut i == j pour éviter une auto-interaction dangereuse, y compris avec une masse extrême; ne modifier ni le tuilage ni le nombre de cibles par thread."
+        ]
+      },
+      "tree_id": "e1:T2",
+      "trial_id": "01M5KBJPFMJP3M6VGSEWHR6V47",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/863a66f2a7c94930"
+    },
+    "result": {
+      "binary_sha256": "8360c697f5a8d49d66edd77a88bbc8af2516bb823ba5ebddf1f676c7c851bd7b",
+      "cache_key": "24265fdec43818ad040676140991adec5f97d987fe93ed8c59fe3e79e96af4c8",
+      "commit": "54e567ac0b3fa77631afff6b7f5b933cfccf7add",
+      "correct": false,
+      "logs": [
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/863a66f2a7c94930/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/863a66f2a7c94930/search/attempt-001/correctness.log"
+      ],
+      "mean_seconds": null,
+      "reason": "Protected correctness checks failed",
+      "score": 0.0,
+      "status": "incorrect",
+      "times": [],
+      "tree_hash": "b89f7ad507e9bad4ec7b3e5946a5c855e3af96c9"
+    },
+    "created": 1792724785.652496,
+    "state": "completed"
+  },
+  {
+    "id": "d995469144fa4584",
+    "role": "T3",
+    "mission": {
+      "base_commit": "7272bcbc4bcfc3bf1948e56d0b217298f36db076",
+      "budget_phase": "search",
+      "delegation_parent": "R/T3",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Avec la configuration de lancement inchangée et sans tuilage partagé, attribuer deux cibles adjacentes à un thread peut réduire le nombre de threads actifs, mais augmente le travail séquentiel par thread et peut donc aussi ralentir. La comparaison au baseline direct à une cible/thread isolera ce compromis. Le stride fondé sur le nombre réel de threads lancés garantit une couverture unique de N même si items_per_block diffère de block.",
+      "id": "d995469144fa4584",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T3",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Conserve le lancement et remplace l’assignation d’une cible par thread par des paires de cibles adjacentes, avec une boucle stride pour couvrir N quel que soit le nombre de threads lancés.",
+          "Factorise le calcul d’une cible dans un helper device inline afin de réutiliser le même calcul direct pour les deux sorties possibles du thread.",
+          "N’utilise pas de mémoire partagée; le contrôle direct à une cible/thread reste le baseline."
+        ]
+      },
+      "tree_id": "e1:T3",
+      "trial_id": "01M5KBJPGPGNB1MAM3P41KGWR0",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/d995469144fa4584"
+    },
+    "result": {
+      "binary_sha256": "2e083e6fe9dde2c720f9a7f3797495b028589e0dc02373c67baedaa94f40457e",
+      "cache_key": "58df8e98d492b127bb5f4b466641542f03501c1b223e56bb322f55cb73ec6f4a",
+      "commit": "1feb290a0cdeaeb49704edc580a2d26e06ee99d8",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/d995469144fa4584/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/d995469144fa4584/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/d995469144fa4584/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/d995469144fa4584/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/d995469144fa4584/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.003361481863261689,
+      "reason": "",
+      "score": 0.3552417926295463,
+      "status": "valid",
+      "times": [
+        0.003361248765865815,
+        0.0033617737284868904,
+        0.0033614230954323613
+      ],
+      "tree_hash": "f2fbe851d9ce5eaa4e023e235d91942c11488523"
+    },
+    "created": 1792724785.6865795,
+    "state": "completed"
+  },
+  {
+    "id": "bfe2017023684f87",
+    "role": "T1",
+    "mission": {
+      "base_commit": "7272bcbc4bcfc3bf1948e56d0b217298f36db076",
+      "budget_phase": "search",
+      "delegation_parent": "R/T1",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Le baseline direct (1,8521 ms) et le candidat tuilé à 256 sources (1,0863 ms) sont tous deux valides et utilisent un bloc de 256 threads; cette comparaison mesurée justifie de tester une taille de tuile différente sans en présumer le résultat. Une tuile de 512 sources garde le mapping des cibles et la formule inchangés, réduit le nombre d’itérations de staging/barrières, mais double l’empreinte partagée par rapport à 256 (14 336 octets, sous la limite de 49 152); le coût accru en mémoire partagée peut aussi limiter l’occupation. Mesurer ce compromis avant de modifier la configuration de bloc.",
+      "id": "bfe2017023684f87",
+      "ordinal": 2,
+      "parent_id": null,
+      "role": "T1",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Remplace la tuile partagée de 256 particules par une tuile statique de 512 particules (14 336 octets).",
+          "Conserve le bloc de 256 threads, une cible par thread, l’ordre des sources, la formule de force, sqrtf et l’intégration d’Euler.",
+          "Charge coopérativement deux sources par thread avec vérification des indices de fin; tous les threads atteignent les deux barrières, y compris ceux sans cible valide.",
+          "Laisse src/launch.json inchangé afin d’isoler la taille de tuile."
+        ]
+      },
+      "tree_id": "e1:T1",
+      "trial_id": "01M5KBQ9SJ2DDQF6B69Q2MK2S3",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/bfe2017023684f87"
+    },
+    "result": {
+      "binary_sha256": "987ca4c2f7bb809a5eb60113eccea4c6a806bb0dee7e1577e7dc4ed672500286",
+      "cache_key": "8efe1ac3dab38dc41c06cdcc913773ce42dded5f774baea5e8f47a2b77443e3b",
+      "commit": "d4652ea0afbddd2e57ae7e3c5ac5ad8180e1b53f",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/bfe2017023684f87/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/bfe2017023684f87/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/bfe2017023684f87/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/bfe2017023684f87/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/bfe2017023684f87/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0010378369350582427,
+      "reason": "",
+      "score": 0.6408756000122263,
+      "status": "valid",
+      "times": [
+        0.0010361343334233213,
+        0.0010360281157909502,
+        0.001041348355960457
+      ],
+      "tree_hash": "e1feab105644740d084c02903cdfef00602a3660"
+    },
+    "created": 1792724936.498992,
+    "state": "completed"
+  },
+  {
+    "id": "49ece3a057ac4f0a",
+    "role": "T3",
+    "mission": {
+      "base_commit": "7272bcbc4bcfc3bf1948e56d0b217298f36db076",
+      "budget_phase": "search",
+      "delegation_parent": "R/T3",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "La variante directe précédente à deux cibles par thread était correcte mais plus lente que le baseline. Ici, garder deux accumulateurs et parcourir les sources une seule fois par paire réutilise chaque particule source dans les registres, ce qui pourrait réduire les chargements redondants. Le travail séquentiel accru et la pression sur les registres peuvent annuler cet effet ; le lancement reste fixe pour isoler ce changement.",
+      "id": "49ece3a057ac4f0a",
+      "ordinal": 2,
+      "parent_id": null,
+      "role": "T3",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Conserver la configuration de lancement actuelle et ne pas utiliser de mémoire partagée.",
+          "Associer deux cibles adjacentes à chaque thread et accumuler leurs forces séparément, avec la boucle sur les sources à l'extérieur afin de charger chaque source une fois pour les deux calculs.",
+          "Utiliser un stride couvrant les paires jusqu'à n et un garde pour la dernière cible, afin de traiter exactement les indices valides même lorsque n est impair."
+        ]
+      },
+      "tree_id": "e1:T3",
+      "trial_id": "01M5KBQT2TGE1EHRZ9BFNBE9XS",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/49ece3a057ac4f0a"
+    },
+    "result": {
+      "binary_sha256": "8a051caf31fee3ad9e5c2e7935df6247f736ae12c3acdc1239bdf8526dc95e6b",
+      "cache_key": "e2ef08475701449da0a1c145e1d6c3606c07f6173605b8f5ec5b0c6329e2cf4f",
+      "commit": "c57a6446a07f94754c74f639ad48273a3c7b6ead",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/49ece3a057ac4f0a/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/49ece3a057ac4f0a/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/49ece3a057ac4f0a/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/49ece3a057ac4f0a/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/49ece3a057ac4f0a/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0027511887618659123,
+      "reason": "",
+      "score": 0.402339189559361,
+      "status": "valid",
+      "times": [
+        0.0027502399661737016,
+        0.0027522067333777974,
+        0.0027511195860462382
+      ],
+      "tree_hash": "b0c5189d9817e6dc4861e267acef78b95e800300"
+    },
+    "created": 1792724953.1793022,
+    "state": "completed"
+  },
+  {
+    "id": "51cd68ced3b4434e",
+    "role": "T1",
+    "mission": {
+      "base_commit": "7272bcbc4bcfc3bf1948e56d0b217298f36db076",
+      "budget_phase": "search",
+      "delegation_parent": "R/T1",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "",
+      "id": "51cd68ced3b4434e",
+      "ordinal": 3,
+      "parent_id": null,
+      "role": "T1",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {},
+      "tree_id": "e1:T1",
+      "trial_id": "01M5KBWV9EB0V22Q4Q16GTVR9Z",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/51cd68ced3b4434e"
+    },
+    "result": {
+      "binary_sha256": null,
+      "cache_key": null,
+      "commit": null,
+      "correct": null,
+      "logs": [],
+      "mean_seconds": null,
+      "reason": "The local model worker stopped sending heartbeats",
+      "score": null,
+      "status": "infrastructure_error",
+      "times": [],
+      "tree_hash": null
+    },
+    "created": 1792725118.255241,
+    "state": "infrastructure_error"
+  },
+  {
+    "id": "00b8f673dfd142ef",
+    "role": "T3",
+    "mission": {
+      "base_commit": "1feb290a0cdeaeb49704edc580a2d26e06ee99d8",
+      "budget_phase": "search",
+      "delegation_parent": "R/T3",
+      "depth": 2,
+      "epoch": 1,
+      "hypothesis": "",
+      "id": "00b8f673dfd142ef",
+      "ordinal": 3,
+      "parent_id": "d995469144fa4584",
+      "role": "T3",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {},
+      "tree_id": "e1:T3",
+      "trial_id": "01M5KBX83K33Q5JKEW100NMGQS",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/00b8f673dfd142ef"
+    },
+    "result": {
+      "binary_sha256": null,
+      "cache_key": null,
+      "commit": null,
+      "correct": null,
+      "logs": [],
+      "mean_seconds": null,
+      "reason": "The local model worker stopped sending heartbeats",
+      "score": null,
+      "status": "infrastructure_error",
+      "times": [],
+      "tree_hash": null
+    },
+    "created": 1792725131.3803625,
+    "state": "infrastructure_error"
+  },
+  {
+    "id": "96ed268570b947ab",
+    "role": "T2",
+    "mission": {
+      "base_commit": "54e567ac0b3fa77631afff6b7f5b933cfccf7add",
+      "budget_phase": "search",
+      "delegation_parent": "R/T2",
+      "depth": 2,
+      "epoch": 1,
+      "hypothesis": "",
+      "id": "96ed268570b947ab",
+      "ordinal": 2,
+      "parent_id": "863a66f2a7c94930",
+      "role": "T2",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {},
+      "tree_id": "e1:T2",
+      "trial_id": "01M5KBYMQQGTD16WDK4PQQ62AH",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/96ed268570b947ab"
+    },
+    "result": {
+      "binary_sha256": null,
+      "cache_key": null,
+      "commit": null,
+      "correct": null,
+      "logs": [],
+      "mean_seconds": null,
+      "reason": "The local model worker stopped sending heartbeats",
+      "score": null,
+      "status": "infrastructure_error",
+      "times": [],
+      "tree_hash": null
+    },
+    "created": 1792725177.080192,
+    "state": "infrastructure_error"
+  },
+  {
+    "id": "4068c0071be145e3",
+    "role": "G",
+    "mission": {
+      "base_commit": "d4652ea0afbddd2e57ae7e3c5ac5ad8180e1b53f",
+      "budget_phase": "postprocess",
+      "delegation_parent": "R/G",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Combiner le tuilage partagé de 512 particules, validé sur T1, avec le calcul de deux cibles adjacentes par thread, idée T3 validée mais plus lente seule. Charger chaque source depuis la tuile une fois pour la paire pourrait amortir davantage le staging; la réduction du nombre de threads/CTA et les registres supplémentaires pourraient aussi ralentir. Cette combinaison doit être mesurée sans présumer de son résultat.",
+      "id": "4068c0071be145e3",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "G",
+      "source_commits": [
+        "d4652ea0afbddd2e57ae7e3c5ac5ad8180e1b53f"
+      ],
+      "sources": [
+        "bfe2017023684f87"
+      ],
+      "transformations": {
+        "files": [
+          "src/launch.json",
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Conserver le tuilage partagé statique de 512 particules et la formule d’interaction de T1.",
+          "Attribuer deux cibles adjacentes à chaque thread et réutiliser chaque particule source chargée en mémoire partagée pour les deux accumulations.",
+          "Régler items_per_block à 512 avec un bloc de 256 threads et utiliser un parcours par blocs uniforme afin que tous les threads atteignent les barrières, même pour les queues.",
+          "Préserver l’ordre des sources, l’exclusion de l’auto-interaction, l’intégration vitesse puis position et la copie exacte des masses."
+        ]
+      },
+      "tree_id": "e1:G-merge-1-1",
+      "trial_id": "01M5KCCZ0J1WKCHDVQ1451E5WM",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/4068c0071be145e3"
+    },
+    "result": {
+      "binary_sha256": "82a430e267d864b41aa22bbb7198796ea7b4845e3cc444dc411be3c1e27a59b0",
+      "cache_key": "9d45755f4289efcb58777e9debcaabee94c17cd4a5cb21e48209ac9b7cb55498",
+      "commit": "ccda708e9eb82085ecc64d343b0fec77a403bf7f",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/4068c0071be145e3/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/4068c0071be145e3/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/4068c0071be145e3/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/4068c0071be145e3/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/4068c0071be145e3/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0017816232225416177,
+      "reason": "",
+      "score": 0.5096938664751364,
+      "status": "valid",
+      "times": [
+        0.0017819294660088164,
+        0.0017818735150975996,
+        0.0017810666865184371
+      ],
+      "tree_hash": "6cfa9b2589a3880d9b83cb5ab53f7bdf53896a36"
+    },
+    "created": 1792725646.354482,
+    "state": "completed"
+  },
+  {
+    "id": "154507185f9c4846",
+    "role": "G",
+    "mission": {
+      "base_commit": "d4652ea0afbddd2e57ae7e3c5ac5ad8180e1b53f",
+      "budget_phase": "postprocess",
+      "delegation_parent": "R/G",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Avec le noyau T1 conservé, un bloc de 128 threads pourrait fournir davantage de blocs indépendants que le réglage 256 sur les tailles mesurées, améliorant l’utilisation du GPU. Le staging de 512 sources coûte toutefois plus de chargements par cible lorsque chaque bloc traite moins de cibles; il faut mesurer ce compromis sans présumer du résultat.",
+      "id": "154507185f9c4846",
+      "ordinal": 2,
+      "parent_id": null,
+      "role": "G",
+      "source_commits": [
+        "d4652ea0afbddd2e57ae7e3c5ac5ad8180e1b53f"
+      ],
+      "sources": [
+        "bfe2017023684f87"
+      ],
+      "transformations": {
+        "files": [
+          "src/launch.json"
+        ],
+        "retained": [
+          "Conserver le noyau T1 validé avec son tuilage partagé de 512 sources et une cible par thread.",
+          "Régler block et items_per_block à 128 pour maintenir le mapping existant et tester l’effet d’un nombre accru de blocs.",
+          "Ne pas modifier la formule, l’ordre des sources ni l’intégration."
+        ]
+      },
+      "tree_id": "e1:G-merge-2-1",
+      "trial_id": "01M5KCJ0D8N1QRC5SJ8E35SDNH",
+      "worktree": "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/worktrees/154507185f9c4846"
+    },
+    "result": {
+      "binary_sha256": "746f2df025fdbcc42e203b3052aa24be5768e0aeac3454980c39d9d2c4cd2b1c",
+      "cache_key": "ebee615767e9edd1af4e9f0cc52fd226c66d9702ef0e77ae4a151ec3060457ed",
+      "commit": "bf84c9ea310475793e0958952105462e04354640",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/154507185f9c4846/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/154507185f9c4846/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/154507185f9c4846/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/154507185f9c4846/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/hpc-forest-cuda-memory-c4a18feb958f4c52a64e27f419f5addb/results-780448/cuda-nbody/logs/e1/154507185f9c4846/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0010100456475154694,
+      "reason": "",
+      "score": 0.6470985293763525,
+      "status": "valid",
+      "times": [
+        0.0010102561339023538,
+        0.0010095265180744956,
+        0.0010103542905695588
+      ],
+      "tree_hash": "4f6b861d8678fc31103b45b280799ebcb82c4d0a"
+    },
+    "created": 1792725811.6252153,
+    "state": "completed"
+  }
+]

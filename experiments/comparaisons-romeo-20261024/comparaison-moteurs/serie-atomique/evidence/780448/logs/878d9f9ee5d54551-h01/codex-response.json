@@ -1,0 +1,159 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Exclude j=i structurally while retaining the original source order and arithmetic.\n    for (int j = 0; j < i; j++) {\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq);\n\n        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    for (int j = i + 1; j < n; j++) {\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq);\n\n        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "Les meilleurs candidats connus combinaient le découpage des plages source avec rsqrtf et/ou un déroulage, sans isoler l'effet du contrôle de boucle. Ce candidat ne change que le contrôle : deux plages [0,i) et (i,n) excluent j=i sans évaluer l'interaction propre, tout en conservant sqrtf, le calcul de force et l'ordre des sources. La suppression du test interne pourrait aider, mais le compilateur peut déjà le traiter efficacement et le code dupliqué peut coûter davantage; aucun gain n'est présumé.",
+    "memory_lessons": [
+      {
+        "applicability": "Une expérience isolant le contrôle de boucle permettrait de distinguer son effet de celui de rsqrtf et du déroulage.",
+        "claim": "Les candidats split+rsqrt ont mesuré 0.001025174 s, et split+rsqrt avec déroulage par quatre 0.000899482 s; rsqrt avec déroulage et le parcours d'origine a mesuré 0.001009364 s. Ces résultats sont valides mais ne prouvent pas à eux seuls quelle transformation explique l'écart.",
+        "evidence_ids": [
+          "fd180002914c485c",
+          "7f81c093820b4441",
+          "f7b049e78ea14fc7"
+        ],
+        "next_experiment": "Mesurer le découpage seul avec l'arithmétique sqrtf d'origine, puis comparer sous le protocole officiel."
+      },
+      {
+        "applicability": "Éviter de reprendre la mise en cache scalaire ou l'annulation de masse comme hypothèse de gain non vérifiée.",
+        "claim": "La mise en cache explicite des scalaires de cible était correcte mais a mesuré 0.001846100 s, proche de la référence à 0.001844410 s. Une tentative de cancellation de masse a échoué aux contrôles de correction; elle ne doit pas être reprise sans traitement sûr des cas extrêmes.",
+        "evidence_ids": [
+          "9562195e979e488d",
+          "baseline-e1",
+          "2495c63d565b4f3e-h01"
+        ],
+        "next_experiment": "Garder l'arithmétique d'origine pour isoler le contrôle de boucle et laisser le contrôleur vérifier les cas extrêmes et les contrôles FP64."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "Le catalogue rapporte six programmes mesurés distincts, sans répétitions, et le meilleur résultat courant est celui de split+rsqrt+déroulage (0.000899482 s). Le candidat présent contraste avec ces combinaisons en ne modifiant que le parcours; il n'a pas encore été validé ni mesuré. Il exclut explicitement j=i, conserve l'intégration et la configuration de lancement, et doit être soumis aux cas de correction complets, aux vérifications FP64 et aux tailles scorées par le contrôleur.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Remplacer la boucle source unique et son test i==j par deux boucles, j dans [0,i) et [i+1,n), afin que l'interaction propre ne soit jamais calculée.",
+      "Conserver sqrtf, l'expression originale de la force, l'ordre d'accumulation des interactions, une cible par thread, l'intégration et la configuration de lancement."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "2395411baacc4819a8e0fb13da4ac589",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "d49b6d81b74aa934096cb9dc8c4d489341997be23a1a3edd0720a8a9abf565fd",
+  "session_id": "bd4eb8bb1d38489bbad5765e53cb020c",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "af06110409cabd6884efce68d6c1c318ea3a25fc0cbee0516a29ad35a40543d5",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4352,
+        "input_tokens": 24010,
+        "output_tokens": 4832,
+        "reasoning_output_tokens": 3210
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "878d9f9ee5d54551-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "fd180002914c485c",
+            "7f81c093820b4441",
+            "f7b049e78ea14fc7"
+          ],
+          "status": "applied",
+          "summary": "Choix d'une expérience contrastée qui isole le découpage des plages du rsqrtf et du déroulage déjà mesurés; aucune performance n'est présumée."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "La modification concerne uniquement le contrôle de boucles CUDA existant et ne dépend pas d'une capacité matérielle ou logicielle particulière."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "Aucune API ou propriété technique incertaine n'est requise; le candidat conserve les opérations CUDA déjà présentes dans la source."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "fd180002914c485c",
+            "7f81c093820b4441",
+            "f7b049e78ea14fc7"
+          ],
+          "status": "applied",
+          "summary": "Comparaison aux mesures disponibles avec prudence; la validation de correction, FP64 et les mesures officielles restent à effectuer par le contrôleur."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "2395411baacc4819a8e0fb13da4ac589",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "d49b6d81b74aa934096cb9dc8c4d489341997be23a1a3edd0720a8a9abf565fd",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "bd4eb8bb1d38489bbad5765e53cb020c"
+    },
+    "observed_tokens": 28842,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 28842,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

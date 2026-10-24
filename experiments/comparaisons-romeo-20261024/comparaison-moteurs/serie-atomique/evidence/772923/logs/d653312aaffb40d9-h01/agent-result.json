@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 512,\n  \"items_per_block\": 512,\n  \"shared_memory_bytes\": 14336\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    extern __shared__ Particle source_tile[];\n\n    const int tile_size = static_cast<int>(blockDim.x);\n    const int lane = static_cast<int>(threadIdx.x);\n    const int i = static_cast<int>(blockIdx.x) * tile_size + lane;\n    const bool active = i < n;\n\n    Particle target;\n    if (active) {\n        target = in[i];\n    }\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int tile_start = 0; tile_start < n; tile_start += tile_size) {\n        const int source_index = tile_start + lane;\n        if (source_index < n) {\n            source_tile[lane] = in[source_index];\n        }\n        __syncthreads();\n\n        const int remaining = n - tile_start;\n        const int tile_count = remaining < tile_size ? remaining : tile_size;\n        if (active) {\n            for (int offset = 0; offset < tile_count; ++offset) {\n                const int j = tile_start + offset;\n                if (i == j) continue;\n\n                const Particle source = source_tile[offset];\n                const float dx = source.x - target.x;\n                const float dy = source.y - target.y;\n                const float dz = source.z - target.z;\n\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * target.mass * source.mass) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n    }\n\n    if (!active) return;\n\n    target.vx += (fx / target.mass) * dt;\n    target.vy += (fy / target.mass) * dt;\n    target.vz += (fz / target.mass) * dt;\n\n    target.x += target.vx * dt;\n    target.y += target.vy * dt;\n    target.z += target.vz * dt;\n\n    out[i] = target;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "With 512 outputs per block, each cooperatively loaded source tile is reused across twice as many destination threads as with the supplied successful 256-thread tiling experiment, reducing aggregate global source loads. The larger block and 14 KiB shared-memory allocation may affect occupancy, so the net performance effect requires official measurement.",
+  "notes": "This is a new 512-thread configuration, not an observed result. The supplied prior candidate 79f075cbacca441f passed all 11 correctness cases at a 256-particle tile and measured 0.0010013361 seconds; that evidence does not establish correctness or performance for this variant. The controller should validate all cases and official sizes before retaining it.",
+  "sources_kept": [],
+  "transformations": [
+    "Use one thread for each output particle, retaining the destination particle and force accumulators locally.",
+    "Cooperatively stage each source tile of blockDim.x particles in dynamic shared memory; synchronize before consumption and before the tile is overwritten.",
+    "Process valid sources in ascending index order, skip self-interaction, guard source and output tails, and ensure inactive output lanes still participate in barriers.",
+    "Set block and items_per_block to 512 and dynamic shared memory to 512 * sizeof(Particle), or 14336 bytes."
+  ]
+}

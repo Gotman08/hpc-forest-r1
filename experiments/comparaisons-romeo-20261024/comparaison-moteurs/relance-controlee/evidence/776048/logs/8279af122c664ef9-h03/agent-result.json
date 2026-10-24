@@ -1,0 +1,18 @@
+{
+  "files": [
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\nstatic_assert(sizeof(Particle) == 28, \"Particle layout must remain 28 bytes\");\n\nstruct SourceParticle {\n    float x, y, z, mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int tid = threadIdx.x;\n    const long long linear = static_cast<long long>(blockIdx.x) * blockDim.x + tid;\n    const bool valid = linear < n;\n    const int i = valid ? static_cast<int>(linear) : -1;\n\n    Particle p;\n    if (valid) p = in[i];\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n    __shared__ SourceParticle source_tile[256];\n\n    for (long long base = 0; base < n; base += blockDim.x) {\n        const long long source_index = base + tid;\n        if (source_index < n) {\n            source_tile[tid] = {in[source_index].x, in[source_index].y,\n                                in[source_index].z, in[source_index].mass};\n        } else {\n            source_tile[tid] = {0.0f, 0.0f, 0.0f, 0.0f};\n        }\n        __syncthreads();\n\n        if (valid) {\n            for (int k = 0; k < blockDim.x && base + k < n; ++k) {\n                const int j = static_cast<int>(base + k);\n                if (i == j) continue;\n\n                const SourceParticle s = source_tile[k];\n                const float dx = s.x - p.x;\n                const float dy = s.y - p.y;\n                const float dz = s.z - p.z;\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * p.mass * s.mass) / (distSq * dist);\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n    }\n\n    if (valid) {\n        p.vx += (fx / p.mass) * dt;\n        p.vy += (fy / p.mass) * dt;\n        p.vz += (fz / p.mass) * dt;\n        p.x += p.vx * dt;\n        p.y += p.vy * dt;\n        p.z += p.vz * dt;\n        out[i] = p;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Shared-memory staging may reduce repeated source loads across target threads. This candidate keeps the baseline FP32 force arithmetic and self-exclusion to isolate tiling; correctness and performance remain unmeasured.",
+  "notes": "The h01 candidate failed compilation because NVRTC could not open math.h. The h02 proposal was rejected before compilation because its memory-lesson citation was invalid. This revision removes the include and the lesson; the controller still needs to compile and check it. launch.json remains unchanged at 256/256/0.",
+  "sources_kept": [
+    "baseline-e1"
+  ],
+  "transformations": [
+    "Stage source positions and masses in a shared-memory tile reused across target threads.",
+    "Keep target particle state in a local variable and retain the baseline force formula, self-interaction exclusion, and velocity-before-position update.",
+    "Keep all threads participating in tile barriers, including inactive threads in the final partial block."
+  ]
+}

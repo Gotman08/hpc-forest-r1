@@ -1,0 +1,149 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index 4d8504e..9e7bffa 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,32 +1,41 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
++// Chaque warp actif réutilise ses sources pour deux cibles par lane.
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Chaque warp charge un tile de sources par lanes, puis diffuse chaque
+-// source par shuffle aux lanes qui accumulent leurs cibles.
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    int lane = threadIdx.x & 31;
+-    bool target_valid = i < n;
++    const int lane = threadIdx.x & 31;
++    const int warp = threadIdx.x >> 5;
++    const int active_warps = blockDim.x / 64;
+ 
+-    // Ne pas faire sortir les lanes invalides : elles participent aux shuffles
+-    // nécessaires aux autres cibles du warp.
+-    Particle p = {};
+-    if (target_valid) p = in[i];
++    // Avec le bloc courant de 256 threads, quatre warps couvrent ses 256 cibles.
++    // Les autres warps n'ont aucune cible et peuvent sortir sans participer aux shuffles.
++    if (warp >= active_warps) return;
++
++    const int warp_base = blockIdx.x * blockDim.x + warp * 64;
++    if (warp_base >= n) return;
++
++    const int i0 = warp_base + lane;
++    const int i1 = i0 + 32;
++    const bool valid0 = i0 < n;
++    const bool valid1 = i1 < n;
++
++    Particle p0 = {};
++    Particle p1 = {};
++    if (valid0) p0 = in[i0];
++    if (valid1) p1 = in[i1];
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+-    float fx = 0.0f;
+-    float fy = 0.0f;
+-    float fz = 0.0f;
++    float fx0 = 0.0f, fy0 = 0.0f, fz0 = 0.0f;
++    float fx1 = 0.0f, fy1 = 0.0f, fz1 = 0.0f;
+ 
+-    // Le parcours par tiles conserve l'ordre croissant des indices source.
++    // Toutes les lanes d'un warp actif restent présentes aux shuffles,
++    // y compris celles dont une ou deux cibles sont hors de la queue.
+     for (int base = 0; base < n; ) {
+-        int source_index = base + lane;
++        const int source_index = base + lane;
+         float sx_lane = 0.0f;
+         float sy_lane = 0.0f;
+         float sz_lane = 0.0f;
+@@ -39,37 +48,61 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+             sm_lane = source.mass;
+         }
+ 
+-        for (int s = 0; s < 32; ++s) {
+-            int j = base + s;
+-            float sx = __shfl_sync(0xffffffffu, sx_lane, s);
+-            float sy = __shfl_sync(0xffffffffu, sy_lane, s);
+-            float sz = __shfl_sync(0xffffffffu, sz_lane, s);
+-            float sm = __shfl_sync(0xffffffffu, sm_lane, s);
++        const int remaining = n - base;
++        const int source_count = remaining < 32 ? remaining : 32;
++        for (int s = 0; s < source_count; ++s) {
++            const int j = base + s;
++            const float sx = __shfl_sync(0xffffffffu, sx_lane, s);
++            const float sy = __shfl_sync(0xffffffffu, sy_lane, s);
++            const float sz = __shfl_sync(0xffffffffu, sz_lane, s);
++            const float sm = __shfl_sync(0xffffffffu, sm_lane, s);
+ 
+-            if (target_valid && j < n && i != j) {
+-                float dx = sx - p.x;
+-                float dy = sy - p.y;
+-                float dz = sz - p.z;
+-                float distSq = dx * dx + dy * dy + dz * dz + softening;
+-                float dist = sqrtf(distSq);
+-                float f = (G * p.mass * sm) / (distSq * dist);
+-                fx += f * dx;
+-                fy += f * dy;
+-                fz += f * dz;
++            if (j < n) {
++                if (valid0 && i0 != j) {
++                    const float dx = sx - p0.x;
++                    const float dy = sy - p0.y;
++                    const float dz = sz - p0.z;
++                    const float distSq = dx * dx + dy * dy + dz * dz + softening;
++                    const float dist = sqrtf(distSq);
++                    const float f = (G * p0.mass * sm) / (distSq * dist);
++                    fx0 += f * dx;
++                    fy0 += f * dy;
++                    fz0 += f * dz;
++                }
++                if (valid1 && i1 != j) {
++                    const float dx = sx - p1.x;
++                    const float dy = sy - p1.y;
++                    const float dz = sz - p1.z;
++                    const float distSq = dx * dx + dy * dy + dz * dz + softening;
++                    const float dist = sqrtf(distSq);
++                    const float f = (G * p1.mass * sm) / (distSq * dist);
++                    fx1 += f * dx;
++                    fy1 += f * dy;
++                    fz1 += f * dz;
++                }
+             }
+         }
+ 
+-        if (n - base <= 32) break;
++        if (remaining <= 32) break;
+         base += 32;
+     }
+ 
+-    if (target_valid) {
+-        p.vx += (fx / p.mass) * dt;
+-        p.vy += (fy / p.mass) * dt;
+-        p.vz += (fz / p.mass) * dt;
+-        p.x += p.vx * dt;
+-        p.y += p.vy * dt;
+-        p.z += p.vz * dt;
+-        out[i] = p;
++    if (valid0) {
++        p0.vx += (fx0 / p0.mass) * dt;
++        p0.vy += (fy0 / p0.mass) * dt;
++        p0.vz += (fz0 / p0.mass) * dt;
++        p0.x += p0.vx * dt;
++        p0.y += p0.vy * dt;
++        p0.z += p0.vz * dt;
++        out[i0] = p0;
++    }
++    if (valid1) {
++        p1.vx += (fx1 / p1.mass) * dt;
++        p1.vy += (fy1 / p1.mass) * dt;
++        p1.vz += (fz1 / p1.mass) * dt;
++        p1.x += p1.vx * dt;
++        p1.y += p1.vy * dt;
++        p1.z += p1.vz * dt;
++        out[i1] = p1;
+     }
+ }

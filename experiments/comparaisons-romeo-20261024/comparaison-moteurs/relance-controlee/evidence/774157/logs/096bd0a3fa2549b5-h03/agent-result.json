@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 256,\n  \"shared_memory_bytes\": 7168\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "// Structure \"Array of Structures\" (AoS), preserved in global memory.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// One output particle per active thread; source particles are staged by block.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int i = blockIdx.x * blockDim.x + threadIdx.x;\n    const bool active = i < n;\n\n    Particle target;\n    if (active) target = in[i];\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    extern __shared__ Particle sourceTile[];\n\n    for (int base = 0; base < n; base += blockDim.x) {\n        const int sourceIndex = base + threadIdx.x;\n        if (sourceIndex < n) sourceTile[threadIdx.x] = in[sourceIndex];\n        __syncthreads();\n\n        int tileCount = n - base;\n        if (tileCount > blockDim.x) tileCount = blockDim.x;\n\n        if (active) {\n            for (int k = 0; k < tileCount; ++k) {\n                const int j = base + k;\n                if (i == j) continue;\n\n                const Particle source = sourceTile[k];\n                const float dx = source.x - target.x;\n                const float dy = source.y - target.y;\n                const float dz = source.z - target.z;\n\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * target.mass * source.mass) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n        __syncthreads();\n    }\n\n    if (active) {\n        target.vx += (fx / target.mass) * dt;\n        target.vy += (fy / target.mass) * dt;\n        target.vz += (fz / target.mass) * dt;\n\n        target.x += target.vx * dt;\n        target.y += target.vy * dt;\n        target.z += target.vz * dt;\n\n        out[i] = target;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Cooperatively loading each tile of AoS source particles into shared memory should reduce repeated global reads across threads in a block while retaining the original interaction order and force arithmetic. This is a performance hypothesis; controller validation is required.",
+  "notes": "This is a distinct shared-memory tiling experiment based on baseline-e1. The 7168-byte dynamic shared-memory setting is 256 * sizeof(Particle) for the fixed 256-thread block. Inactive tail threads still participate in barriers, and the interaction loop visits source indices in ascending order. No local commands or tests were run. The baseline was valid and correct in its reported cases; this candidate has no measured outcome or independent confirmation yet.",
+  "sources_kept": [
+    "baseline-e1"
+  ],
+  "transformations": [
+    "Stage each block-sized tile of source Particle records in dynamic shared memory, with barriers around reuse; preserve ascending interaction order and original force arithmetic.",
+    "Set launch shared_memory_bytes to 7168 for 256 Particle records."
+  ]
+}

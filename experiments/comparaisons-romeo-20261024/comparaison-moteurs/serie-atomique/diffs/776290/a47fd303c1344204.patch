@@ -1,0 +1,113 @@
+diff --git a/src/launch.json b/src/launch.json
+index 694a30a..4545b6d 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+-{
+-  "block": 256,
+-  "items_per_block": 256,
+-  "shared_memory_bytes": 0
+-}
++{
++  "block": 128,
++  "items_per_block": 128,
++  "shared_memory_bytes": 4096
++}
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..d7891b6 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -1,43 +1,68 @@
+-// Structure "Array of Structures" (AoS) : intuitive mais naïve sur GPU
+-// car elle empêche la coalescence parfaite des accès mémoire.
++// Structure "Array of Structures" (AoS).
+ struct Particle {
+     float x, y, z;
+     float vx, vy, vz;
+     float mass;
+ };
+ 
+-// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)
++// Compact shared-memory representation of a source particle.
++struct SharedSource {
++    float x, y, z, mass;
++};
++
++// Each CTA processes one target per thread and reuses 256-source chunks.
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+-    if (i >= n) return;
++    const int i = blockIdx.x * blockDim.x + threadIdx.x;
++    const int lane = threadIdx.x;
++    const int source_tile_size = 256;
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+-
+     float fx = 0.0f;
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
+-    for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++    extern __shared__ SharedSource source_tile[];
++
++    for (int source_base = 0; source_base < n;) {
++        const int remaining = n - source_base;
++        const int tile_count = remaining < source_tile_size ? remaining : source_tile_size;
+ 
+-        float dx = in[j].x - in[i].x;
+-        float dy = in[j].y - in[i].y;
+-        float dz = in[j].z - in[i].z;
++        // The 128-thread CTA cooperatively loads up to two sources per thread.
++        for (int k = lane; k < tile_count; k += blockDim.x) {
++            const int j = source_base + k;
++            source_tile[k].x = in[j].x;
++            source_tile[k].y = in[j].y;
++            source_tile[k].z = in[j].z;
++            source_tile[k].mass = in[j].mass;
++        }
++        __syncthreads();
+ 
+-        float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        // Tail threads remain in the barriers but do not compute or write output.
++        if (i < n) {
++            for (int k = 0; k < tile_count; ++k) {
++                const int j = source_base + k;
++                if (i == j) continue;
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++                const float dx = source_tile[k].x - in[i].x;
++                const float dy = source_tile[k].y - in[i].y;
++                const float dz = source_tile[k].z - in[i].z;
+ 
+-        fx += f * dx;
+-        fy += f * dy;
+-        fz += f * dz;
++                const float distSq = dx * dx + dy * dy + dz * dz + softening;
++                const float dist = sqrtf(distSq);
++                const float f = (G * in[i].mass * source_tile[k].mass) / (distSq * dist);
++
++                fx += f * dx;
++                fy += f * dy;
++                fz += f * dz;
++            }
++        }
++        __syncthreads();
++        source_base += tile_count;
+     }
+ 
+-    // Intégration d'Euler explicite
++    if (i >= n) return;
++
+     Particle p = in[i];
+     p.vx += (fx / p.mass) * dt;
+     p.vy += (fy / p.mass) * dt;
+@@ -49,4 +74,3 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     out[i] = p;
+ }
+-

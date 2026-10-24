@@ -1,0 +1,210 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "b3e706b3bf0a2de7513e575bf20b0281c98d0afe2c9d4d8b9e5f4ec5eda51609",
+    "tree_id": null
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "c8c01cd6351d4360",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "c8c01cd6351d4360",
+        "facts": {
+          "commit": "626f10d1d8cebc39cee5e03ecb4b27d211bb315e",
+          "base_commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.001079250349358449,
+          "score": 0.6322065247371921
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Staging each 256-particle source tile in shared memory lets 256 target threads reuse the tile while retaining one thread per target and the original interaction order. This may reduce repeated source loads, though the synchronization cost per tile could offset gains, particularly at smaller sizes.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Stage up to 256 source particles per block in dynamic shared memory, allocated as 256 * 28 bytes.\",\"Keep one thread per target; traverse source tiles in increasing order and skip self-interaction by index.\",\"Synchronize all threads before reading each staged tile and before reusing shared storage; keep inactive tail threads participating in barriers.\",\"Retain the original integration and complete Particle output state.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "5c313ff0a7e54670",
+        "kind": "experiment",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "5c313ff0a7e54670",
+        "facts": {
+          "commit": "072048c463a8593e353603bb047de6f557c940f5",
+          "base_commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.00012643742423986977,
+          "score": 0.9361936117565764
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Assigning one CTA to each target row and striding its threads over source indices exposes row-level CTA parallelism while reducing the per-thread serial source loop. Warp shuffles and a small shared-memory reduction combine the force components; changing items_per_block to 1 requests one CTA per row. This is a performance hypothesis, not a measured result.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Changed the launch mapping to one 256-thread CTA per target row by setting items_per_block to 1.\",\"Distributed source indices across CTA threads with a blockDim.x stride, skipping self-interactions and guarding the n tail.\",\"Reduced per-thread force sums within each warp using shuffle-down operations, then reduced eight warp sums through shared memory and warp 0.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "11ab1d9e992f420b",
+        "kind": "experiment",
+        "role": "T3",
+        "tree_id": "e1:T3",
+        "mission_id": "11ab1d9e992f420b",
+        "facts": {
+          "commit": null,
+          "base_commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "infrastructure_error",
+          "correct": null,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "The local model worker stopped sending heartbeats",
+        "model_interpretation": {
+          "claim": "Reassociating mass times inverse-distance cubed as (mass * invDist) * (invDist * invDist) keeps one rsqrtf and the same multiplication count while creating two independent products before the final scale multiply. This may shorten the dependent arithmetic path; changed float32 rounding means correctness and scored-size timing still require controller measurement.",
+          "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Reassociate the acceleration scale from mass * ((invDist * invDist) * invDist) to (mass * invDist) * (invDist * invDist), allowing the mass/inverse-distance and inverse-distance-square products to proceed independently while retaining the existing single reciprocal-square-root and self-interaction guard.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": false,
+        "details_are_bounded": true
+      },
+      {
+        "id": "baseline-e1",
+        "kind": "experiment",
+        "role": "baseline",
+        "tree_id": "baseline",
+        "mission_id": "baseline-e1",
+        "facts": {
+          "commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+          "base_commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0018551419711884762,
+          "score": 0.5
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "",
+          "transformations": "{}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "c8c01cd6351d4360-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "c8c01cd6351d4360",
+        "facts": {
+          "commit": null,
+          "base_commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Staging each 256-particle source tile in shared memory lets 256 target threads reuse the tile while retaining one thread per target and the original interaction order. This may reduce repeated source loads, though the synchronization cost per tile could offset gains, particularly at smaller sizes.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Stage up to 256 source particles per block in dynamic shared memory, allocated as 256 * 28 bytes.\",\"Keep one thread per target; traverse source tiles in increasing order and skip self-interaction by index.\",\"Synchronize all threads before reading each staged tile and before reusing shared storage; keep inactive tail threads participating in barriers.\",\"Retain the original integration and complete Particle output state.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "5c313ff0a7e54670-h01",
+        "kind": "development",
+        "role": "T2",
+        "tree_id": "e1:T2",
+        "mission_id": "5c313ff0a7e54670",
+        "facts": {
+          "commit": null,
+          "base_commit": "d58a08e24f588d1a8eabad135e3a8a705d0a8f94",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Assigning one CTA to each target row and striding its threads over source indices exposes row-level CTA parallelism while reducing the per-thread serial source loop. Warp shuffles and a small shared-memory reduction combine the force components; changing items_per_block to 1 requests one CTA per row. This is a performance hypothesis, not a measured result.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Changed the launch mapping to one 256-thread CTA per target row by setting items_per_block to 1.\",\"Distributed source indices across CTA threads with a blockDim.x stride, skipping self-interactions and guarding the n tail.\",\"Reduced per-thread force sums within each warp using shuffle-down operations, then reduced eight warp sums through shared memory and warp 0.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 8,
+    "next_offset": 6
+  },
+  "evidence_ids": [
+    "c8c01cd6351d4360",
+    "5c313ff0a7e54670",
+    "11ab1d9e992f420b",
+    "baseline-e1",
+    "c8c01cd6351d4360-h01",
+    "5c313ff0a7e54670-h01"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "072048c463a8593e353603bb047de6f557c940f5",
+  "selected_parent_id": null
+}

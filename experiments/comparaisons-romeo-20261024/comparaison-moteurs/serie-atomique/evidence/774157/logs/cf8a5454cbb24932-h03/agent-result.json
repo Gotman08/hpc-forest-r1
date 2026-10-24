@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist3 = 1.0f / (distSq * sqrtf(distSq));\n        float accelScale = in[j].mass * invDist3;\n\n        fx += accelScale * dx;\n        fy += accelScale * dy;\n        fz += accelScale * dz;\n    }\n\n    Particle p = in[i];\n    p.vx += fx * dt;\n    p.vy += fy * dt;\n    p.vz += fz * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Computing the inverse-distance cube as 1/(distSq*sqrtf(distSq)) may reduce the per-interaction multiplication count while retaining the standard float32 square root and division, avoiding the approximation error that caused the prior rsqrt-based parent to fail its largest-size check. Its performance and numerical effects require controller validation.",
+  "notes": "The supplied kernel has no target-mass multiply/divide to cancel. The baseline is correct and measured; the rsqrt parent failed one 16,384-particle case (maximum absolute error 0.0003108978271484375). This candidate has not been measured. Validate tolerances, nonfinite outputs, and the extreme-mass case before judging timing.",
+  "sources_kept": [],
+  "transformations": [
+    "Replace reciprocal-square-root, inverse-distance-squared, and inverse-distance-cubed intermediates with 1.0f / (distSq * sqrtf(distSq)).",
+    "Keep the one-thread-per-target mapping, source traversal, float32 softening, self-pair skip, velocity-then-position update order, and exact Particle mass copy unchanged; do not enable global fast math."
+  ]
+}

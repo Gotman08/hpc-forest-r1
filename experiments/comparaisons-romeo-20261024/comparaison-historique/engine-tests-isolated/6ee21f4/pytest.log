@@ -1,0 +1,100 @@
+........................................................................ [  9%]
+........................................................................ [ 18%]
+........................................................................ [ 27%]
+........................................................................ [ 36%]
+......................................................................F. [ 45%]
+........................................................................ [ 54%]
+........................................................................ [ 63%]
+....................................................................F... [ 72%]
+........................................................................ [ 81%]
+........................................................................ [ 91%]
+.......................................................................  [100%]
+================================== FAILURES ===================================
+_ test_unlimited_mailbox_still_verifies_identity_and_receives_completed_response _
+
+tmp_path = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-23/ce-que-je-voudrais-que-tu/work/engine-snapshots/tests-6ee21f4/test_unlimited_mailbox_still_v0')
+
+    def test_unlimited_mailbox_still_verifies_identity_and_receives_completed_response(tmp_path):
+        channel = tmp_path / "mailbox"
+        mailbox.initialize_channel(channel, "a" * 32, "offline-test")
+        request = {"nonce": "b" * 32, "session_id": "a" * 32,
+                   "expires_at": None, "deadline_policy": FINISH_STARTED}
+        request_sha = digest(request)
+        response = mailbox.response_envelope(request, request_sha, data={"finished": True})
+        def complete():
+            time.sleep(0.02)
+            mailbox.publish_response(channel, response)
+        thread = threading.Thread(target=complete)
+        thread.start()
+        try:
+>           assert mailbox.wait_response(channel, request, request_sha, poll_seconds=0.005)["data"]["finished"]
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_finish_started.py:189: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\hpc_forest\codex_mailbox.py:184: in wait_response
+    ready = bounded_json(ready_path, 4096)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\hpc_forest\codex_mailbox.py:59: in bounded_json
+    with path.open("rb") as stream:
+         ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-23/ce-que-je-voudrais-que-tu/work/engine-snapshots/tests-6ee21f4/test_unlimited_mailbox_still_v0/mailbox/responses/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ready.json')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       PermissionError: [Errno 13] Permission denied: 'C:\\Users\\nicol\\Documents\\Codex\\2026-10-23\\ce-que-je-voudrais-que-tu\\work\\engine-snapshots\\tests-6ee21f4\\test_unlimited_mailbox_still_v0\\mailbox\\responses\\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ready.json'
+
+C:\Users\nicol\AppData\Roaming\uv\python\cpython-3.13.12-windows-x86_64-none\Lib\pathlib\_local.py:537: PermissionError
+__________ test_cli_accepts_mother_choice_without_a_parallelism_knob __________
+
+tmp_path = WindowsPath('C:/Users/nicol/Documents/Codex/2026-10-23/ce-que-je-voudrais-que-tu/work/engine-snapshots/tests-6ee21f4/test_cli_accepts_mother_choice0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000020E38231A20>
+
+    def test_cli_accepts_mother_choice_without_a_parallelism_knob(tmp_path, monkeypatch):
+        from test_mother_forest import settings
+    
+        from hpc_forest import cli
+    
+        config = settings(tmp_path)
+        config["forest"] = {"policy": "fixed"}
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(config), encoding="utf-8")
+        statement = tmp_path / "statement.txt"
+        statement.write_text("The complete problem text.", encoding="utf-8")
+        captured = {}
+        def create(destination, settings, source, validation):
+            validate(settings)
+            captured.update(settings)
+            return destination
+        monkeypatch.setattr(cli, "create_workspace", create)
+        assert cli.main(["init", str(tmp_path / "new"), "--config", str(path), "--duration", "5h",
+                         "--mother-trees", "--statement", str(statement)]) == 0
+>       assert captured["forest"] == {"policy": "mother", "conversation": "persistent", "integration": "pairwise",
+                                      "statement": "The complete problem text."}
+E       AssertionError: assert {'policy': 'm...alls': 2, ...} == {'policy': 'm...roblem text.'}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Left contains 1 more item:
+E         {'plan_review_calls': 2}
+E         Use -v to get more diff
+
+tests\test_mother_forest_launch.py:177: AssertionError
+---------------------------- Captured stdout call -----------------------------
+{
+  "workspace": "C:\\Users\\nicol\\Documents\\Codex\\2026-10-23\\ce-que-je-voudrais-que-tu\\work\\engine-snapshots\\tests-6ee21f4\\test_cli_accepts_mother_choice0\\new"
+}
+=========================== short test summary info ===========================
+FAILED tests/test_finish_started.py::test_unlimited_mailbox_still_verifies_identity_and_receives_completed_response
+FAILED tests/test_mother_forest_launch.py::test_cli_accepts_mother_choice_without_a_parallelism_knob
+2 failed, 789 passed in 1306.42s (0:21:46)

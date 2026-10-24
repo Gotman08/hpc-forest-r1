@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 8,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int lane = threadIdx.x & 31;\n    const int warps_per_block = blockDim.x / 32;\n    const int warp_in_block = threadIdx.x / 32;\n    const int i = blockIdx.x * warps_per_block + warp_in_block;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Each warp owns one target; its lanes traverse disjoint source indices.\n    if (i < n) {\n        const float target_x = in[i].x;\n        const float target_y = in[i].y;\n        const float target_z = in[i].z;\n        const float target_mass = in[i].mass;\n\n        for (int j = lane; j < n; j += 32) {\n            if (i == j) continue;\n\n            const float dx = in[j].x - target_x;\n            const float dy = in[j].y - target_y;\n            const float dz = in[j].z - target_z;\n\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * target_mass * in[j].mass) / (distSq * dist);\n\n            fx += f * dx;\n            fy += f * dy;\n            fz += f * dz;\n        }\n    }\n\n    // No lane returns early, so every lane in each full warp reaches the reduction.\n    const unsigned int full_warp_mask = 0xffffffffu;\n    for (int offset = 16; offset > 0; offset >>= 1) {\n        fx += __shfl_down_sync(full_warp_mask, fx, offset);\n        fy += __shfl_down_sync(full_warp_mask, fy, offset);\n        fz += __shfl_down_sync(full_warp_mask, fz, offset);\n    }\n\n    if (lane == 0 && i < n) {\n        Particle p = in[i];\n        p.vx += (fx / p.mass) * dt;\n        p.vy += (fy / p.mass) * dt;\n        p.vz += (fz / p.mass) * dt;\n\n        p.x += p.vx * dt;\n        p.y += p.vy * dt;\n        p.z += p.vz * dt;\n\n        out[i] = p;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "The parent assigns a thread to each target and performs its full source-particle accumulation serially. Giving each target to a warp distributes that traversal across 32 lanes and exposes more target warps across CTAs; a warp-local reduction may reduce per-target serial work, though its reduction overhead and altered summation order must be measured.",
+  "notes": "The supplied baseline observation is valid on all 11 correctness cases and reports a three-repeat mean of 0.0018526411283622502 seconds. This candidate has not been measured. The launch uses 256 threads per CTA and 8 target warps per CTA, with no shared-memory tiling; each warp reaches the reduction even for an out-of-range target, and only lane 0 writes the complete particle state for an in-range target. Official correctness checks should precede timing comparisons.",
+  "sources_kept": [],
+  "transformations": [
+    "Map each warp to one target using the global warp index; configure 256 threads and 8 target warps per CTA.",
+    "Have each lane accumulate source indices lane + 32k, skipping the self pair and bounding traversal by n.",
+    "Reduce the three force components with full-warp shuffle-down operations; lane 0 integrates and writes the full Particle record for valid targets."
+  ]
+}

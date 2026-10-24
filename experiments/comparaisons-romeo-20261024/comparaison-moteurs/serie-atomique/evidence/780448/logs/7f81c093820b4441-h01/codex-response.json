@@ -1,0 +1,149 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale\n    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.\n#pragma unroll 4\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue; // Divergence de branche inutile dans la boucle\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float invDist = rsqrtf(distSq);\n        float invDist3 = invDist * invDist * invDist;\n        float f = (G * in[i].mass * in[j].mass) * invDist3;\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += (fx / p.mass) * dt;\n    p.vy += (fy / p.mass) * dt;\n    p.vz += (fz / p.mass) * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "The isolated rsqrt-based arithmetic variant was valid with a recorded search mean of 0.001009684 s, while split source ranges combined with rsqrt were also valid but recorded 0.001025174 s. The catalog contains three distinct T3 programs and no repeats. This candidate keeps the original self-exclusion check, target-mass handling, and one-target-per-thread loop, and adds a factor-four unroll directive to test whether unrolling reduces loop-control or scheduling cost without changing the source interaction order. Code growth may instead regress performance; no speedup or correctness is assumed before controller validation.",
+    "memory_lessons": [
+      {
+        "applicability": "These are recorded search means, not independent confirmation; the small split-range versus baseline difference does not establish a reliable speedup.",
+        "claim": "The split-range program was valid at 0.001842930 s versus the baseline's 0.001844410 s, while the isolated rsqrt program was valid at 0.001009684 s. These outcomes motivate testing loop scheduling separately from arithmetic, without attributing a cause or claiming a confirmed gain.",
+        "evidence_ids": [
+          "896161c511ca4f2b",
+          "baseline-e1",
+          "2495c63d565b4f3e"
+        ],
+        "next_experiment": "Measure the unrolled rsqrt candidate under the official correctness and timing protocol, then compare it with the isolated rsqrt program."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "This candidate preserves the supplied launch configuration and does not cancel target mass or evaluate the j=i interaction. Controller validation should include coincident positions, extreme mass, GPU tolerance and FP64 checks, then all scored sizes. This program is unmeasured.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Add #pragma unroll 4 to the single source loop while retaining the original per-interaction self-exclusion check and source traversal.",
+      "Use the previously validated rsqrtf-based inverse-cube factor while retaining target-mass multiplication and the final force-per-target-mass update.",
+      "Preserve one target per thread, the existing launch configuration, particle layout, and integration behavior."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "c922ea4d47a44a5899a6263b96a46680",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "0bbe470b0796607319317d3479b17d3876afa724fad64d4d05559ca57e4361ea",
+  "session_id": "bd4eb8bb1d38489bbad5765e53cb020c",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "71329b692b270fc6f64c2b0b8509034e0b340b790b553caaf2fc6549995c85e0",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4352,
+        "input_tokens": 23585,
+        "output_tokens": 9026,
+        "reasoning_output_tokens": 7599
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "7f81c093820b4441-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "2495c63d565b4f3e",
+            "896161c511ca4f2b",
+            "f7b049e78ea14fc7"
+          ],
+          "status": "applied",
+          "summary": "Compared the recorded arithmetic and split-range results and proposed one bounded loop-unrolling test; no candidate performance gain is presumed."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "The change introduces no hardware-specific instruction or resource setting; it preserves the controller's fixed target and launch configuration."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No new library API or architecture feature is introduced; the existing CUDA rsqrt arithmetic has already passed recorded correctness checks, and the unrolling effect is left to measurement."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "baseline-e1",
+            "2495c63d565b4f3e",
+            "896161c511ca4f2b"
+          ],
+          "status": "applied",
+          "summary": "Compared available search means cautiously, noted the lack of independent confirmation, and made no performance claim for this unmeasured candidate."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "c922ea4d47a44a5899a6263b96a46680",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "0bbe470b0796607319317d3479b17d3876afa724fad64d4d05559ca57e4361ea",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "bd4eb8bb1d38489bbad5765e53cb020c"
+    },
+    "observed_tokens": 32611,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 32611,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

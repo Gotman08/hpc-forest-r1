@@ -1,0 +1,150 @@
+diff --git a/src/launch.json b/src/launch.json
+index 1bf00c9..0acd06d 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+ {
+-  "block": 256,
++  "block": 128,
+   "items_per_block": 256,
+-  "shared_memory_bytes": 4096
++  "shared_memory_bytes": 2048
+ }
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index def88d6..a0b3b7d 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -6,12 +6,19 @@ struct Particle {
+ 
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+     const int tid = threadIdx.x;
+-    const int i = blockIdx.x * blockDim.x + tid;
+-    const bool target_valid = i < n;
++    const int target_base = blockIdx.x * (2 * blockDim.x);
++    const int i0 = target_base + 2 * tid;
++    const int i1 = i0 + 1;
++    const bool valid0 = i0 < n;
++    const bool valid1 = i1 < n;
+ 
+-    Particle target;
+-    if (target_valid) {
+-        target = in[i];
++    Particle target0;
++    Particle target1;
++    if (valid0) {
++        target0 = in[i0];
++    }
++    if (valid1) {
++        target1 = in[i1];
+     }
+ 
+     extern __shared__ float shared[];
+@@ -22,9 +29,12 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     const float G = 1.0f;
+     const float softening = 0.001f;
+-    float fx = 0.0f;
+-    float fy = 0.0f;
+-    float fz = 0.0f;
++    float fx0 = 0.0f;
++    float fy0 = 0.0f;
++    float fz0 = 0.0f;
++    float fx1 = 0.0f;
++    float fy1 = 0.0f;
++    float fz1 = 0.0f;
+ 
+     for (int base = 0; base < n; base += blockDim.x) {
+         const int source_index = base + tid;
+@@ -35,47 +45,67 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+             source_mass[tid] = in[source_index].mass;
+         }
+ 
+-        // Every thread, including inactive target lanes, participates in both barriers.
+         __syncthreads();
+ 
+-        if (target_valid) {
+-            int tile_count = n - base;
+-            if (tile_count > blockDim.x) {
+-                tile_count = blockDim.x;
+-            }
+-
+-            for (int k = 0; k < tile_count; ++k) {
+-                const int j = base + k;
+-                if (i == j) continue;
++        int tile_count = n - base;
++        if (tile_count > blockDim.x) {
++            tile_count = blockDim.x;
++        }
+ 
+-                const float dx = source_x[k] - target.x;
+-                const float dy = source_y[k] - target.y;
+-                const float dz = source_z[k] - target.z;
++        for (int k = 0; k < tile_count; ++k) {
++            const int j = base + k;
++            const float sx = source_x[k];
++            const float sy = source_y[k];
++            const float sz = source_z[k];
++            const float sm = source_mass[k];
+ 
++            if (valid0 && i0 != j) {
++                const float dx = sx - target0.x;
++                const float dy = sy - target0.y;
++                const float dz = sz - target0.z;
+                 const float distSq = dx * dx + dy * dy + dz * dz + softening;
+                 const float dist = sqrtf(distSq);
+-                const float f = (G * target.mass * source_mass[k]) / (distSq * dist);
++                const float f = (G * target0.mass * sm) / (distSq * dist);
++                fx0 += f * dx;
++                fy0 += f * dy;
++                fz0 += f * dz;
++            }
+ 
+-                fx += f * dx;
+-                fy += f * dy;
+-                fz += f * dz;
++            if (valid1 && i1 != j) {
++                const float dx = sx - target1.x;
++                const float dy = sy - target1.y;
++                const float dz = sz - target1.z;
++                const float distSq = dx * dx + dy * dy + dz * dz + softening;
++                const float dist = sqrtf(distSq);
++                const float f = (G * target1.mass * sm) / (distSq * dist);
++                fx1 += f * dx;
++                fy1 += f * dy;
++                fz1 += f * dz;
+             }
+         }
+ 
+-        // Ensure all readers finish before the next source tile overwrites shared memory.
+         __syncthreads();
+     }
+ 
+-    if (target_valid) {
+-        Particle p = target;
+-        p.vx += (fx / p.mass) * dt;
+-        p.vy += (fy / p.mass) * dt;
+-        p.vz += (fz / p.mass) * dt;
+-
++    if (valid0) {
++        Particle p = target0;
++        p.vx += (fx0 / p.mass) * dt;
++        p.vy += (fy0 / p.mass) * dt;
++        p.vz += (fz0 / p.mass) * dt;
+         p.x += p.vx * dt;
+         p.y += p.vy * dt;
+         p.z += p.vz * dt;
++        out[i0] = p;
++    }
+ 
+-        out[i] = p;
++    if (valid1) {
++        Particle p = target1;
++        p.vx += (fx1 / p.mass) * dt;
++        p.vy += (fy1 / p.mass) * dt;
++        p.vz += (fz1 / p.mass) * dt;
++        p.x += p.vx * dt;
++        p.y += p.vy * dt;
++        p.z += p.vz * dt;
++        out[i1] = p;
+     }
+ }

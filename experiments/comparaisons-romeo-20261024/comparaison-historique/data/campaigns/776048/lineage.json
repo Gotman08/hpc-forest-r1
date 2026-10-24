@@ -1,0 +1,1617 @@
+[
+  {
+    "campaign": "776048",
+    "ordinal": 1,
+    "id": "aae515bf57f94665",
+    "role": "T1",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673346.6642172,
+    "elapsed_seconds": 130.47049379348755,
+    "commit": "d28aed5445e6e7914fcf52b67e251e630d1efec9",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "d9fbd34509971d67",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0009693238222033003,
+    "score": 0.6562077615404189,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 47.60923923658814,
+    "best_research_before_seconds": null,
+    "beats_best_research": true,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/aae515bf57f94665.patch",
+    "hypothesis": "A 128-thread block can cooperatively stage each 128-particle source tile once and reuse it across its target threads, reducing repeated global source loads. The serial source order is preserved; shared-memory synchronization and access overhead may offset the reuse, so official measurements are needed.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Stage a 128-particle AoS source tile in dynamic shared memory, with one loader thread per source particle.",
+        "Keep one target particle per thread and serially traverse source particles in their original order.",
+        "Use 128 threads per block and configure 3584 bytes of dynamic shared memory.",
+        "Keep all threads participating in barriers, including inactive target threads, and bound the final source tile for arbitrary n."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673452.74904,
+    "measured_elapsed_seconds": 236.55531644821167,
+    "kernel_sha256": "3fe80bff37877b48977a7df17033c0a1ebca9cd29fbc173b160489bbc46882e1",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 3584
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 2,
+    "id": "e099ff53da844775",
+    "role": "T2",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673346.6948724,
+    "elapsed_seconds": 130.5011489391327,
+    "commit": "cdd3e221b598767ddbaeb1293a6b52bdadfc6e56",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "852ef30d975b7cb2",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0026152822324718374,
+    "score": 0.4143312384732991,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": -41.352789059481765,
+    "best_research_before_seconds": 0.0009693238222033003,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/e099ff53da844775.patch",
+    "hypothesis": "Two targets per thread should let each source particle's position and mass be loaded once and reused for both force accumulations, reducing redundant source loads without shared-memory staging. Keeping 256 outputs per block while using 128 threads limits the coarsening change; register pressure and reduced thread-level parallelism could offset any gain, so performance remains unverified.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Each thread computes two strided target particles and reuses one set of source position/mass loads across both targets.",
+        "Set the launch to 128 threads and 256 output items per block; mask incomplete target pairs and safely skip wholly out-of-range threads.",
+        "Retain ascending source accumulation and the existing velocity-then-position update order; copy each target particle through so its mass is unchanged."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673476.6616316,
+    "measured_elapsed_seconds": 260.4679081439972,
+    "kernel_sha256": "716bd59ea41b71a83bec491f055649e46eda514a0b5d2c4bd44d6b4bc3e6bbe7",
+    "launch": {
+      "block": 128,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 3,
+    "id": "072b1a80b8fa466d",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673346.722733,
+    "elapsed_seconds": 130.52900958061218,
+    "commit": "e568be9d2b0a871f1cd1f187960d4bcbce943955",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "9a36d0fced288e83",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0001518326655745892,
+    "score": 0.9241600196593025,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 91.79363111069702,
+    "best_research_before_seconds": 0.0009693238222033003,
+    "beats_best_research": true,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/072b1a80b8fa466d.patch",
+    "hypothesis": "Assigning one warp to each target exposes parallelism across the source-particle reduction and shortens each thread's dependent accumulation chain. Warp shuffles combine force partials without shared memory, barriers, extra buffers, or launches; the reduced outputs per block and additional shuffle work may affect performance, especially at small n, and must be measured.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Map one warp to each target; lanes process source indices lane + 32k, guarding the tail and excluding the target's self-interaction.",
+        "Reduce the three force components with warp shuffle-down operations, then have lane zero preserve the original velocity-then-position integration order and write the unchanged mass.",
+        "Use 256 threads and 8 output items per block so each of the block's 8 warps owns one target."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673514.8050423,
+    "measured_elapsed_seconds": 298.6113188266754,
+    "kernel_sha256": "bed23440c734be138a8b192e22963e00926c6ecb984814b05e493938620ee731",
+    "launch": {
+      "block": 256,
+      "items_per_block": 8,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 4,
+    "id": "7a33f8f04fdf415f",
+    "role": "T4",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673346.7493823,
+    "elapsed_seconds": 130.55565881729126,
+    "commit": "ce2d18e6b1bf60a3defd1632579a9a59932a60c2",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "33f7e4d246eb0746",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0010145747743325992,
+    "score": 0.6458424704265079,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 45.163480912054276,
+    "best_research_before_seconds": 0.0001518326655745892,
+    "beats_best_research": false,
+    "change_kind": "kernel seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "patch": "diffs/776048/7a33f8f04fdf415f.patch",
+    "hypothesis": "Remplacer sqrtf, la multiplication du dénominateur et la division par rsqrtf(distSq) suivi de deux multiplications pour former distSq^(-3/2) pourrait réduire le travail arithmétique par interaction. Cette réécriture change l’arrondi float32 : aucun gain ni maintien des tolérances n’est présumé avant les vérifications officielles.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Remplacer sqrtf(distSq) et la formation du dénominateur distSq * dist par rsqrtf(distSq) et le produit invDist^3.",
+        "Conserver l’exclusion d’auto-interaction et la mise à jour/copie des champs existants."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673502.4852073,
+    "measured_elapsed_seconds": 286.29148387908936,
+    "kernel_sha256": "400de6327346a77eba38d07b6896afdcd91a805d838b2eb94c1bfd160d1790c9",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 5,
+    "id": "2edf23e904aa477b",
+    "role": "T1",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673452.7656732,
+    "elapsed_seconds": 236.5719497203827,
+    "commit": "9caf39a759436ab65459030239a44dbb5c2f9697",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "1742f4c89470c7a6",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.000993255436589586,
+    "score": 0.6506848274810291,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 46.31576490399182,
+    "best_research_before_seconds": 0.0001518326655745892,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/2edf23e904aa477b.patch",
+    "hypothesis": "Using a 256-thread block and staging 256 AoS source particles per tile should reuse each staged source across twice as many target threads as the previously measured 128-thread tiling candidate, while reducing tile-loop barriers per source traversal. The 7168-byte shared-memory allocation is modest; performance remains to be measured.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Set the block size and source tile size to 256 threads and particles, respectively.",
+        "Stage each valid source particle into dynamic shared memory once per target block, allocating 256 * sizeof(Particle) = 7168 bytes.",
+        "Keep one target particle per thread and serially process source particles in ascending index order.",
+        "Keep inactive target threads in all block barriers; bound loads and interactions for the final partial source tile."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673537.5827935,
+    "measured_elapsed_seconds": 321.3890700340271,
+    "kernel_sha256": "80d151d080589733c6cead76e8f5a7bb425efce6b3dcf8ed524bb625e4e16f7b",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 7168
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 6,
+    "id": "335e165bec36493e",
+    "role": "T2",
+    "parent_id": "e099ff53da844775",
+    "depth": 2,
+    "created": 1792673476.6765192,
+    "elapsed_seconds": 260.48279571533203,
+    "commit": "c71f1693d69a6eb173c9a41489b28febd472be6b",
+    "base_commit": "cdd3e221b598767ddbaeb1293a6b52bdadfc6e56",
+    "variant_id": "1a6734f85d4f4122",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.004167634985676047,
+    "score": 0.30745056008928573,
+    "base_search_seconds": 0.0026152822324718374,
+    "gain_vs_base_pct": -59.35698770595024,
+    "best_research_before_seconds": 0.0001518326655745892,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/335e165bec36493e.patch",
+    "hypothesis": "Increasing per-thread output coarsening from two targets to four should reuse each loaded source particle across more force accumulations. The parent’s two-target candidate was correct but slower than baseline, so this tests whether stronger reuse compensates for increased per-thread work and reduced target-level parallelism. Keeping 128 threads per block isolates the coarsening change; the output tile scales to 512 items per block.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Increase the per-thread target coarsening factor from two to four, reusing each loaded source particle for four target accumulations without shared-memory staging.",
+        "Keep 128 threads per block and set the output tile to 512 items per block to match the coarsening factor.",
+        "Retain ascending source iteration, the existing force and update order, tail masking, complete output writes, and exact mass copying."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673560.3355453,
+    "measured_elapsed_seconds": 344.1418218612671,
+    "kernel_sha256": "96bf26d37a4eec1f0f2a636a048cbb703338e6d07d90b669dd11715c001f03ac",
+    "launch": {
+      "block": 128,
+      "items_per_block": 512,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 7,
+    "id": "36b0e8c95e694a2e",
+    "role": "T4",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673502.4992046,
+    "elapsed_seconds": 286.30548119544983,
+    "commit": "3121437eed1f4dcdf695050e4a6db1df2c6f4def",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": null,
+    "status": "incorrect",
+    "reason": "Protected correctness checks failed",
+    "seconds": null,
+    "score": 0.0,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.0001518326655745892,
+    "beats_best_research": false,
+    "change_kind": "kernel seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "patch": "diffs/776048/36b0e8c95e694a2e.patch",
+    "hypothesis": "Form the source-mass-times-inverse-distance term independently of the inverse-distance square, then multiply the two results. This keeps the same multiplication count but may shorten the dependent multiply chain per interaction; the changed FP32 grouping must still pass the official oracle and extreme-mass checks.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Reorder the per-interaction scale calculation so mass * invDist and invDist * invDist can be computed independently before their final multiplication.",
+        "Apply the same arithmetic change in both source ranges while retaining self-interaction exclusion and all existing integration behavior."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673684.9581013,
+    "measured_elapsed_seconds": 468.7643778324127,
+    "kernel_sha256": "e9020a9aa520f871be189b9994e0d4777102025d96e3fc5b7a4fc34aded15ada",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 8,
+    "id": "54965513c23b4631",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673514.8190196,
+    "elapsed_seconds": 298.62529611587524,
+    "commit": "1174186ce4c74c6c9fa42f92dc4ec43df5ae547b",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "3b26d2a24d3ac27c",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00014436238753220778,
+    "score": 0.9276213295856214,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 92.19739045384921,
+    "best_research_before_seconds": 0.0001518326655745892,
+    "beats_best_research": true,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/54965513c23b4631.patch",
+    "hypothesis": "Using one 256-thread block per target assigns eight times as many lanes to the source reduction as the previously measured one-warp-per-target mapping, shortening each lane's serial source loop. A shared-memory tree reduction and one target per block add synchronization and scheduling overhead, so any benefit must be measured.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Assign one 256-thread block to each target, with each thread accumulating forces from source indices spaced by the block width; safely stop the loop before integer index overflow.",
+        "Load the target once into shared memory, exclude self-interaction, and handle incomplete source tails through the per-thread loop bound.",
+        "Combine per-thread force sums with a synchronized shared-memory tree reduction; let thread zero preserve the velocity-then-position integration order and write the unchanged mass.",
+        "Set items_per_block to one to match the block-per-target mapping; retain a 256-thread block."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673580.7103145,
+    "measured_elapsed_seconds": 364.5165910720825,
+    "kernel_sha256": "da11923fe7f545b6d711051ce70e78dc3f9d0cb20b44416b282041227b5301ab",
+    "launch": {
+      "block": 256,
+      "items_per_block": 1,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 9,
+    "id": "5e30f66d28c84e34",
+    "role": "T1",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673537.5974603,
+    "elapsed_seconds": 321.4037368297577,
+    "commit": "2ab238d9ae8046c2f297b9014ee423abcf3563f8",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "9c73b8ee045c8ac7",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0009585576270644929,
+    "score": 0.6587230761106311,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 48.19113884632574,
+    "best_research_before_seconds": 0.00014436238753220778,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/5e30f66d28c84e34.patch",
+    "hypothesis": "A 128-thread block with a 256-particle source tile may reduce the number of synchronization cycles relative to the measured 128/128 candidate, while avoiding the 256-thread block configuration that measured slightly slower. Two source particles per lane stage the tile; each target still traverses sources serially in ascending order. The effect of reduced barriers versus the extra staging work requires official measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Set the launch block and items-per-block to 128, with 7168 bytes of dynamic shared memory.",
+        "Stage up to 256 AoS source particles per block tile using two bounded loads per lane.",
+        "Keep one target per thread and traverse each staged source tile in ascending source-index order.",
+        "Keep all threads participating in synchronization, including inactive target lanes, and handle partial source tiles without extra kernels or host preprocessing."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673610.309113,
+    "measured_elapsed_seconds": 394.115389585495,
+    "kernel_sha256": "253ebfd505d04899fbcbd47b0ce02a76c7c8bebf831256ae98850ff6a3f33d3f",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 7168
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 10,
+    "id": "3aec87f1ed714bf4",
+    "role": "T2",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673560.3503568,
+    "elapsed_seconds": 344.1566333770752,
+    "commit": "b370a56ebb0297d945680abc7705c273bf8159fa",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "56d8335cf138a902",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0025820852919946694,
+    "score": 0.417434510935827,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": -39.558535243803064,
+    "best_research_before_seconds": 0.00014436238753220778,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/3aec87f1ed714bf4.patch",
+    "hypothesis": "The measured two-target, 128-thread candidate and four-target candidate were both slower than baseline. This experiment tests a two-target contiguous output tile with 64 threads per block (128 targets per block), changing block granularity while retaining source-load reuse across two accumulators. Any speed effect remains unverified.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Assign each 64-thread block a contiguous 128-target tile: the first target is block-base plus thread index, and the second is offset by blockDim.x.",
+        "Reuse each loaded source particle across up to two target force accumulations, without shared-memory staging.",
+        "Mask an incomplete second target and keep ascending source accumulation, velocity-before-position updates, complete valid output writes, and exact copied masses."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673749.2641053,
+    "measured_elapsed_seconds": 533.0703818798065,
+    "kernel_sha256": "4904df224e96085f0e57891713cb64923d129927bc07ddae057332ad70498767",
+    "launch": {
+      "block": 64,
+      "items_per_block": 128,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 11,
+    "id": "8052fe0a6b7b4d62",
+    "role": "T3",
+    "parent_id": "072b1a80b8fa466d",
+    "depth": 2,
+    "created": 1792673580.7253306,
+    "elapsed_seconds": 364.5316071510315,
+    "commit": "3c16471bb69533bcfeae6d46f73564644f91aa03",
+    "base_commit": "e568be9d2b0a871f1cd1f187960d4bcbce943955",
+    "variant_id": "46949a163efb77f5",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00013281273678120593,
+    "score": 0.9330241218405282,
+    "base_search_seconds": 0.0001518326655745892,
+    "gain_vs_base_pct": 12.526901718681582,
+    "best_research_before_seconds": 0.00014436238753220778,
+    "beats_best_research": true,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/8052fe0a6b7b4d62.patch",
+    "hypothesis": "Assigning four warps to each target increases source-reduction parallelism over the measured one-warp-per-target parent while using warp shuffles and one block barrier to combine partial sums. With 256 threads this produces two targets per block; the shorter per-lane source loop may help, but fewer targets per block and shared-memory synchronization may offset that benefit.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Map four warps to each target; each lane processes a distinct source-index sequence with stride 128, covering arbitrary source tails and excluding self-interaction.",
+        "Reduce each warp's three force components with warp shuffles; have each warp leader write its partial sums to a unique shared-memory slot.",
+        "Use a block barrier before combining the four warp partials per target; avoid early returns so all threads reach the barrier, including for an incomplete target group.",
+        "Have the first warp of each target group combine the partials and preserve the existing velocity-then-position integration order and unchanged mass.",
+        "Use 256 threads and two targets per block, with fixed-size shared scratch and no additional launch or external buffer."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673653.8317988,
+    "measured_elapsed_seconds": 437.6380753517151,
+    "kernel_sha256": "ebf9250f362a1cff4a1320c4e557a22c82a957530dab72185a0a3f38a79a53ee",
+    "launch": {
+      "block": 256,
+      "items_per_block": 2,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 12,
+    "id": "b067236e66fc41e3",
+    "role": "T1",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673610.321695,
+    "elapsed_seconds": 394.1279716491699,
+    "commit": "0bc4fed352dc4d8128fb72d3de15229c4d9e5c4f",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "4eedc49fa7c95609",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.000960974214033043,
+    "score": 0.6581568100861634,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 48.06052529197659,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/b067236e66fc41e3.patch",
+    "hypothesis": "Holding the 128-target-thread block fixed, staging 512 source particles per tile should halve tile iterations and their synchronization rounds relative to the valid 128-thread/256-source-tile candidate, while preserving serial source order and reuse across targets. The 14,336-byte shared allocation could affect occupancy or staging cost, so the official measurement must determine the outcome.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Set the launch block and items_per_block to 128 and dynamic shared memory to 14,336 bytes for a 512-Particle tile.",
+        "Stage each valid source particle into dynamic shared memory with a block-strided load; bound the final tile for arbitrary n.",
+        "Keep one target particle per thread and traverse source indices in ascending order, preserving the interaction and integration arithmetic.",
+        "Ensure inactive target threads still participate in both block barriers; write the complete output Particle only for active targets."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673697.676286,
+    "measured_elapsed_seconds": 481.48256254196167,
+    "kernel_sha256": "d97e7241bcf2b83af05aa704bacfd55780b3044a7f05a96db2eac3fa99e550ae",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 14336
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 13,
+    "id": "986ed4e1c49d44e1",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673653.845443,
+    "elapsed_seconds": 437.6517195701599,
+    "commit": "fff81576991c1fdf17aae5b9c9d7fca9c68ea198",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "20ead4116ce2eaa1",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00014356636894721666,
+    "score": 0.9279916893842952,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 92.24041427962779,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/986ed4e1c49d44e1.patch",
+    "hypothesis": "Assigning two warps (64 lanes) to each target gives each lane a shorter source loop than the measured one-warp mapping, while using less reduction width per target than the four-warp and block-per-target candidates. Warp shuffles reduce each warp's partial force, followed by one block barrier and a small shared-memory combine. This may balance source parallelism, reduction overhead, and target throughput; its effect requires measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Map each group of 64 threads (two warps) to one target; each lane handles source indices starting at warp_offset * 32 + lane and advances by 64.",
+        "Guard targets and source tails for arbitrary n, exclude j == i, and keep invalid target groups active through the reduction barrier.",
+        "Reduce each warp's three force components with shuffle-down operations, store each warp's leader partial in fixed shared scratch, and combine the two partials after one block barrier.",
+        "Use 256 threads and four targets per block; preserve the entry point, Particle layout, unchanged mass, and velocity-then-position integration order."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673757.1932113,
+    "measured_elapsed_seconds": 540.9994878768921,
+    "kernel_sha256": "0552c9ea1d3ae64e187d46d251973ad61a9431ff63ca08328d61503dbcefc4c9",
+    "launch": {
+      "block": 256,
+      "items_per_block": 4,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 14,
+    "id": "917b639f9f734e82",
+    "role": "T4",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673684.9736152,
+    "elapsed_seconds": 468.77989172935486,
+    "commit": "f3bfaae6e93031fa3397043c13e453852aea7c69",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "905386dffbc23ab9",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0018485566126338886,
+    "score": 0.500219566300318,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 0.08778796956783186,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "patch": "diffs/776048/917b639f9f734e82.patch",
+    "hypothesis": "Calculer une seule fois le réciproque float32 de la masse cible puis le réutiliser pour les trois composantes pourrait remplacer trois divisions après l'accumulation par un réciproque et des multiplications. L'accumulation de force, l'exclusion de l'auto-interaction et les masses stockées restent inchangées; la différence d'arrondi et le cas de masse extrême doivent être vérifiés par le protocole officiel.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Après avoir copié la particule cible, calculer une fois invMass = 1.0f / p.mass et l'utiliser pour mettre à l'échelle les trois sommes de force; conserver le reste du noyau inchangé."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673925.1507294,
+    "measured_elapsed_seconds": 708.9570059776306,
+    "kernel_sha256": "b3c56030a2d999e78879c80f4a5ba41e1fe686a0c40d271942709a3f7dbe1b69",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 15,
+    "id": "d4299d0b4ca44112",
+    "role": "T1",
+    "parent_id": "b067236e66fc41e3",
+    "depth": 2,
+    "created": 1792673697.6894877,
+    "elapsed_seconds": 481.4957642555237,
+    "commit": "43a59806dd5ee75ed7c2e74fd184422ea07533b7",
+    "base_commit": "0bc4fed352dc4d8128fb72d3de15229c4d9e5c4f",
+    "variant_id": "1eb6448a41d5ccef",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.000966752330228386,
+    "score": 0.6568067934965973,
+    "base_search_seconds": 0.000960974214033043,
+    "gain_vs_base_pct": -0.6012769240803184,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/d4299d0b4ca44112.patch",
+    "hypothesis": "Keeping the valid 128-thread block and 512-source tile, a shared structure-of-arrays holding only source x, y, z, and mass should reduce dynamic shared memory from 14,336 to 8,192 bytes and stage fewer fields than the AoS tile. This may reduce staging overhead or improve occupancy; official measurement must determine the effect.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Replace the shared AoS Particle tile with four dynamic shared-memory float arrays for source x, y, z, and mass.",
+        "Keep a 512-source tile and 128-thread block; set dynamic shared memory to 8,192 bytes.",
+        "Load only the four source fields used by the interaction into shared memory.",
+        "Preserve ascending source traversal, bounds checks, block barriers, output updates, and inactive-thread barrier participation."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673774.1642141,
+    "measured_elapsed_seconds": 557.970490694046,
+    "kernel_sha256": "b4b107a1b109497ff5b5e822e4419e5a1f219171dcc86fd7d903ce633d2b2438",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 8192
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 16,
+    "id": "08eb76bfcf6f4c3b",
+    "role": "T2",
+    "parent_id": "335e165bec36493e",
+    "depth": 3,
+    "created": 1792673749.2794023,
+    "elapsed_seconds": 533.0856788158417,
+    "commit": "2fe73e60b35ef990360ff30e92daa18da5dec71f",
+    "base_commit": "c71f1693d69a6eb173c9a41489b28febd472be6b",
+    "variant_id": "1945356f38ad4fab",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0027648815927216975,
+    "score": 0.400900501838187,
+    "base_search_seconds": 0.004167634985676047,
+    "gain_vs_base_pct": 33.658259367136104,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/08eb76bfcf6f4c3b.patch",
+    "hypothesis": "Changing from four targets per thread with 128 threads to two targets per thread with 256 threads keeps the output tile at 512 while reducing per-thread accumulators and increasing threads per block. This tests whether lower per-thread register demand improves execution; earlier coarsened candidates were slower than baseline, so no speedup is assumed.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Reduce the compile-time per-thread target coarsening factor from four to two; each source particle is still loaded once per thread and reused across its active target accumulators.",
+        "Set the launch to 256 threads and 512 outputs per block, keeping the same output tile as the selected parent while changing per-thread work and block size.",
+        "Retain guarded tail handling, ascending source iteration, existing force and update order, complete valid output writes, exact mass copying, and zero shared-memory staging."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673815.460854,
+    "measured_elapsed_seconds": 599.267130613327,
+    "kernel_sha256": "716bd59ea41b71a83bec491f055649e46eda514a0b5d2c4bd44d6b4bc3e6bbe7",
+    "launch": {
+      "block": 256,
+      "items_per_block": 512,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 17,
+    "id": "6c7b9306ff1c45c4",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673757.2075415,
+    "elapsed_seconds": 541.013818025589,
+    "commit": "5365e150fcab4d17b3fd2106d7bed04005735379",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "ba16e2e3aa3c7a5f",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00019732731125512353,
+    "score": 0.9036256288978626,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 89.33470144935092,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/6c7b9306ff1c45c4.patch",
+    "hypothesis": "A 16-lane subgroup per target performs a warp-local force reduction without shared scratch or a block barrier, while allowing two independent target reductions per warp. It increases each lane's serial source work relative to a full-warp target mapping, so the effect on throughput is uncertain and should be measured against the valid candidates.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Set a 256-thread block to process 16 targets, assigning each target a distinct 16-lane subgroup.",
+        "Have each lane accumulate source indices separated by 16, guarding arbitrary source tails and excluding the target's self-interaction.",
+        "Reduce force components within each subgroup using width-16 warp shuffles; keep all lanes active through the reduction and use no shared memory or extra launch.",
+        "Preserve the existing velocity-then-position integration order and copy the original mass unchanged."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673869.7677574,
+    "measured_elapsed_seconds": 653.5740339756012,
+    "kernel_sha256": "5183fca90b2db4598c75496d3ec211fc445850af3ce1c472eded174acb3a22cf",
+    "launch": {
+      "block": 256,
+      "items_per_block": 16,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 18,
+    "id": "4cac546b57bc4d08",
+    "role": "T1",
+    "parent_id": "2edf23e904aa477b",
+    "depth": 2,
+    "created": 1792673774.196218,
+    "elapsed_seconds": 558.0024945735931,
+    "commit": "a643c0538bcf901cbdff2aa37042bb7ba95dcf90",
+    "base_commit": "9caf39a759436ab65459030239a44dbb5c2f9697",
+    "variant_id": "d938f5a054e19827",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0009684442885448933,
+    "score": 0.656412526908303,
+    "base_search_seconds": 0.000993255436589586,
+    "gain_vs_base_pct": 2.4979624707500814,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/4cac546b57bc4d08.patch",
+    "hypothesis": "A 128-thread block with a 256-source tile follows a previously valid and faster-measured AoS configuration than the selected 256-thread parent. Staging only x, y, z, and mass in four shared-memory planes reduces the allocation from 7,168 to 4,096 bytes and avoids staging unused velocity fields. A prior 128-thread/512-source SoA candidate measured slower than its AoS counterpart, so this layout’s effect at tile size 256 needs official measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configure a 128-thread block and 4,096 bytes of dynamic shared memory for four 256-float shared-memory planes.",
+        "Stage source x, y, z, and mass with block-strided loads; bound the final tile for arbitrary n.",
+        "Keep one target per thread and process staged sources serially in ascending order, excluding self-interaction as before.",
+        "Keep all threads at both block barriers, including inactive target lanes, and write the complete output Particle only for active targets."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673896.9727538,
+    "measured_elapsed_seconds": 680.7790303230286,
+    "kernel_sha256": "38d69e19906670e576031141a8e633ca7300445cdb1a923157600bf3dbb469a4",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 4096
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 19,
+    "id": "929d39cd705e4487",
+    "role": "T2",
+    "parent_id": "e099ff53da844775",
+    "depth": 2,
+    "created": 1792673815.4767256,
+    "elapsed_seconds": 599.2830021381378,
+    "commit": "0eaf17a3443e64f29ffe212c1b6a6693b5de8301",
+    "base_commit": "cdd3e221b598767ddbaeb1293a6b52bdadfc6e56",
+    "variant_id": "13fa0a50738d362e",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0025854029980898444,
+    "score": 0.4171222803323567,
+    "base_search_seconds": 0.0026152822324718374,
+    "gain_vs_base_pct": 1.1424860388300262,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "lancement seul",
+    "changed_paths": [
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/929d39cd705e4487.patch",
+    "hypothesis": "With two targets per thread, reducing the block to one warp and the output tile to 64 keeps the total thread count for a given n similar while increasing the number of independently schedulable blocks. This tests launch granularity; additional block scheduling overhead could instead hurt performance.",
+    "transformations": {
+      "files": [
+        "src/launch.json"
+      ],
+      "retained": [
+        "Set the launch to 32 threads and 64 output items per block, preserving two targets per thread and zero shared-memory staging. The kernel's guarded target handling remains responsible for arbitrary n and tails."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673945.261629,
+    "measured_elapsed_seconds": 729.067905664444,
+    "kernel_sha256": "716bd59ea41b71a83bec491f055649e46eda514a0b5d2c4bd44d6b4bc3e6bbe7",
+    "launch": {
+      "block": 32,
+      "items_per_block": 64,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 20,
+    "id": "7d651842ff4e48f5",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673869.7846413,
+    "elapsed_seconds": 653.5909178256989,
+    "commit": "92047ac5dde8d04d0544a5ea6d25e986699cd582",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "08b310ca0425ff3d",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0002984635642201054,
+    "score": 0.8610921554042491,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 83.86841132810703,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/7d651842ff4e48f5.patch",
+    "hypothesis": "An 8-lane subgroup per target lets four independent reductions share each warp, increasing target concurrency and using fewer shuffle stages than a 16-lane subgroup. The resulting longer per-lane source loop may offset those benefits, so official measurement is needed.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Set the block size to 256 threads and assign each 8-lane subgroup one target, yielding 32 targets per block.",
+        "Have each lane accumulate source indices beginning at its subgroup lane and advancing by 8, with an arbitrary-size tail guard and self-interaction exclusion.",
+        "Reduce the three force components within each 8-lane subgroup using width-8 warp shuffles; invalid target groups keep zero partials and reach every shuffle without shared memory, barriers, or extra launches.",
+        "Preserve the existing velocity-then-position integration order and copy the target particle's mass unchanged."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792673984.646833,
+    "measured_elapsed_seconds": 768.4531095027924,
+    "kernel_sha256": "5dbeef7eeaf299def9d1e52beb639a4c9716d1e89f4f366194e00899133bac38",
+    "launch": {
+      "block": 256,
+      "items_per_block": 32,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 21,
+    "id": "cc1fd62237d84c67",
+    "role": "T1",
+    "parent_id": "b067236e66fc41e3",
+    "depth": 2,
+    "created": 1792673896.989581,
+    "elapsed_seconds": 680.795857667923,
+    "commit": "adf6c55fc1188ffe29c69b077ece5a9dd9f2d5d4",
+    "base_commit": "0bc4fed352dc4d8128fb72d3de15229c4d9e5c4f",
+    "variant_id": "53fc89c246e8b530",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0008898039245556399,
+    "score": 0.675252237458704,
+    "base_search_seconds": 0.000960974214033043,
+    "gain_vs_base_pct": 7.406056108281367,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/cc1fd62237d84c67.patch",
+    "hypothesis": "The 512-particle tile currently stages all seven Particle fields, although the interaction uses only x, y, z, and mass. Staging those four fields in a compact 16-byte per-source record reduces dynamic shared memory from 14,336 to 8,192 bytes while keeping the used values adjacent. This differs from the measured four-plane SoA variant; reduced staging traffic may help, but that variant was slower than the AoS parent, so this candidate needs official measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Add a compact SourceParticle record containing only source x, y, z, and mass; leave the Particle layout and entry point unchanged.",
+        "For each bounded 512-source tile, stage the four needed fields in a compact per-source shared-memory record, reducing the allocation from 14,336 to 8,192 bytes.",
+        "Keep one target per thread, preserve ascending serial source traversal and interaction arithmetic, retain unconditional block barriers, and write the complete output Particle for active targets.",
+        "Set the launch dynamic shared-memory allocation to 8,192 bytes while retaining the 128-thread block."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674057.6901145,
+    "measured_elapsed_seconds": 841.4963910579681,
+    "kernel_sha256": "29fa509c01674d15d274550fa584cd83634b0c4ab72e92964408e64c52014a5a",
+    "launch": {
+      "block": 128,
+      "items_per_block": 128,
+      "shared_memory_bytes": 8192
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 22,
+    "id": "206c8a2af7294599",
+    "role": "T4",
+    "parent_id": "917b639f9f734e82",
+    "depth": 2,
+    "created": 1792673925.1671617,
+    "elapsed_seconds": 708.9734382629395,
+    "commit": "fa94899b99fa583f20163045db4476078cab8dba",
+    "base_commit": "f3bfaae6e93031fa3397043c13e453852aea7c69",
+    "variant_id": "2d96c63059d5f552",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0011802861830134592,
+    "score": 0.6105266381024571,
+    "base_search_seconds": 0.0018485566126338886,
+    "gain_vs_base_pct": 36.15093122131944,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "patch": "diffs/776048/206c8a2af7294599.patch",
+    "hypothesis": "Employer des FMA float32 explicites pour accumuler les trois carrés dans distSq, avec la forme rsqrtf(distSq)^3 déjà valide, pourrait réduire les instructions d'arithmétique par interaction tout en gardant une distance au carré précise. La tolérance FP64, les sorties finies et le temps complet source-et-lancement restent à vérifier officiellement.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Remplacer l'expression de distSq par trois accumulations fmaf float32 explicites, en incorporant softening à la première.",
+        "Calculer distSq^(-3/2) avec rsqrtf(distSq) suivi de deux multiplications, en conservant le regroupement des masses et l'accumulation des forces."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674014.5674944,
+    "measured_elapsed_seconds": 798.3737709522247,
+    "kernel_sha256": "86f4e2dcbef0b02a6f3f68bd6b0d8374c5fc99c50a8b8a633326ee0e5ebdbded",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 23,
+    "id": "b306ffa7eebb4043",
+    "role": "T2",
+    "parent_id": "e099ff53da844775",
+    "depth": 2,
+    "created": 1792673945.2782376,
+    "elapsed_seconds": 729.0845141410828,
+    "commit": "415fe545981963696ea37289be77ff1deb928ad2",
+    "base_commit": "cdd3e221b598767ddbaeb1293a6b52bdadfc6e56",
+    "variant_id": "707dd538bdc70d2a",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.003424644015537868,
+    "score": 0.3507568301141293,
+    "base_search_seconds": 0.0026152822324718374,
+    "gain_vs_base_pct": -30.947397302548918,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/b306ffa7eebb4043.patch",
+    "hypothesis": "Three targets per thread may offer more reuse of each loaded source particle than two-target coarsening while avoiding the heavier register demand observed with four targets. A 32-thread block with a 96-output tile tests this intermediate coarsening level; performance remains uncertain.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Increase per-thread target coarsening from two to three, reusing each source particle's loaded position and mass across three target accumulators without shared-memory staging.",
+        "Keep 32 threads per block and set the output tile to 96 targets per block to match the coarsening factor.",
+        "Preserve ascending source iteration, force accumulation and update order, tail masking, complete output writes, and exact copied masses."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674093.5923586,
+    "measured_elapsed_seconds": 877.3986351490021,
+    "kernel_sha256": "c9eefbbb4027ea06e283fc4a8dd514756b5e77d3009a5fedddb56b874ea48581",
+    "launch": {
+      "block": 32,
+      "items_per_block": 96,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 24,
+    "id": "0c5c6d925f44466a",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792673984.675954,
+    "elapsed_seconds": 768.4822306632996,
+    "commit": "253496638f8ecebf5ce758d3fba2efc9b21d68ef",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "b5fecac6d15812be",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00014115868751779506,
+    "score": 0.9291137021382232,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 92.3705465005368,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/0c5c6d925f44466a.patch",
+    "hypothesis": "A 96-lane, three-warp reduction per target may balance source parallelism and block occupancy better than the measured 64- and 128-lane mappings. Each block handles two targets; one warp reduces each third of a target's source sequence, then a barrier precedes combining the three warp sums. This is a performance hypothesis only and requires official measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Use a 192-thread block with two target slots, each assigned three warps (96 lanes).",
+        "Map each lane to source indices starting at warpInTarget * 32 + lane and advancing by 96; guard source tails and exclude self-interaction.",
+        "Reduce each warp's force components with warp shuffles, store one partial per warp in fixed shared scratch, and combine the three partials after a block barrier.",
+        "Keep invalid target slots active through synchronization, preserve the entry point and Particle layout, retain velocity-then-position integration order, and copy mass unchanged."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674152.6528776,
+    "measured_elapsed_seconds": 936.4591541290283,
+    "kernel_sha256": "e6780eee6f0b784a2bdb2aca1a5afe4ca93eb5371072c205ef3873c5cb628a16",
+    "launch": {
+      "block": 192,
+      "items_per_block": 2,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 25,
+    "id": "adcb4f6a36b74958",
+    "role": "T4",
+    "parent_id": "206c8a2af7294599",
+    "depth": 3,
+    "created": 1792674014.584446,
+    "elapsed_seconds": 798.3907225131989,
+    "commit": "e424f134d842c04beead5e8a6ff0b7453bb5ab38",
+    "base_commit": "fa94899b99fa583f20163045db4476078cab8dba",
+    "variant_id": "ddc953e241c01997",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0011800301059325413,
+    "score": 0.6105782324903204,
+    "base_search_seconds": 0.0011802861830134592,
+    "gain_vs_base_pct": 0.021696185603403695,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "patch": "diffs/776048/adcb4f6a36b74958.patch",
+    "hypothesis": "Hoisting the shared float32 scale (1 / target mass) * dt and using explicit fused multiply-adds for the three velocity updates may replace three per-component force-times-inverse-mass multiplies with one shared multiply, while retaining the force loop, self-interaction exclusion, float32 state, exact mass copy, and kernel interface. The regrouping changes rounding and requires official oracle, finite-output, extreme-mass, and full-source-and-launch timing checks; no gain is presumed.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Hoist the shared inverse-mass-times-dt scale out of the three velocity updates.",
+        "Use fmaf for each velocity update, leaving interaction arithmetic, self-interaction exclusion, particle state layout, mass copying, entry point, and launch interface unchanged."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674128.3160577,
+    "measured_elapsed_seconds": 912.1223342418671,
+    "kernel_sha256": "f0060ba4bb7413c2293cc0d2b808fc1e96d08b49c15562723c51fc20b31c348f",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 26,
+    "id": "7bedf3b808574349",
+    "role": "T1",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792674057.707855,
+    "elapsed_seconds": 841.5141315460205,
+    "commit": "96aa0ba05b339d93d551605477324464ff2da15e",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": null,
+    "status": "incorrect",
+    "reason": "Protected correctness checks failed",
+    "seconds": null,
+    "score": 0.0,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/7bedf3b808574349.patch",
+    "hypothesis": "With the 256-thread block and compact four-field source records unchanged, increasing the source tile from 512 to 1024 should halve the number of tile-loop barrier pairs for large n. The tradeoff is twice the dynamic shared memory (16 KiB); correctness should be preserved by bounded tail staging and ascending serial source traversal.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Increase SOURCE_TILE_SIZE from 512 to 1024 while retaining the compact x/y/z/mass shared record.",
+        "Keep the block at 256 threads and set dynamic shared memory to 1024 * sizeof(SourceParticle), or 16384 bytes.",
+        "Retain bounded final-tile loads, unconditional barriers, one target per active thread, and ascending serial source traversal."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674302.255142,
+    "measured_elapsed_seconds": 1086.0614185333252,
+    "kernel_sha256": "7d0cb27550bc3d64a2642fea935992e386273ab4aef23bde6f4441b7014bd5ed",
+    "launch": {
+      "block": 256,
+      "items_per_block": 1024,
+      "shared_memory_bytes": 16384
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 27,
+    "id": "82706559abee4549",
+    "role": "T2",
+    "parent_id": "3aec87f1ed714bf4",
+    "depth": 2,
+    "created": 1792674093.6122298,
+    "elapsed_seconds": 877.4185063838959,
+    "commit": "d96ceb0a16adae7c438aaf4d6c8c76a4aa16e48c",
+    "base_commit": "b370a56ebb0297d945680abc7705c273bf8159fa",
+    "variant_id": "02e1628274f6ddcb",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.004251408556948428,
+    "score": 0.30322932694895627,
+    "base_search_seconds": 0.0025820852919946694,
+    "gain_vs_base_pct": -64.6501984318342,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/82706559abee4549.patch",
+    "hypothesis": "Four targets per thread may amortize each source-particle load across more force accumulations. A prior four-target, 128-thread candidate was slower than baseline; this tests whether reducing the block and output tile to 64 threads and 256 targets improves its launch behavior. No speedup is assumed.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Increase per-thread coarsening from two targets to four, reusing each source particle load across four target accumulators without shared-memory staging.",
+        "Use 64 threads per block and 256 output items per block to test a smaller launch tile than the prior four-target, 128-thread candidate.",
+        "Keep ascending source iteration, each target's force and update order, per-target tail guards, full valid output writes, and unchanged mass values."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674236.2871344,
+    "measured_elapsed_seconds": 1020.0934109687805,
+    "kernel_sha256": "f855eba3a803cc3b80e708bc67619483372ed1b3aba5df366c838139261cba3a",
+    "launch": {
+      "block": 64,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 28,
+    "id": "f914248a67cb48e9",
+    "role": "T4",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792674128.3337867,
+    "elapsed_seconds": 912.1400632858276,
+    "commit": "dee732bf8034c6b1ea93d69ec21530b64ae574b7",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "a7c2f933aa2a1766",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0010899355279923727,
+    "score": 0.6292883041695376,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 41.09032483613609,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "patch": "diffs/776048/f914248a67cb48e9.patch",
+    "hypothesis": "Remplacer sqrtf et la division par distSq * sqrtf(distSq) par rsqrtf(distSq) et invDist^3 réduit le travail arithmétique par interaction. Garder explicitement les coordonnées et la masse de la particule cible dans des scalaires réutilisables peut aussi éviter des chargements invariants dans la boucle. Cette variante n'a pas encore été mesurée; aucune accélération n'est présumée.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Remplacer sqrtf et la division de la force par rsqrtf(distSq), puis calculer invDist^3 par multiplications float32.",
+        "Charger les coordonnées et la masse de la particule cible dans des scalaires avant la boucle et les réutiliser pour chaque interaction.",
+        "Conserver l'exclusion de l'auto-interaction, la structure d'état, l'intégration, la copie de masse exacte, l'entrée et l'interface mono-kernel."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674439.5908747,
+    "measured_elapsed_seconds": 1223.3971512317657,
+    "kernel_sha256": "63e266ec8073e07e9a62ef5fc97b3c64640daffc82cbb0efca88748ae26fa2e1",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 29,
+    "id": "9bcc1b2d95ca4e8b",
+    "role": "T3",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792674152.6847284,
+    "elapsed_seconds": 936.4910049438477,
+    "commit": "d6e7f0135a89fde5e830a106e6b51ff8acff023e",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": "8aa85299cbd8681c",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00013287262928194602,
+    "score": 0.9329959424956317,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": 92.81839776010796,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/9bcc1b2d95ca4e8b.patch",
+    "hypothesis": "A five-warp (160-lane) reduction per target may shorten each lane’s serial source loop relative to the measured two- and four-warp mappings, without using a full eight-warp block per target. One target per block and a small shared-memory combine add overhead, so the net performance effect is uncertain and requires official measurement.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configure 160 threads per block and one target per block, assigning five complete warps to each target’s source reduction.",
+        "Partition source indices across the five warps with a stride of 160; guard arbitrary source tails and exclude the target’s self-interaction.",
+        "Reduce force components within each warp using full-warp shuffles, store one partial per component and warp in static shared memory, then synchronize and combine the five partials.",
+        "Preserve the entry point, Particle layout, unchanged mass, and velocity-then-position integration order; use no extra launch or external buffer."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674364.7100987,
+    "measured_elapsed_seconds": 1148.5163753032684,
+    "kernel_sha256": "4adc59dbd791068c6edcfe05665fb8ef76c3ffe7b589186ca25dfd004e7f54b1",
+    "launch": {
+      "block": 160,
+      "items_per_block": 1,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 30,
+    "id": "6aa6069b720f4954",
+    "role": "T2",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792674236.305503,
+    "elapsed_seconds": 1020.1117794513702,
+    "commit": "e0c0832e67a3e8e3c427f5dda5446128be142a56",
+    "base_commit": "4fae7323a87b91ecf1b3dee948ce9a88560f2193",
+    "variant_id": null,
+    "status": "incorrect",
+    "reason": "Protected correctness checks failed",
+    "seconds": null,
+    "score": 0.0,
+    "base_search_seconds": 0.0018501808488344132,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/6aa6069b720f4954.patch",
+    "hypothesis": "Four targets per thread can reuse each loaded source particle across four independent accumulations. A 32-thread block with 128 outputs per block tests whether one-warp blocks improve scheduling for this coarsening level; prior coarsened candidates were slower than baseline, so no speedup is assumed.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Expand per-thread output coarsening from two targets to four, loading each source position and mass once per source iteration and reusing them across four independently guarded accumulations.",
+        "Use 32 threads and 128 output items per block, preserving four outputs per thread and zero shared-memory staging.",
+        "Preserve ascending source iteration, per-target force accumulation and update order, valid-tail checks, complete writes for active targets, and copied masses."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674455.524895,
+    "measured_elapsed_seconds": 1239.3311715126038,
+    "kernel_sha256": "88c8dc12f312ba36d32973eb23a500f2b4283ea900d7cd2d6da55b66ccf2de89",
+    "launch": {
+      "block": 32,
+      "items_per_block": 128,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 31,
+    "id": "2505e16e21d24a25",
+    "role": "T1",
+    "parent_id": "aae515bf57f94665",
+    "depth": 2,
+    "created": 1792674302.2756221,
+    "elapsed_seconds": 1086.08189868927,
+    "commit": "70859ca128a3b7feda54a190e2530783497ee480",
+    "base_commit": "d28aed5445e6e7914fcf52b67e251e630d1efec9",
+    "variant_id": "76aa6d065e17c4e1",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.0009212536833488365,
+    "score": 0.6675895920864126,
+    "base_search_seconds": 0.0009693238222033003,
+    "gain_vs_base_pct": 4.959141388395771,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": false,
+    "change_kind": "kernel et lancement",
+    "changed_paths": [
+      "src/nbody_kernel.cu",
+      "src/launch.json"
+    ],
+    "patch": "diffs/776048/2505e16e21d24a25.patch",
+    "hypothesis": "Staging a compact 512-source tile for 256 target threads should reduce tile and barrier rounds relative to the selected 128-thread/128-source parent, while reusing each staged source across more outputs and avoiding staging unused particle fields. The 8 KiB allocation and larger block may affect occupancy; the measured 128-thread/512-source compact candidate is encouraging but does not predict this configuration's performance.",
+    "transformations": {
+      "files": [
+        "src/launch.json",
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Configure 256 target threads per block and 8,192 bytes of dynamic shared memory for a 512-entry compact source tile.",
+        "Introduce a shared-only source record containing x, y, z, and mass while preserving the public Particle layout and entry point.",
+        "Cooperatively stage each bounded tile with a block-strided load; keep all threads at both barriers and traverse valid sources serially in ascending order.",
+        "Preserve self-interaction exclusion, force and integration arithmetic, and complete Particle output for active targets."
+      ]
+    },
+    "source_ids": [],
+    "source_commits": [],
+    "evaluated_at": 1792674389.0515628,
+    "measured_elapsed_seconds": 1172.857839345932,
+    "kernel_sha256": "b92c1ea28f7c91f4e7a054e66914b0e62382dd43e3f3fce59f74b4dad8d7f7c0",
+    "launch": {
+      "block": 256,
+      "items_per_block": 256,
+      "shared_memory_bytes": 8192
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 32,
+    "id": "bd224cee51694d00",
+    "role": "G",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792674534.2998667,
+    "elapsed_seconds": 1318.1061432361603,
+    "commit": "5a33efdbbf12743f1ce8ab27ba8d67f57adc2484",
+    "base_commit": "3c16471bb69533bcfeae6d46f73564644f91aa03",
+    "variant_id": "730dbea752a62077",
+    "status": "valid",
+    "reason": "",
+    "seconds": 0.00010052812132428774,
+    "score": 0.9484658537679719,
+    "base_search_seconds": 0.00013281273678120593,
+    "gain_vs_base_pct": 24.308373006501228,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": true,
+    "change_kind": "kernel seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "patch": "diffs/776048/bd224cee51694d00.patch",
+    "hypothesis": "Using rsqrtf and an inverse-distance cube may reduce per-interaction arithmetic in the measured four-warps-per-target kernel. The combined candidate remains unmeasured and requires fresh correctness and performance checks.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Preserved the measured four-warps-per-target source-parallel mapping, warp reductions, shared partial sums, self-interaction exclusion, and velocity-then-position integration.",
+        "Replaced sqrtf and division by distSq * dist with rsqrtf(distSq) and a float32 inverse-distance cube, retaining target and source mass factors.",
+        "Kept the selected launch.json configuration unchanged."
+      ]
+    },
+    "source_ids": [
+      "8052fe0a6b7b4d62"
+    ],
+    "source_commits": [
+      "3c16471bb69533bcfeae6d46f73564644f91aa03"
+    ],
+    "evaluated_at": null,
+    "measured_elapsed_seconds": null,
+    "kernel_sha256": "1f4cffd38ca37719ec445b3912ed923d9895d3b00c995ee36481659b109cb425",
+    "launch": {
+      "block": 256,
+      "items_per_block": 2,
+      "shared_memory_bytes": 0
+    }
+  },
+  {
+    "campaign": "776048",
+    "ordinal": 33,
+    "id": "f1843fc5ccdb4b63",
+    "role": "G",
+    "parent_id": null,
+    "depth": 1,
+    "created": 1792674746.8462842,
+    "elapsed_seconds": 1530.652560710907,
+    "commit": "fb0d9a4822413f62bf242c0a021d910821a9ac2a",
+    "base_commit": "5a33efdbbf12743f1ce8ab27ba8d67f57adc2484",
+    "variant_id": "76ae01a77792ba54",
+    "status": "valid",
+    "reason": "",
+    "seconds": 9.964856999039209e-05,
+    "score": 0.9488936985828986,
+    "base_search_seconds": null,
+    "gain_vs_base_pct": null,
+    "best_research_before_seconds": 0.00013281273678120593,
+    "beats_best_research": true,
+    "change_kind": "kernel seul",
+    "changed_paths": [
+      "src/nbody_kernel.cu"
+    ],
+    "patch": "diffs/776048/f1843fc5ccdb4b63.patch",
+    "hypothesis": "Canceling the positive target mass between force accumulation and acceleration division may save per-interaction work on the valid rsqrt/source-parallel base. This changes float32 accumulation and must be freshly checked for correctness and performance.",
+    "transformations": {
+      "files": [
+        "src/nbody_kernel.cu"
+      ],
+      "retained": [
+        "Preserved the four-warps-per-target source-parallel mapping, warp reductions, shared partial sums, self-interaction exclusion, and integration order.",
+        "Canceled target.mass from the interaction factor and final acceleration division, accumulating acceleration contributions directly using source.mass and the existing rsqrt-derived inverse-distance cube.",
+        "Kept the launch configuration unchanged."
+      ]
+    },
+    "source_ids": [
+      "bd224cee51694d00"
+    ],
+    "source_commits": [
+      "5a33efdbbf12743f1ce8ab27ba8d67f57adc2484"
+    ],
+    "evaluated_at": null,
+    "measured_elapsed_seconds": null,
+    "kernel_sha256": "ea8387cd4ace43f406430779101f22a41ecaa8e602fb234609f3cc25513ec2d2",
+    "launch": {
+      "block": 256,
+      "items_per_block": 2,
+      "shared_memory_bytes": 0
+    }
+  }
+]

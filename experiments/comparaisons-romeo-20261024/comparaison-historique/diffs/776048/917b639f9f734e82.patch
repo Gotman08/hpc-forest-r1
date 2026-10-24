@@ -1,0 +1,23 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..9ef178e 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -39,9 +39,10 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     // Intégration d'Euler explicite
+     Particle p = in[i];
+-    p.vx += (fx / p.mass) * dt;
+-    p.vy += (fy / p.mass) * dt;
+-    p.vz += (fz / p.mass) * dt;
++    const float invMass = 1.0f / p.mass;
++    p.vx += (fx * invMass) * dt;
++    p.vy += (fy * invMass) * dt;
++    p.vz += (fz * invMass) * dt;
+ 
+     p.x += p.vx * dt;
+     p.y += p.vy * dt;
+@@ -49,4 +50,3 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     out[i] = p;
+ }
+-

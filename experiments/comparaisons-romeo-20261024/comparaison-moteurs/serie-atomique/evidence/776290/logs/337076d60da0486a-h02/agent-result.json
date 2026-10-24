@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 64,\n  \"items_per_block\": 128,\n  \"shared_memory_bytes\": 0\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Each thread handles two targets spaced by blockDim.x, reusing each streamed\n// source particle while keeping the source path in registers.\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const long long base = static_cast<long long>(blockIdx.x) * static_cast<long long>(blockDim.x) * 2LL + static_cast<long long>(threadIdx.x);\n    const long long i0 = base;\n    const long long i1 = base + static_cast<long long>(blockDim.x);\n\n    const bool valid0 = i0 < n;\n    const bool valid1 = i1 < n;\n    if (!valid0 && !valid1) return;\n\n    Particle p0, p1;\n    if (valid0) p0 = in[i0];\n    if (valid1) p1 = in[i1];\n\n    float fx0 = 0.0f, fy0 = 0.0f, fz0 = 0.0f;\n    float fx1 = 0.0f, fy1 = 0.0f, fz1 = 0.0f;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    for (int j = 0; j < n; ++j) {\n        const float sx = in[j].x;\n        const float sy = in[j].y;\n        const float sz = in[j].z;\n        const float sm = in[j].mass;\n\n        if (valid0 && i0 != j) {\n            const float dx = sx - p0.x;\n            const float dy = sy - p0.y;\n            const float dz = sz - p0.z;\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * p0.mass * sm) / (distSq * dist);\n            fx0 += f * dx;\n            fy0 += f * dy;\n            fz0 += f * dz;\n        }\n\n        if (valid1 && i1 != j) {\n            const float dx = sx - p1.x;\n            const float dy = sy - p1.y;\n            const float dz = sz - p1.z;\n            const float distSq = dx * dx + dy * dy + dz * dz + softening;\n            const float dist = sqrtf(distSq);\n            const float f = (G * p1.mass * sm) / (distSq * dist);\n            fx1 += f * dx;\n            fy1 += f * dy;\n            fz1 += f * dz;\n        }\n    }\n\n    if (valid0) {\n        p0.vx += (fx0 / p0.mass) * dt;\n        p0.vy += (fy0 / p0.mass) * dt;\n        p0.vz += (fz0 / p0.mass) * dt;\n        p0.x += p0.vx * dt;\n        p0.y += p0.vy * dt;\n        p0.z += p0.vz * dt;\n        out[i0] = p0;\n    }\n    if (valid1) {\n        p1.vx += (fx1 / p1.mass) * dt;\n        p1.vy += (fy1 / p1.mass) * dt;\n        p1.vz += (fz1 / p1.mass) * dt;\n        p1.x += p1.vx * dt;\n        p1.y += p1.vy * dt;\n        p1.z += p1.vz * dt;\n        out[i1] = p1;\n    }\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "A factor-two target tile with 64 threads and 128 outputs per block preserves source-register reuse while changing CTA size and scheduling relative to the measured 128-thread factor-two candidate. Smaller per-CTA resource reservation may affect residency, but the effect is hardware-dependent; prior coarsened candidates were slower than baseline, so no speedup is assumed.",
+  "notes": "This tests a launch-configuration change, not shared-memory source staging. The existing kernel bounds-checks both target indices, so partial tiles still cover each valid output once. The factor-two 256-thread parent was valid at 0.00272718 s and the factor-two 128-thread candidate was valid at 0.00261699 s; baseline was valid at 0.00184734 s. Register counts and occupancy data are unavailable here. The controller should run full correctness and official timing and measure this candidate before drawing conclusions.",
+  "sources_kept": [],
+  "transformations": [
+    "Keep two output targets per thread, with the second target at threadIdx.x + blockDim.x, so each streamed source position and mass can be reused across both targets.",
+    "Set launch block size to 64 threads and items_per_block to 128; retain zero shared-memory allocation.",
+    "Retain per-target validity and self-interaction checks so arbitrary N and partial final tiles remain covered."
+  ]
+}

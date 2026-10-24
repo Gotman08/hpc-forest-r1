@@ -1,0 +1,106 @@
+struct Particle {
+    float x, y, z;
+    float vx, vy, vz;
+    float mass;
+};
+
+struct SourceParticle {
+    float x, y, z, mass;
+};
+
+// Each thread updates two targets and reuses each shared source tile for both.
+extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+    if (n <= 0) return;
+
+    constexpr unsigned int targets_per_thread = 2U;
+    const unsigned int targets_per_block = blockDim.x * targets_per_thread;
+    const unsigned int first_target = blockIdx.x * targets_per_block + threadIdx.x;
+    const unsigned int second_target = first_target + blockDim.x;
+    const unsigned int count = static_cast<unsigned int>(n);
+    const bool has_first = first_target < count;
+    const bool has_second = second_target < count;
+
+    Particle p_first;
+    Particle p_second;
+    if (has_first) p_first = in[first_target];
+    if (has_second) p_second = in[second_target];
+
+    extern __shared__ SourceParticle tile[];
+    const unsigned int tile_capacity = 2U * blockDim.x;
+
+    const float G = 1.0f;
+    const float softening = 0.001f;
+    float fx_first = 0.0f, fy_first = 0.0f, fz_first = 0.0f;
+    float fx_second = 0.0f, fy_second = 0.0f, fz_second = 0.0f;
+
+    for (unsigned int tile_start = 0; tile_start < count; tile_start += tile_capacity) {
+        unsigned int tile_count = count - tile_start;
+        if (tile_count > tile_capacity) tile_count = tile_capacity;
+
+        for (unsigned int source_offset = threadIdx.x;
+             source_offset < tile_count;
+             source_offset += blockDim.x) {
+            const Particle source = in[tile_start + source_offset];
+            tile[source_offset].x = source.x;
+            tile[source_offset].y = source.y;
+            tile[source_offset].z = source.z;
+            tile[source_offset].mass = source.mass;
+        }
+        __syncthreads();
+
+        if (has_first || has_second) {
+            for (unsigned int lane = 0; lane < tile_count; ++lane) {
+                const unsigned int j = tile_start + lane;
+                const float sx = tile[lane].x;
+                const float sy = tile[lane].y;
+                const float sz = tile[lane].z;
+                const float source_mass = tile[lane].mass;
+
+                if (has_first && first_target != j) {
+                    const float dx = sx - p_first.x;
+                    const float dy = sy - p_first.y;
+                    const float dz = sz - p_first.z;
+                    const float distSq = dx * dx + dy * dy + dz * dz + softening;
+                    const float dist = sqrtf(distSq);
+                    const float f = (G * p_first.mass * source_mass) / (distSq * dist);
+                    fx_first += f * dx;
+                    fy_first += f * dy;
+                    fz_first += f * dz;
+                }
+
+                if (has_second && second_target != j) {
+                    const float dx = sx - p_second.x;
+                    const float dy = sy - p_second.y;
+                    const float dz = sz - p_second.z;
+                    const float distSq = dx * dx + dy * dy + dz * dz + softening;
+                    const float dist = sqrtf(distSq);
+                    const float f = (G * p_second.mass * source_mass) / (distSq * dist);
+                    fx_second += f * dx;
+                    fy_second += f * dy;
+                    fz_second += f * dz;
+                }
+            }
+        }
+        __syncthreads();
+    }
+
+    if (has_first) {
+        p_first.vx += (fx_first / p_first.mass) * dt;
+        p_first.vy += (fy_first / p_first.mass) * dt;
+        p_first.vz += (fz_first / p_first.mass) * dt;
+        p_first.x += p_first.vx * dt;
+        p_first.y += p_first.vy * dt;
+        p_first.z += p_first.vz * dt;
+        out[first_target] = p_first;
+    }
+
+    if (has_second) {
+        p_second.vx += (fx_second / p_second.mass) * dt;
+        p_second.vy += (fy_second / p_second.mass) * dt;
+        p_second.vz += (fz_second / p_second.mass) * dt;
+        p_second.x += p_second.vx * dt;
+        p_second.y += p_second.vy * dt;
+        p_second.z += p_second.vz * dt;
+        out[second_target] = p_second;
+    }
+}

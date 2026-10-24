@@ -1,0 +1,145 @@
+{
+  "data": {
+    "files": [
+      {
+        "content": "// Structure \"Array of Structures\" (AoS) : intuitive mais naïve sur GPU\n// car elle empêche la coalescence parfaite des accès mémoire.\nstruct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\n// Kernel CUDA naïf : Simulation gravitationnelle N-Corps (N-Body)\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i >= n) return;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale\n    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.\n    for (int j = 0; j < n; j++) {\n        if (i == j) continue;\n\n        float dx = in[j].x - in[i].x;\n        float dy = in[j].y - in[i].y;\n        float dz = in[j].z - in[i].z;\n\n        float distSq = dx * dx + dy * dy + dz * dz + softening;\n        float dist = sqrtf(distSq);\n\n        // Accumulate acceleration directly: the target mass cancels with the\n        // division by p.mass in the velocity update.\n        float f = (G * in[j].mass) / (distSq * dist);\n\n        fx += f * dx;\n        fy += f * dy;\n        fz += f * dz;\n    }\n\n    // Intégration d'Euler explicite\n    Particle p = in[i];\n    p.vx += fx * dt;\n    p.vy += fy * dt;\n    p.vz += fz * dt;\n\n    p.x += p.vx * dt;\n    p.y += p.vy * dt;\n    p.z += p.vz * dt;\n\n    out[i] = p;\n}\n",
+        "path": "src/nbody_kernel.cu"
+      }
+    ],
+    "hypothesis": "Cancelling the target mass algebraically in each interaction should remove a repeated multiply and the final per-target force division while preserving the original self-exclusion and one-target-per-thread loop. This isolates arithmetic from the previously tested split-loop control change; changed rounding and overflow behavior still require controller correctness checks, especially for coincident positions and extreme masses.",
+    "memory_lessons": [
+      {
+        "applicability": "The comparison is only a small search-mean difference and does not establish a reliable speedup or cause.",
+        "claim": "The split-range candidate was valid and measured 0.00184293 s versus the baseline's 0.00184441 s; the catalog reports one distinct T3 program, so arithmetic remains a contrasting axis to test.",
+        "evidence_ids": [
+          "896161c511ca4f2b",
+          "baseline-e1"
+        ],
+        "next_experiment": "Measure target-mass cancellation independently, then compare its validated result with the split-range program before considering a combination."
+      }
+    ],
+    "memory_read": {
+      "ids": [],
+      "offset": 0,
+      "operation": "none",
+      "path": "",
+      "query": ""
+    },
+    "notes": "The catalog has one valid distinct T3 program: split source ranges. Its measured mean is only about 1.48 microseconds below baseline, so this is weak evidence rather than an established speedup. The current source retains the original self-exclusion check to isolate target-mass cancellation. No correctness or performance result is claimed for this candidate.",
+    "research": {
+      "queries": [],
+      "urls": []
+    },
+    "sources_kept": [],
+    "transformations": [
+      "Cancel the target mass from the force-per-target-mass update by accumulating acceleration using source mass directly and removing the final division by target mass.",
+      "Retain the original self-interaction exclusion, source loop, and one-target-per-thread execution; make no shared-memory or multi-target changes."
+    ]
+  },
+  "error": null,
+  "infrastructure_error": false,
+  "model": "gpt-6-luna",
+  "nonce": "c19a7ea389ac4286b49ecf0b8c30c018",
+  "protocol": "hpc-forest-codex-mailbox-v1",
+  "reasoning_effort": "max",
+  "request_sha256": "12d3fe1591b5e00d6e7271632f200e3a92497cf68a0a7ed327e5c02cba2b9459",
+  "session_id": "bd4eb8bb1d38489bbad5765e53cb020c",
+  "usage": {
+    "cached_tokens_included_in_input": true,
+    "codex_jsonl_sha256": "90c4a4bf39a2f7ac1f2d0f168ff6b3bdca1e91c2ce68401842be286d48e7ecb0",
+    "events": [
+      {
+        "cache_write_input_tokens": 0,
+        "cached_input_tokens": 4352,
+        "input_tokens": 16818,
+        "output_tokens": 4284,
+        "reasoning_output_tokens": 3176
+      }
+    ],
+    "forbidden_tool_events": [],
+    "llm_calls": 1,
+    "mcp_tool_calls": [],
+    "model_requested": "gpt-6-luna",
+    "model_skills": {
+      "conversation": null,
+      "effective_instructions_sha256": "a894fa9ea29da4104bfcbcbf5090a2bcacd9e9d2ff7aaf527456149e0caea2ed",
+      "loading": "explicit_system_instructions",
+      "manifest": {
+        "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a",
+        "loaded": [
+          {
+            "name": "conduire-experience-optimisation",
+            "path": "assets/skills/conduire-experience-optimisation/SKILL.md",
+            "sha256": "bb87bcc536902f46a89929f58a087965bc39cae5e9009df2472acd437370103a"
+          },
+          {
+            "name": "inspecter-environnement",
+            "path": "assets/skills/inspecter-environnement/SKILL.md",
+            "sha256": "37c7131618e20c73d9c81b5de3eeb310d1557565af0d8b952d2a85f840a451eb"
+          },
+          {
+            "name": "consulter-documentation-technique",
+            "path": "assets/skills/consulter-documentation-technique/SKILL.md",
+            "sha256": "4aacb276745b6c12ba7e080a60d4e58e8f615d6611534afe8ed8ea041acd6fae"
+          },
+          {
+            "name": "evaluer-performances",
+            "path": "assets/skills/evaluer-performances/SKILL.md",
+            "sha256": "44a2521a665e20736d03e94d0dc0adbf728c80f607f8e1e86efeef504ae5db88"
+          }
+        ],
+        "phase": "research",
+        "role": "T3",
+        "version": "hpc-forest-project-skills-v1"
+      },
+      "mission_id": "2495c63d565b4f3e-h01",
+      "model_declarations_are_execution_proof": false,
+      "model_reported": [
+        {
+          "name": "conduire-experience-optimisation",
+          "references": [
+            "896161c511ca4f2b",
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Selected an arithmetic-only candidate that retains self-exclusion and direct-loop structure to contrast with the measured split-range experiment."
+        },
+        {
+          "name": "inspecter-environnement",
+          "references": [],
+          "status": "not_needed",
+          "summary": "This scalar CUDA arithmetic change does not rely on a target-specific hardware capability; the frozen target remains unchanged."
+        },
+        {
+          "name": "consulter-documentation-technique",
+          "references": [],
+          "status": "not_needed",
+          "summary": "No new API, instruction, or compiler-specific behavior is introduced; correctness and performance remain for controller evaluation."
+        },
+        {
+          "name": "evaluer-performances",
+          "references": [
+            "896161c511ca4f2b",
+            "baseline-e1"
+          ],
+          "status": "applied",
+          "summary": "Compared the available search means and noted their small difference without treating it as a demonstrated speedup."
+        }
+      ],
+      "native_turn_completed": true,
+      "nonce": "c19a7ea389ac4286b49ecf0b8c30c018",
+      "observed_mcp_calls": [],
+      "report_error": null,
+      "report_status": "reported",
+      "request_sha256": "12d3fe1591b5e00d6e7271632f200e3a92497cf68a0a7ed327e5c02cba2b9459",
+      "schema": "hpc-forest-project-skills-v1",
+      "session_id": "bd4eb8bb1d38489bbad5765e53cb020c"
+    },
+    "observed_tokens": 21102,
+    "reasoning_effort_requested": "max",
+    "token_accounting": "exact",
+    "tokens": 21102,
+    "tool_events": [],
+    "tool_runtime_errors": []
+  }
+}

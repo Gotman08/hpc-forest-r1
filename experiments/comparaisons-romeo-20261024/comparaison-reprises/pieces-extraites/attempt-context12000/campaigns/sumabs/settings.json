@@ -1,0 +1,125 @@
+{
+  "problem": "reference-sumabs",
+  "method": "H",
+  "backend": "codex",
+  "seed": 23,
+  "binary_tree": {
+    "enabled": false
+  },
+  "forest": {
+    "policy": "mother",
+    "conversation": "persistent",
+    "integration": "memory-guided-v1",
+    "plan_review_calls": 2,
+    "statement": "Optimize on one NVIDIA GH200 with CUDA 12.6.3. Use the actual AB-MCTS research trees and persistent Mother memory/integration policy.\nCompute one FP32 sum(abs(x)) for n FP32 values. Performance n=268435456 (exactly 1 GiB of input). Checks include 1,127,1024,1048576 and performance n. input1=x; other inputs ignored; output one float; scratch n+65536 floats. Each call must reset/overwrite output. Compare to an independent FP64 sum with absolute error <=.001+2e-4*abs(reference). Allocation and transfers excluded; all launches and necessary resets included.\nEdit only src/candidate.cu. Preserve extern C void run(const void*x,const void*k,const void*gy,void*out,void*scratch,int n,int h,int l,int ks). All pointers are device memory owned by the host. Use the default CUDA stream. Do not read beyond buffers. Scratch is not guaranteed initialized. No external optimized library calls; ordinary CUDA primitives and CUB block primitives are allowed.\nNo cached answers, filesystem or environment inspection, timing inspection, phase detection, or external tools. Every call must compute on the current input. Immutable reference implementations and correctness checks are withheld from source. Choose useful topics independently, record failures, complete memory integration and independently confirm final G. No additional allocations or devices.\n"
+  },
+  "completion": {
+    "policy": "finish-started",
+    "postprocess_tokens": null,
+    "reserve_policy": "adaptive",
+    "confirm_final_g": true,
+    "token_policy": "observe-only"
+  },
+  "roles": [
+    "A",
+    "B",
+    "C"
+  ],
+  "budget": {
+    "search_slots": null,
+    "confirmation_slots": 3,
+    "wall_seconds": 7200,
+    "tokens": null,
+    "mission_tokens": null,
+    "max_workers": 1,
+    "max_depth": 0,
+    "generation_seconds": 600,
+    "infrastructure_retries": 0,
+    "confirmation_seconds": 600
+  },
+  "schedule": {
+    "cycles": null,
+    "trials_per_role_per_cycle": 1,
+    "integrations_per_cycle": 0
+  },
+  "protocol": {
+    "build": [
+      "{python}",
+      "{trusted}/protocol.py",
+      "build",
+      "{worktree}",
+      "{build}"
+    ],
+    "check": [
+      "{python}",
+      "{trusted}/protocol.py",
+      "check",
+      "{binary}",
+      "{phase}"
+    ],
+    "benchmark": [
+      "{python}",
+      "{trusted}/protocol.py",
+      "benchmark",
+      "{binary}",
+      "{phase}"
+    ],
+    "repetitions": 3,
+    "confirmation_repetitions": 5,
+    "warmups": 0,
+    "timeout_seconds": 600,
+    "build_timeout_seconds": 180,
+    "environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "FOREST_GPU_TARGET": "NVIDIA GH200 CUDA 12.6.3"
+    }
+  },
+  "codex": {
+    "model": "gpt-6-luna",
+    "reasoning_effort": "max",
+    "transport": "codex-mailbox",
+    "mailbox_dir": "/scratch_p/nimarano/forest-reference-rerun-sumabs-c9268d504e21474db6b4a48b72a73a24/pending/mailbox",
+    "session_id": "c9268d504e21474db6b4a48b72a73a24"
+  },
+  "ollama": {
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen2.5-coder:7b",
+    "temperature": 0.0,
+    "context_tokens": 8192,
+    "max_output_tokens": 4096,
+    "num_threads": 4
+  },
+  "minimum_gain": 0.03,
+  "harness": {
+    "enabled": true,
+    "max_attempts": 3,
+    "call_token_ceiling": null,
+    "research": {
+      "enabled": true,
+      "corpus": null,
+      "corpus_sha256": null,
+      "allowed_hosts": [
+        "docs.nvidia.com",
+        "developer.nvidia.com",
+        "gcc.gnu.org",
+        "clang.llvm.org"
+      ]
+    }
+  },
+  "skills": {
+    "enabled": true,
+    "version": "hpc-forest-project-skills-v1",
+    "bundle_sha256": "9c3aa40fb776ec87627f9d2021c53627a979c87f7c7b69795b1a03744f8cd47a"
+  },
+  "memory": {
+    "mode": "active",
+    "assembly_rounds": 16,
+    "selection_calls": 4,
+    "reads_per_mission": 3,
+    "page_size": 6,
+    "context_characters": 12000,
+    "sources_per_integration": 3
+  }
+}

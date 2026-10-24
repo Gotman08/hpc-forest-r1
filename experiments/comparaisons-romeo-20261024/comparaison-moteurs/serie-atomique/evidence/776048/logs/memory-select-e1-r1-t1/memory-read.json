@@ -1,0 +1,188 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "items": [
+    {
+      "id": "9de5dc1f8b9a4eb0-h02",
+      "kind": "development",
+      "role": "T2",
+      "tree_id": "e1:T2",
+      "mission_id": "9de5dc1f8b9a4eb0",
+      "facts": {
+        "commit": null,
+        "base_commit": "73ceddfaf30a687a24657b1a60739a706918a26f",
+        "parent_id": "7f202149e3894459",
+        "source_ids": [],
+        "source_count": 0
+      },
+      "measured_outcome": {
+        "status": "development_valid",
+        "correct": true,
+        "mean_seconds": null,
+        "score": null
+      },
+      "diagnostic": "",
+      "model_interpretation": {
+        "claim": "Précharger par lane les champs du prochain segment avant les shuffles et calculs du segment courant pourrait masquer une partie de la latence des chargements globaux. Le coût des registres et les accès de la queue partielle peuvent annuler ce bénéfice; aucune accélération n'est présumée avant mesure.",
+        "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Précharger les quatre champs source du premier segment puis ceux du segment suivant avant de traiter le segment courant.\",\"Garder une borne uniforme pour les shuffles du dernier segment partiel; toutes les lanes participent et aucun retour anticipé n'est introduit.\",\"Conserver l'accumulation et l'écriture conditionnées par la validité de la cible.\"]}",
+        "applicability": "",
+        "next_experiment": "",
+        "evidence_ids": []
+      },
+      "source_available": true,
+      "details_are_bounded": true
+    },
+    {
+      "id": "d02c3bc452244f32-h01",
+      "kind": "development",
+      "role": "T3",
+      "tree_id": "e1:T3",
+      "mission_id": "d02c3bc452244f32",
+      "facts": {
+        "commit": null,
+        "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+        "parent_id": null,
+        "source_ids": [],
+        "source_count": 0
+      },
+      "measured_outcome": {
+        "status": "incorrect",
+        "correct": false,
+        "mean_seconds": null,
+        "score": null
+      },
+      "diagnostic": "Protected correctness checks failed",
+      "model_interpretation": {
+        "claim": "Le candidat précédent combinant l’annulation de la masse cible et rsqrtf avec raffinement a échoué un cas à N=16384. Ce candidat isole l’annulation algébrique, en conservant sqrtf et le calcul du dénominateur du parent, afin que le contrôleur puisse vérifier la tolérance sans confondre les effets de rsqrtf et ceux de la réorganisation arithmétique. Aucun gain de performance n’est présumé.",
+        "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Remplacer l’accumulation de force suivie de la division finale par la masse cible par une accumulation directe de l’accélération en annulant algébriquement cette masse.\",\"Conserver sqrtf, le calcul distSq * dist, l’exclusion de soi, le softening et la copie de Particle pour isoler la transformation.\"]}",
+        "applicability": "",
+        "next_experiment": "",
+        "evidence_ids": []
+      },
+      "source_available": true,
+      "details_are_bounded": true
+    },
+    {
+      "id": "254ee8e4c27d450e-h02",
+      "kind": "development",
+      "role": "T4",
+      "tree_id": "e1:T4",
+      "mission_id": "254ee8e4c27d450e",
+      "facts": {
+        "commit": null,
+        "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+        "parent_id": null,
+        "source_ids": [],
+        "source_count": 0
+      },
+      "measured_outcome": {
+        "status": "development_valid",
+        "correct": true,
+        "mean_seconds": null,
+        "score": null
+      },
+      "diagnostic": "",
+      "model_interpretation": {
+        "claim": "Avec block=128 et items_per_block=256, chaque thread peut calculer deux cibles tout en réutilisant dans ses registres les coordonnées et la masse de chaque source. Cela réduit les chargements de champs source par cible, mais le surcroît d’accumulateurs peut accroître la pression sur les registres. Les gardes séparées doivent préserver la couverture des tiles incomplets sans omettre de sortie.",
+        "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Configurer block=128 et items_per_block=256, soit deux cibles par thread et un tile cohérent avec la grille contrôleur.\",\"Charger une fois les coordonnées et la masse de chaque source, puis les réutiliser pour deux accumulateurs indépendants.\",\"Garder les exclusions d’auto-interaction et les gardes de validité par cible; écrire chaque cible valide, y compris dans un tile incomplet.\"]}",
+        "applicability": "",
+        "next_experiment": "",
+        "evidence_ids": []
+      },
+      "source_available": true,
+      "details_are_bounded": true
+    },
+    {
+      "id": "645de581d96d4755",
+      "kind": "experiment",
+      "role": "T1",
+      "tree_id": "e1:T1",
+      "mission_id": "645de581d96d4755",
+      "facts": {
+        "commit": "1378744fc6a4776c1bc77ea1771948495c17e2c1",
+        "base_commit": "2feb5109d050d733c0800342975d3bcf4dfc1ff9",
+        "parent_id": "b3f7172206a040f1",
+        "source_ids": [],
+        "source_count": 0
+      },
+      "measured_outcome": {
+        "status": "incorrect",
+        "correct": false,
+        "mean_seconds": null,
+        "score": 0.0
+      },
+      "diagnostic": "Protected correctness checks failed",
+      "model_interpretation": {
+        "claim": "À partir des fichiers remis (128 threads et tuiles de 384 sources), passer à 512 sources par tuile demande 14 336 octets partagés et devrait réduire le nombre de passages et de barrières pour les grands n, sans changer le nombre de cibles par bloc. Le chargement par thread augmente et l’occupation peut en pâtir; l’effet sur les trois tailles officielles reste à mesurer.",
+        "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Conserver 128 threads par bloc et augmenter la taille de tuile source de 384 à 512 Particle.\",\"Configurer 14 336 octets de mémoire partagée dynamique et synchroniser après le chargement coopératif et après la consommation de chaque tuile.\",\"Conserver le bornage de la tuile terminale, les threads sans cible aux barrières, l’exclusion i == j, l’adoucissement, l’ordre des interactions, la structure Particle et l’interface du kernel.\"]}",
+        "applicability": "",
+        "next_experiment": "",
+        "evidence_ids": []
+      },
+      "source_available": true,
+      "details_are_bounded": true
+    },
+    {
+      "id": "e572c8a8f7b64df3",
+      "kind": "experiment",
+      "role": "T2",
+      "tree_id": "e1:T2",
+      "mission_id": "e572c8a8f7b64df3",
+      "facts": {
+        "commit": "793caec769f2c6ab5833c64bbfaeb2528c51f358",
+        "base_commit": "34734df16ecc19238adf3d0bc9c5e5e1955e9932",
+        "parent_id": "7cb6054219d04953",
+        "source_ids": [],
+        "source_count": 0
+      },
+      "measured_outcome": {
+        "status": "valid",
+        "correct": true,
+        "mean_seconds": 0.0016584475231351753,
+        "score": 0.5254951157500951
+      },
+      "diagnostic": "",
+      "model_interpretation": {
+        "claim": "Séparer les segments complets du segment final permet d’éliminer les vérifications de borne par source sur le chemin principal, notamment pour les tailles multiples de 32, tout en conservant le même ordre d’interaction et la participation de toutes les lanes aux shuffles. Le gain éventuel reste à mesurer.",
+        "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Conserver deux cibles par lane et les shuffles existants pour diffuser les champs sources.\",\"Traiter les tuiles de 32 sources complètes sans test de borne par source.\",\"Traiter séparément la queue partielle, avec des échanges uniformes et un arrêt uniforme au premier indice source invalide.\",\"Ne jamais retourner avant les échanges warp; conditionner les accumulations et écritures à la validité de la cible.\"]}",
+        "applicability": "",
+        "next_experiment": "",
+        "evidence_ids": []
+      },
+      "source_available": true,
+      "details_are_bounded": true
+    },
+    {
+      "id": "d02c3bc452244f32-h04",
+      "kind": "development",
+      "role": "T3",
+      "tree_id": "e1:T3",
+      "mission_id": "d02c3bc452244f32",
+      "facts": {
+        "commit": null,
+        "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+        "parent_id": null,
+        "source_ids": [],
+        "source_count": 0
+      },
+      "measured_outcome": {
+        "status": "development_valid",
+        "correct": true,
+        "mean_seconds": null,
+        "score": null
+      },
+      "diagnostic": "",
+      "model_interpretation": {
+        "claim": "Le candidat antérieur combinant annulation de la masse cible et rsqrtf raffiné a échoué un contrôle à n=16384. J’isole donc le calcul par rsqrtf : deux itérations de Newton visent à réduire l’erreur d’approximation, tandis que l’accumulation de force et la division finale par la masse restent dans l’ordre de référence. Le contrôleur devra confirmer correction et mesurer les temps; aucun gain n’est présumé.",
+        "transformations": "{\"files\":[\"src/nbody_kernel.cu\"],\"retained\":[\"Remplacer sqrtf et la division par le cube de la distance par rsqrtf, deux raffinements de Newton et la formation de l’inverse du cube.\",\"Conserver l’accumulation de force suivie de la division finale par la masse cible pour isoler le changement du calcul de distance.\",\"Garder l’exclusion de soi avant les calculs d’interaction et copier la particule d’entrée afin de préserver exactement sa masse.\"]}",
+        "applicability": "",
+        "next_experiment": "",
+        "evidence_ids": []
+      },
+      "source_available": true,
+      "details_are_bounded": true
+    }
+  ],
+  "offset": 6,
+  "total": 69,
+  "next_offset": 12
+}

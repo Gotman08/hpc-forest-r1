@@ -1,0 +1,36 @@
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index ae1b7ed..7d370e3 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -18,19 +18,21 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     float fy = 0.0f;
+     float fz = 0.0f;
+ 
+-    // Approche naïve : chaque thread parcourt toutes les particules en mémoire globale
+-    // sans utiliser de mémoire partagée (__shared__) ni mettre in[i] en registre.
++    // Keep self-interactions excluded before evaluating their mass products.
+     for (int j = 0; j < n; j++) {
+-        if (i == j) continue; // Divergence de branche inutile dans la boucle
++        if (i == j) continue;
+ 
+         float dx = in[j].x - in[i].x;
+         float dy = in[j].y - in[i].y;
+         float dz = in[j].z - in[i].z;
+ 
+         float distSq = dx * dx + dy * dy + dz * dz + softening;
+-        float dist = sqrtf(distSq); // Calcul coûteux (au lieu de rsqrtf)
++        float invDist = rsqrtf(distSq);
++        float invDistCubed = (invDist * invDist) * invDist;
+ 
+-        float f = (G * in[i].mass * in[j].mass) / (distSq * dist);
++        // Test the reciprocal-square-root factor while retaining target-mass
++        // force accumulation and division in the velocity update.
++        float f = (G * in[i].mass * in[j].mass) * invDistCubed;
+ 
+         fx += f * dx;
+         fy += f * dy;
+@@ -49,4 +51,3 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+ 
+     out[i] = p;
+ }
+-

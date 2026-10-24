@@ -1,0 +1,210 @@
+{
+  "schema": "hpc-forest-memory-v1",
+  "enabled": true,
+  "scope": {
+    "epoch": 1,
+    "protocol_id": "6a93a881f67a24c1bf6ada028275c9df8d80e2b4d74096c6b9ffd928412c5eab",
+    "tree_id": "e1:T1"
+  },
+  "page": {
+    "schema": "hpc-forest-memory-v1",
+    "items": [
+      {
+        "id": "b20762207d5e44f9",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "b20762207d5e44f9",
+        "facts": {
+          "commit": "c5f88792df03fb81988946616159f1253cb7c6fe",
+          "base_commit": "ed520c148cd596aa703023603e689420708bc6c5",
+          "parent_id": "4d46c44fb7074759",
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0008881716052268224,
+          "score": 0.6760553381960932
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Avec 128 threads et une cible par thread, charger une tuile de 256 sources en deux tours coopératifs divise par deux le nombre de tuiles et de paires de barrières par rapport à la tuile de 128. L’ordre des interactions et la formule restent inchangés. Les 4096 octets de mémoire partagée supplémentaires par rapport au parent peuvent néanmoins annuler le bénéfice ; aucun gain n’est présumé.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Garder 128 threads et 128 cibles par bloc, mais agrandir la tuile de sources à 2 × blockDim.x (256 sources pour la configuration proposée).\",\"Charger chaque tuile par striding coopératif : chaque thread charge les sources d’indices tid et tid + blockDim.x lorsque ces indices sont dans la tuile.\",\"Allouer 4096 octets de mémoire partagée pour les 256 structures SourceParticle.\",\"Conserver l’ordre croissant des indices source, la formule arithmétique, l’exclusion j==i, les barrières pour tous les threads et le traitement de la dernière tuile partielle.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "b20762207d5e44f9-h02",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "b20762207d5e44f9",
+        "facts": {
+          "commit": null,
+          "base_commit": "ed520c148cd596aa703023603e689420708bc6c5",
+          "parent_id": "4d46c44fb7074759",
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Avec 128 threads et une cible par thread, charger une tuile de 256 sources en deux tours coopératifs divise par deux le nombre de tuiles et de paires de barrières par rapport à la tuile de 128. L’ordre des interactions et la formule restent inchangés. Les 4096 octets de mémoire partagée supplémentaires par rapport au parent peuvent néanmoins annuler le bénéfice ; aucun gain n’est présumé.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Garder 128 threads et 128 cibles par bloc, mais agrandir la tuile de sources à 2 × blockDim.x (256 sources pour la configuration proposée).\",\"Charger chaque tuile par striding coopératif : chaque thread charge les sources d’indices tid et tid + blockDim.x lorsque ces indices sont dans la tuile.\",\"Allouer 4096 octets de mémoire partagée pour les 256 structures SourceParticle.\",\"Conserver l’ordre croissant des indices source, la formule arithmétique, l’exclusion j==i, les barrières pour tous les threads et le traitement de la dernière tuile partielle.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "005966a372d94d9e",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "005966a372d94d9e",
+        "facts": {
+          "commit": "84c1f3782c4e29034d588ae16b017d3e57f59cf1",
+          "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0010004127982623473,
+          "score": 0.6494674639155178
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Passer de 128 à 64 threads par bloc réduit la tuile partagée dynamique de 2048 à 1024 octets et peut accroître l’occupation. En contrepartie, les tuiles et barrières sont deux fois plus nombreuses pour une même taille d’entrée, ce qui peut annuler ce bénéfice ou ralentir le noyau.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Remplacer le parcours direct des sources par des tuiles de 64 particules chargées coopérativement en mémoire partagée sous forme de quatre tableaux float : x, y, z et masse.\",\"Conserver une cible par thread, les additions dans l’ordre croissant des indices source, la formule de force de référence et l’exclusion j==i.\",\"Gérer la dernière tuile partielle; les threads sans cible participent aux barrières sans accès hors limites ni retour anticipé.\",\"Configurer 64 threads par bloc, 64 items par bloc et 1024 octets de mémoire partagée dynamique.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "005966a372d94d9e-h01",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "005966a372d94d9e",
+        "facts": {
+          "commit": null,
+          "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Passer de 128 à 64 threads par bloc réduit la tuile partagée dynamique de 2048 à 1024 octets et peut accroître l’occupation. En contrepartie, les tuiles et barrières sont deux fois plus nombreuses pour une même taille d’entrée, ce qui peut annuler ce bénéfice ou ralentir le noyau.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Remplacer le parcours direct des sources par des tuiles de 64 particules chargées coopérativement en mémoire partagée sous forme de quatre tableaux float : x, y, z et masse.\",\"Conserver une cible par thread, les additions dans l’ordre croissant des indices source, la formule de force de référence et l’exclusion j==i.\",\"Gérer la dernière tuile partielle; les threads sans cible participent aux barrières sans accès hors limites ni retour anticipé.\",\"Configurer 64 threads par bloc, 64 items par bloc et 1024 octets de mémoire partagée dynamique.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4d46c44fb7074759",
+        "kind": "experiment",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "4d46c44fb7074759",
+        "facts": {
+          "commit": "ed520c148cd596aa703023603e689420708bc6c5",
+          "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "valid",
+          "correct": true,
+          "mean_seconds": 0.0008975214563563584,
+          "score": 0.6737576961079265
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Par rapport au candidat tuilé mesuré avec 256 threads, un bloc de 128 threads réduit la mémoire partagée requise par tuile à 2048 octets et peut augmenter le nombre de blocs disponibles pour occuper le GPU. Les tuiles et barrières supplémentaires peuvent toutefois ralentir le noyau ; aucun gain n’est présumé.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Utiliser des tuiles de 128 positions et masses de sources chargées coopérativement en mémoire partagée, avec une cible conservée par thread.\",\"Configurer 128 threads par bloc et 2048 octets de mémoire partagée dynamique.\",\"Gérer les tuiles finales et les threads sans cible sans sortie anticipée avant les barrières ; conserver l’ordre de calcul et exclure j==i.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      },
+      {
+        "id": "4d46c44fb7074759-h03",
+        "kind": "development",
+        "role": "T1",
+        "tree_id": "e1:T1",
+        "mission_id": "4d46c44fb7074759",
+        "facts": {
+          "commit": null,
+          "base_commit": "2718921299cf73709e9fd8c246989bea4af9f725",
+          "parent_id": null,
+          "source_ids": [],
+          "source_count": 0
+        },
+        "measured_outcome": {
+          "status": "development_valid",
+          "correct": true,
+          "mean_seconds": null,
+          "score": null
+        },
+        "diagnostic": "",
+        "model_interpretation": {
+          "claim": "Par rapport au candidat tuilé mesuré avec 256 threads, un bloc de 128 threads réduit la mémoire partagée requise par tuile à 2048 octets et peut augmenter le nombre de blocs disponibles pour occuper le GPU. Les tuiles et barrières supplémentaires peuvent toutefois ralentir le noyau ; aucun gain n’est présumé.",
+          "transformations": "{\"files\":[\"src/launch.json\",\"src/nbody_kernel.cu\"],\"retained\":[\"Utiliser des tuiles de 128 positions et masses de sources chargées coopérativement en mémoire partagée, avec une cible conservée par thread.\",\"Configurer 128 threads par bloc et 2048 octets de mémoire partagée dynamique.\",\"Gérer les tuiles finales et les threads sans cible sans sortie anticipée avant les barrières ; conserver l’ordre de calcul et exclure j==i.\"]}",
+          "applicability": "",
+          "next_experiment": "",
+          "evidence_ids": []
+        },
+        "source_available": true,
+        "details_are_bounded": true
+      }
+    ],
+    "offset": 0,
+    "total": 17,
+    "next_offset": 6
+  },
+  "evidence_ids": [
+    "b20762207d5e44f9",
+    "b20762207d5e44f9-h02",
+    "005966a372d94d9e",
+    "005966a372d94d9e-h01",
+    "4d46c44fb7074759",
+    "4d46c44fb7074759-h03"
+  ],
+  "remaining_reads": 3,
+  "max_result_characters": 12000,
+  "provenance": "controller facts and separately labelled model interpretations",
+  "current_base_commit": "0f0ee6520bd85d572c431a775d0d8844381cde5a",
+  "selected_parent_id": "5d4e46ca68854f49"
+}

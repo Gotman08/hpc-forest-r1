@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "content": "{\n  \"block\": 256,\n  \"items_per_block\": 256,\n  \"shared_memory_bytes\": 4096\n}\n",
+      "path": "src/launch.json"
+    },
+    {
+      "content": "struct Particle {\n    float x, y, z;\n    float vx, vy, vz;\n    float mass;\n};\n\nstruct SourceParticle {\n    float x, y, z, mass;\n};\n\nextern \"C\" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {\n    const int i = blockIdx.x * blockDim.x + threadIdx.x;\n    const bool active = i < n;\n\n    const float G = 1.0f;\n    const float softening = 0.001f;\n\n    float fx = 0.0f;\n    float fy = 0.0f;\n    float fz = 0.0f;\n\n    Particle target;\n    if (active) {\n        target = in[i];\n    }\n\n    extern __shared__ SourceParticle source_tile[];\n\n    for (int tile_start = 0; tile_start < n;) {\n        const int remaining = n - tile_start;\n        const int tile_count = remaining < blockDim.x ? remaining : blockDim.x;\n        const int lane = threadIdx.x;\n\n        if (lane < tile_count) {\n            const Particle source = in[tile_start + lane];\n            source_tile[lane].x = source.x;\n            source_tile[lane].y = source.y;\n            source_tile[lane].z = source.z;\n            source_tile[lane].mass = source.mass;\n        }\n        __syncthreads();\n\n        if (active) {\n            for (int offset = 0; offset < tile_count; ++offset) {\n                const int j = tile_start + offset;\n                if (i == j) continue;\n\n                const SourceParticle source = source_tile[offset];\n                const float dx = source.x - target.x;\n                const float dy = source.y - target.y;\n                const float dz = source.z - target.z;\n\n                const float distSq = dx * dx + dy * dy + dz * dz + softening;\n                const float dist = sqrtf(distSq);\n                const float f = (G * target.mass * source.mass) / (distSq * dist);\n\n                fx += f * dx;\n                fy += f * dy;\n                fz += f * dz;\n            }\n        }\n\n        __syncthreads();\n        tile_start += tile_count;\n    }\n\n    if (!active) return;\n\n    target.vx += (fx / target.mass) * dt;\n    target.vy += (fy / target.mass) * dt;\n    target.vz += (fz / target.mass) * dt;\n\n    target.x += target.vx * dt;\n    target.y += target.vy * dt;\n    target.z += target.vz * dt;\n\n    out[i] = target;\n}\n",
+      "path": "src/nbody_kernel.cu"
+    }
+  ],
+  "hypothesis": "Keep the selected parent’s 256-thread CTA and matching 256-source tile, but stage only x, y, z, and mass in a 16-byte record. This reduces shared memory from 7,168 to 4,096 bytes while preserving source order and force arithmetic. The selected parent measured 0.00099616 s; compact tiles measured 0.00089008 s at 128 threads, 0.00092808 s at 160, and 0.00092263 s at 192. Since those results vary with tile size, this experiment tests compact staging at a fixed 256-thread configuration; no speedup is assumed. The catalog reports eight distinct programs and no repeats.",
+  "notes": "The candidate uses 4,096 bytes of shared memory, below the selected parent’s successfully measured 7,168-byte allocation. All threads still reach both CTA barriers; source-tail loads, target reads, and output writes remain bounds-guarded. Correctness and performance are left to the official controller protocol.",
+  "sources_kept": [],
+  "transformations": [
+    "Keep block and items_per_block at 256, preserving one target per thread and a matching source-tile width.",
+    "Stage only source x, y, z, and mass in a 16-byte SourceParticle record; set shared_memory_bytes to 4,096.",
+    "Preserve ascending source interaction order and force arithmetic, partial-tile handling, both CTA barriers, and target/output bounds checks."
+  ]
+}

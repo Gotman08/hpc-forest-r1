@@ -1,0 +1,325 @@
+[
+  {
+    "id": "16e9ab0967f54ba0",
+    "role": "T1",
+    "state": "completed",
+    "mission": {
+      "base_commit": "11816b00641659a925b7dd05e8b0f9b85cef34e4",
+      "budget_phase": "search",
+      "delegation_parent": "R/T1",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "L'élimination de la masse cible et le changement d'ordre des opérations des deux candidats précédents sont compatibles avec les erreurs observées à grande taille. Restaurer l'accumulation de force et sa division finale par la masse cible devrait réduire cette source d'écart; remplacer sqrtf suivi d'une division par rsqrtf pourrait réduire le coût par interaction, sous réserve de passer toutes les validations numériques.",
+      "id": "16e9ab0967f54ba0",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T1",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Rétablir l'accumulation de force pondérée par les masses cible et source, puis diviser la force totale par la masse cible à l'intégration, au lieu d'accumuler directement l'accélération.",
+          "Employer rsqrtf(distSq) pour former l'inverse de distance au cube; faire vérifier par le contrôleur la tolérance numérique et tous les cas limites."
+        ]
+      },
+      "tree_id": "e1:T1",
+      "trial_id": "01M5M7TKTXJVTDBB7SRBHRE272",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/worktrees/16e9ab0967f54ba0"
+    },
+    "result": {
+      "binary_sha256": "4c05862b14644a4e0883f391baf3cf509c33bbe5d8b6dd1254afdbd7477a8558",
+      "cache_key": "b4555c715f0dec883e009ceaf2c8ae244f2c7c40f7a088bf27fb209a31b19ee4",
+      "commit": "b716a70263fe36d86a769ec9d99a77f102775a6b",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/16e9ab0967f54ba0/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/16e9ab0967f54ba0/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/16e9ab0967f54ba0/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/16e9ab0967f54ba0/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/16e9ab0967f54ba0/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.0010152611226415668,
+      "reason": "",
+      "score": 0.646253823178416,
+      "status": "valid",
+      "times": [
+        0.001016176404838581,
+        0.0010133274279729798,
+        0.0010162795351131395
+      ],
+      "tree_hash": "5a7842bda8ec0f1485e8a0411fb8d9a5058221d5"
+    },
+    "created": 1792754405.2134805
+  },
+  {
+    "id": "f00c768afc4448a1",
+    "role": "T2",
+    "state": "completed",
+    "mission": {
+      "base_commit": "11816b00641659a925b7dd05e8b0f9b85cef34e4",
+      "budget_phase": "search",
+      "delegation_parent": "R/T2",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Un bloc de 256 cibles peut réutiliser chaque tuile de 256 sources en mémoire partagée, réduisant potentiellement les lectures répétées depuis la mémoire globale. Les accès globaux uniformes du noyau parent peuvent déjà être bien servis par le matériel, et les barrières ou le chargement des tuiles peuvent donc annuler ce bénéfice; la comparaison officielle doit trancher.",
+      "id": "f00c768afc4448a1",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T2",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/launch.json",
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Remplacé les lectures répétées de sources par un chargement coopératif d'une tuile de 256 particules en mémoire partagée, avec réutilisation par les cibles du bloc.",
+          "Conservé le calcul des interactions dans l'ordre des indices source et l'intégration Euler; les threads inactifs n'accèdent ni aux particules cibles ni à la sortie, mais participent aux barrières.",
+          "Configuré une allocation dynamique de 7168 octets, soit 256 particules AoS de 28 octets."
+        ]
+      },
+      "tree_id": "e1:T2",
+      "trial_id": "01M5M7TKVV7FST3VG5J75FSZPY",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/worktrees/f00c768afc4448a1"
+    },
+    "result": {
+      "binary_sha256": "86233f204da6b0c41bb06764fea07460fab117b936756a56fd1f84f1d2c7a9a9",
+      "cache_key": "9531c11d91dd88d86d2d1ba631a798ef95d6863594c07e36ed0f55d4f9f5884f",
+      "commit": "e04ed8da120785a654370be6570d4e8dde47f540",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/f00c768afc4448a1/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/f00c768afc4448a1/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/f00c768afc4448a1/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/f00c768afc4448a1/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/f00c768afc4448a1/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.001000034427867311,
+      "reason": "",
+      "score": 0.6497007575455297,
+      "status": "valid",
+      "times": [
+        0.0010022908966314178,
+        0.0010025428232479144,
+        0.0009952695637226007
+      ],
+      "tree_hash": "efc48c080a4b468ddff3d749358ce7e83b1b9771"
+    },
+    "created": 1792754405.2440243
+  },
+  {
+    "id": "8b015738939f494d",
+    "role": "T3",
+    "state": "completed",
+    "mission": {
+      "base_commit": "11816b00641659a925b7dd05e8b0f9b85cef34e4",
+      "budget_phase": "search",
+      "delegation_parent": "R/T3",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "Répartir la boucle des sources entre les 32 lanes d’un warp raccourcit la chaîne d’accumulation sérielle par cible. La réduction par shuffles et les accès AoS moins bien coalescés peuvent compenser ce gain ; la mesure officielle devra trancher. Avec 256 threads, le bloc contient huit warps et traite exactement huit cibles, en accord avec items_per_block.",
+      "id": "8b015738939f494d",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "T3",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {
+        "files": [
+          "src/launch.json",
+          "src/nbody_kernel.cu"
+        ],
+        "retained": [
+          "Remplacer l’accumulation sérielle par thread par une boucle source répartie entre les lanes du warp cible, avec exclusion explicite de la paire i==j.",
+          "Réduire fx, fy et fz par __shfl_down_sync ; réserver l’écriture complète de l’état à lane 0, sans supprimer les lanes des warps de bord avant la réduction.",
+          "Configurer block à 256 threads (huit warps) et items_per_block à 8 cibles, pour aligner le découpage des cibles avec la grille hôte."
+        ]
+      },
+      "tree_id": "e1:T3",
+      "trial_id": "01M5M7TKWMNT7QZA7DK8V0W5NG",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/worktrees/8b015738939f494d"
+    },
+    "result": {
+      "binary_sha256": "00fb1dbfe738a300f68b9a152e4de79ee828910f99342376696dff82081dd0be",
+      "cache_key": "958ae2fcf0e817b1672373eb2498868a29387b2238792a2df92611d578481b0a",
+      "commit": "7733d5a257dffe5648284507a2f69e7d94c278da",
+      "correct": true,
+      "logs": [
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/8b015738939f494d/search/attempt-001/build.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/8b015738939f494d/search/attempt-001/correctness.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/8b015738939f494d/search/attempt-001/sample-0.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/8b015738939f494d/search/attempt-001/sample-1.log",
+        "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/logs/e1/8b015738939f494d/search/attempt-001/sample-2.log"
+      ],
+      "mean_seconds": 0.00015469194730113894,
+      "reason": "",
+      "score": 0.9230180719277157,
+      "status": "valid",
+      "times": [
+        0.00015474688877996072,
+        0.0001546995461090127,
+        0.00015462940701444338
+      ],
+      "tree_hash": "2a6d42ec68cc3d09c21e95cff133157c749a164f"
+    },
+    "created": 1792754405.2691245
+  },
+  {
+    "id": "5c2f4750e9f54914",
+    "role": "T1",
+    "state": "infrastructure_error",
+    "mission": {
+      "base_commit": "11816b00641659a925b7dd05e8b0f9b85cef34e4",
+      "budget_phase": "search",
+      "delegation_parent": "R/T1",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "",
+      "id": "5c2f4750e9f54914",
+      "ordinal": 2,
+      "parent_id": null,
+      "role": "T1",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {},
+      "tree_id": "e1:T1",
+      "trial_id": "01M5M86QWX4ZCRG836MCNEYYC0",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/worktrees/5c2f4750e9f54914"
+    },
+    "result": {
+      "binary_sha256": null,
+      "cache_key": null,
+      "commit": null,
+      "correct": null,
+      "logs": [],
+      "mean_seconds": null,
+      "reason": "The local model worker stopped sending heartbeats",
+      "score": null,
+      "status": "infrastructure_error",
+      "times": [],
+      "tree_hash": null
+    },
+    "created": 1792754802.5894773
+  },
+  {
+    "id": "8cedd1dab7ee4ef1",
+    "role": "T2",
+    "state": "infrastructure_error",
+    "mission": {
+      "base_commit": "e04ed8da120785a654370be6570d4e8dde47f540",
+      "budget_phase": "search",
+      "delegation_parent": "R/T2",
+      "depth": 2,
+      "epoch": 1,
+      "hypothesis": "",
+      "id": "8cedd1dab7ee4ef1",
+      "ordinal": 2,
+      "parent_id": "f00c768afc4448a1",
+      "role": "T2",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {},
+      "tree_id": "e1:T2",
+      "trial_id": "01M5M86QXSAX8CN6Y3QA2WVJFC",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/worktrees/8cedd1dab7ee4ef1"
+    },
+    "result": {
+      "binary_sha256": null,
+      "cache_key": null,
+      "commit": null,
+      "correct": null,
+      "logs": [],
+      "mean_seconds": null,
+      "reason": "The local model worker stopped sending heartbeats",
+      "score": null,
+      "status": "infrastructure_error",
+      "times": [],
+      "tree_hash": null
+    },
+    "created": 1792754802.6175556
+  },
+  {
+    "id": "787361bc20694686",
+    "role": "T3",
+    "state": "infrastructure_error",
+    "mission": {
+      "base_commit": "11816b00641659a925b7dd05e8b0f9b85cef34e4",
+      "budget_phase": "search",
+      "delegation_parent": "R/T3",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "",
+      "id": "787361bc20694686",
+      "ordinal": 2,
+      "parent_id": null,
+      "role": "T3",
+      "source_commits": [],
+      "sources": [],
+      "transformations": {},
+      "tree_id": "e1:T3",
+      "trial_id": "01M5M86QYM4WZRG1T20HRMTC8M",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/worktrees/787361bc20694686"
+    },
+    "result": {
+      "binary_sha256": null,
+      "cache_key": null,
+      "commit": null,
+      "correct": null,
+      "logs": [],
+      "mean_seconds": null,
+      "reason": "The local model worker stopped sending heartbeats",
+      "score": null,
+      "status": "infrastructure_error",
+      "times": [],
+      "tree_hash": null
+    },
+    "created": 1792754802.645065
+  },
+  {
+    "id": "0e6aa24de9754cf3",
+    "role": "G",
+    "state": "infrastructure_error",
+    "mission": {
+      "base_commit": "e04ed8da120785a654370be6570d4e8dde47f540",
+      "budget_phase": "postprocess",
+      "delegation_parent": "R/G",
+      "depth": 1,
+      "epoch": 1,
+      "hypothesis": "",
+      "id": "0e6aa24de9754cf3",
+      "ordinal": 1,
+      "parent_id": null,
+      "role": "G",
+      "source_commits": [
+        "b716a70263fe36d86a769ec9d99a77f102775a6b",
+        "e04ed8da120785a654370be6570d4e8dde47f540"
+      ],
+      "sources": [
+        "16e9ab0967f54ba0",
+        "f00c768afc4448a1"
+      ],
+      "transformations": {},
+      "tree_id": "e1:G-merge-1-1",
+      "trial_id": "01M5M8C81NEAERK8682D9F1WNF",
+      "worktree": "/gpfs/scratch/nimarano/forest-engine-history-772923-39f27d687fd7437580098d20490d0215/results-780639/cuda-nbody/worktrees/0e6aa24de9754cf3"
+    },
+    "result": {
+      "binary_sha256": null,
+      "cache_key": null,
+      "commit": null,
+      "correct": null,
+      "logs": [],
+      "mean_seconds": null,
+      "reason": "The local model worker stopped sending heartbeats",
+      "score": null,
+      "status": "infrastructure_error",
+      "times": [],
+      "tree_hash": null
+    },
+    "created": 1792754982.9657295
+  }
+]

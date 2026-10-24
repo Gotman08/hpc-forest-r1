@@ -1,0 +1,53 @@
+diff --git a/src/launch.json b/src/launch.json
+index d4de04a..dcf2ae7 100644
+--- a/src/launch.json
++++ b/src/launch.json
+@@ -1,5 +1,5 @@
+ {
+   "block": 192,
+   "items_per_block": 192,
+-  "shared_memory_bytes": 5376
++  "shared_memory_bytes": 3072
+ }
+diff --git a/src/nbody_kernel.cu b/src/nbody_kernel.cu
+index 3b1f9ac..7f8ebb6 100644
+--- a/src/nbody_kernel.cu
++++ b/src/nbody_kernel.cu
+@@ -4,10 +4,14 @@ struct Particle {
+     float mass;
+ };
+ 
++struct SourceParticle {
++    float x, y, z, mass;
++};
++
+ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, int n, float dt) {
+     if (n <= 0) return;
+ 
+-    extern __shared__ Particle source_tile[];
++    extern __shared__ SourceParticle source_tile[];
+ 
+     const unsigned int particle_count = static_cast<unsigned int>(n);
+     const unsigned int target_index = blockIdx.x * blockDim.x + threadIdx.x;
+@@ -28,7 +32,11 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+     for (unsigned int tile_start = 0; tile_start < particle_count; tile_start += blockDim.x) {
+         const unsigned int source_index = tile_start + threadIdx.x;
+         if (source_index < particle_count) {
+-            source_tile[threadIdx.x] = in[source_index];
++            const Particle source = in[source_index];
++            source_tile[threadIdx.x].x = source.x;
++            source_tile[threadIdx.x].y = source.y;
++            source_tile[threadIdx.x].z = source.z;
++            source_tile[threadIdx.x].mass = source.mass;
+         }
+         __syncthreads();
+ 
+@@ -42,7 +50,7 @@ extern "C" __global__ void nbody_step_naive(const Particle* in, Particle* out, i
+                 const unsigned int j = tile_start + offset;
+                 if (target_index == j) continue;
+ 
+-                const Particle source = source_tile[offset];
++                const SourceParticle source = source_tile[offset];
+                 const float dx = source.x - target.x;
+                 const float dy = source.y - target.y;
+                 const float dz = source.z - target.z;

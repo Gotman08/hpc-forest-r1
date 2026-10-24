@@ -11,6 +11,25 @@ de synthèse, rôles A/B/C et intégration G, véritable TreeQuest AB-MCTS-A 0.3
 évaluateur externe et confirmations séparées. La lecture du code ne lance aucun
 modèle, aucune campagne ni allocation.
 
+## Premier lot Forest + analystes
+
+Tous les rôles Codex de la série actuelle utilisent explicitement **GPT-6 Luna,
+effort `max`** : Mother, recherche, réparations, fusion et analystes. Une identité
+différente est refusée ; les anciennes campagnes ne sont pas converties.
+
+Le premier lot ajoute **un analyste indépendant par arbre de recherche**, en
+observation seulement, après la confirmation finale. Ses dossiers et bilans
+restent dans un répertoire séparé. Aucun avis n'entre dans les prompts, la
+mémoire de recherche, les admissions, les récompenses ou la sélection AB-MCTS.
+Consulter [le mode d'emploi et les garanties](docs/ANALYSTES-OBSERVATION.md).
+
+![Architecture Forest + JEV proposée](docs/images/forest-architecture-proposee.png)
+
+*Schéma fourni par l'utilisateur : architecture proposée. Ce lot implémente
+uniquement les analystes en observation après confirmation. Les retours vers
+Mother aux jalons et les combinaisons intermédiaires restent à évaluer. « JEV »
+désigne ici le rôle d'analyste réalisé par Luna Max, sans service TypeSafe AI.*
+
 ## Organisation
 
 | Emplacement | Responsabilité |
@@ -25,6 +44,9 @@ modèle, aucune campagne ni allocation.
 | src/hpc_forest/node_harness.py | Développement borné d'un candidat |
 | src/hpc_forest/assets/skills/ | Six skills génériques pour Mother, les enfants et la fusion |
 | src/hpc_forest/model_skills.py | Chargement par rôle, empreintes et traces d'utilisation |
+| src/hpc_forest/model_policy.py | Identité unique GPT-6 Luna Max pour la série actuelle |
+| src/hpc_forest/observer_snapshot.py | Dossiers figés par arbre, registre lu sans modification |
+| src/hpc_forest/tree_observer.py | Analystes après confirmation, budget et rapports séparés |
 | src/hpc_forest/evaluator.py | Compilation, correction et mesures |
 | src/hpc_forest/registry.py | Registre, réservations et consommation |
 | src/hpc_forest/support/ | Sources bornées, échéances et validation numérique |

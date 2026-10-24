@@ -17,6 +17,7 @@ from hpc_forest import codex_mailbox, codex_process, codex_worker
 from hpc_forest.config import load_config
 from hpc_forest.controller import Controller, create_workspace
 from hpc_forest.core import FileLock, InfrastructureError, atomic_json, file_digest
+from hpc_forest.model_policy import EFFORT, MODEL
 from hpc_forest.mother import MotherContext
 from hpc_forest.native_matrix import install_identity
 from hpc_forest.reporting import report
@@ -35,7 +36,6 @@ FOREST_SCOPES = {LEGACY_FOREST_SCOPE, *CONVERSATION_SCOPES}
 ADAPTIVE_SCOPES = {ADAPTIVE_SCOPE, *FOREST_SCOPES}
 COMPLETION_SCOPES = {FINISH_SCOPE, *ADAPTIVE_SCOPES}
 DEPTH_SCOPES = {DEPTH_SCOPE, *COMPLETION_SCOPES}
-MODEL, EFFORT = "gpt-6-luna", "max"
 PILOTS = {SCOPE: ("matmul", 4, "hpc-forest-r1-pilot-"),
           OFFICIAL_SCOPE: ("2023-count", 8, "hpc-forest-r1-official-"),
           DEPTH_SCOPE: ("2023-count", None, "hpc-forest-r1-depth-"),

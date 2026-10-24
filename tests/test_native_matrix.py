@@ -11,12 +11,13 @@ from hpc_forest.native_matrix import EFFORTS, MODELS, validate_identity
 
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("effort", EFFORTS)
-def test_all_twenty_requested_identities(model, effort):
+def test_current_fixed_identity(model, effort):
     validate_identity(model, effort)
 
 
 @pytest.mark.parametrize("model,effort", [("gpt-6.1-sol", "ultra"), ("gpt-6-sol", "max"),
-                                          ("gpt-6-astra", "automatic")])
+                                          ("gpt-6-astra", "automatic"), ("gpt-6.1-sol", "max"),
+                                          ("gpt-6-luna", "low")])
 def test_identity_never_substituted(model, effort):
     with pytest.raises(InfrastructureError):
         validate_identity(model, effort)
@@ -38,9 +39,9 @@ def test_native_identity_reaches_real_argv_in_dedicated_process(tmp_path):
 from pathlib import Path
 import json,sys
 from hpc_forest.native_matrix import install_identity
-install_identity("gpt-6-luna", "low")
+install_identity("gpt-6-luna", "max")
 from hpc_forest.codex_process import command_for
-request={"model":"gpt-6-luna","reasoning_effort":"low","schema":{"type":"object"},
+request={"model":"gpt-6-luna","reasoning_effort":"max","schema":{"type":"object"},
          "messages":[{"role":"system","content":"bounded"},{"role":"user","content":"data"}]}
 print(json.dumps(command_for(request,Path(sys.argv[1]),sys.executable)))
 '''
@@ -48,6 +49,6 @@ print(json.dumps(command_for(request,Path(sys.argv[1]),sys.executable)))
                          text=True, check=True)
     argv = json.loads(run.stdout)
     assert argv[argv.index("--model") + 1] == "gpt-6-luna"
-    assert 'model_reasoning_effort="low"' in argv
+    assert 'model_reasoning_effort="max"' in argv
     from hpc_forest.codex_mailbox import MODEL
-    assert MODEL == "gpt-6.1-sol"
+    assert MODEL == "gpt-6-luna"

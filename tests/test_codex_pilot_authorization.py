@@ -5,13 +5,14 @@ import pytest
 
 from hpc_forest.codex_process import check_dependencies, usage_from_events
 from hpc_forest.core import InfrastructureError
+from hpc_forest.model_policy import EFFORT, MODEL
 
 
 def test_parallel_pilot_does_not_require_or_claim_deepseek_receipt(tmp_path):
     gate = {"schema": "hpc-forest-explicit-parallel-pilot-v1",
             "status": "parallel_pilot_explicitly_authorized",
             "scope_id": "gpt61sol-max-pilot-20261015-r1",
-            "next_model": "gpt-6.1-sol", "reasoning_effort": "max",
+            "next_model": MODEL, "reasoning_effort": EFFORT,
             "deepseek_completion_claimed": False,
             "expires_at": time.time() + 60, "user_message": "Launch a pilot now"}
     receipt = tmp_path / "authorization.json"

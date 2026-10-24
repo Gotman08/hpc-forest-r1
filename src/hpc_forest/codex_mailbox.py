@@ -14,6 +14,7 @@ from .core import CandidateRejected, InfrastructureError, Mission, atomic_json
 from .forest import persistent_mother
 from .harness_research import extract_research
 from .memory_contract import extract_memory
+from .model_policy import EFFORT, MODEL, require_identity
 from .ollama_backend import validate_files
 from .source_request import proposal_messages
 from .support.budgets import (
@@ -27,8 +28,6 @@ from .support.budgets import (
     unlimited_tokens,
 )
 
-MODEL = "gpt-6.1-sol"
-EFFORT = "max"
 PROTOCOL = "hpc-forest-codex-mailbox-v1"
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
@@ -92,8 +91,7 @@ def check_channel(root: Path, session_id: str) -> dict:
 
 def make_request(mission: Mission, context: dict, config: dict) -> dict:
     settings = config["codex"]
-    if settings.get("model") != MODEL or settings.get("reasoning_effort") != EFFORT:
-        raise InfrastructureError("This campaign requires exactly GPT-6.1 Sol MAX")
+    require_identity(settings)
     if not unlimited_tokens(config) and config["budget"]["mission_tokens"] < TOKEN_CEILING:
         raise InfrastructureError("Insufficient conservative Codex token reservation")
     if context.get("assembly_selection"):
@@ -142,6 +140,7 @@ def make_request(mission: Mission, context: dict, config: dict) -> dict:
 
 
 def publish_request(channel: Path, request: dict) -> str:
+    require_identity(request)
     nonce = request["nonce"]
     if not re.fullmatch(r"[0-9a-f]{32}", nonce):
         raise InfrastructureError("Invalid request nonce")

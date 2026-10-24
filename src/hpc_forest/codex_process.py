@@ -19,6 +19,7 @@ from .codex_mailbox import (
 from .core import CandidateRejected, InfrastructureError, atomic_json, run_process
 from .documentation_mcp import DOCUMENTATION_INSTRUCTIONS, DOCUMENTATION_TOOLS, DocumentationMCP
 from .model_mcp import DISABLED_MODEL_TOOLS, RomeoMCP
+from .model_policy import require_identity
 from .model_skills import consume_report, usage_trace, verify_binding
 from .support.budgets import FINISH_STARTED, OBSERVE_TOKENS, time_left
 
@@ -91,8 +92,7 @@ def wire_schema(schema: dict) -> dict:
 def command_for(request: dict, output: Path, executable: str = "codex", *,
                 romeo_mcp: RomeoMCP | None = None,
                 documentation_mcp: DocumentationMCP | None = None) -> list[str]:
-    if request.get("model") != MODEL or request.get("reasoning_effort") != EFFORT:
-        raise InfrastructureError("A different model or reasoning effort is forbidden")
+    require_identity(request)
     executable = shutil.which(executable)
     if not executable:
         raise InfrastructureError("The authenticated Codex CLI is unavailable locally")
@@ -326,3 +326,17 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
                                  error=error, infrastructure_error=infra)
     atomic_json(output / "response.json", response)
     return response
+
+
+def run_observer(request: dict, output: Path, executable="codex") -> dict:
+    """Explicit post-confirmation analysis, with no tools or source execution.
+
+    This separate entry point cannot dispatch a search or assembly request and
+    does not use the historical experiment authorization gates.
+    """
+    from .observer_contract import validate_request
+
+    validate_request(request)
+    from .codex_mailbox import json_bytes
+
+    return _invoke(request, sha256(json_bytes(request)), output, executable, None, True)

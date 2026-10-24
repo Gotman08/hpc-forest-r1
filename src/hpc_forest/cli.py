@@ -98,6 +98,13 @@ def parser():
     rep = sub.add_parser("report")
     rep.add_argument("workspace", type=Path)
     rep.add_argument("--output", type=Path)
+    observe = sub.add_parser("observe", help="Freeze one isolated analyst dossier per confirmed research tree")
+    observe.add_argument("workspace", type=Path)
+    observe.add_argument("destination", type=Path)
+    observe.add_argument("--max-calls", type=int, default=8, help="Separate observation allowance per tree (1..16)")
+    observe.add_argument("--run", action="store_true", help="Invoke authenticated native Codex analysts after freezing")
+    observe_run = sub.add_parser("observe-run", help="Run a portable observation batch; never replay claimed calls")
+    observe_run.add_argument("destination", type=Path)
     reliability = sub.add_parser("reliability", help="Compare confirmed independent campaigns without changing them")
     reliability.add_argument("workspaces", type=Path, nargs="+")
     reliability.add_argument("--output", type=Path)
@@ -218,6 +225,17 @@ def main(argv=None) -> int:
                     emit(controller.new_epoch())
         elif args.command == "report":
             emit({"report": str(report(args.workspace, args.output))})
+        elif args.command in {"observe", "observe-run"}:
+            from .observer_snapshot import prepare as prepare_observers
+            from .tree_observer import run as run_observers
+
+            if args.command == "observe":
+                emit({"manifest": str(prepare_observers(args.workspace, args.destination, max_calls=args.max_calls))})
+            if args.command == "observe-run" or args.run:
+                result = run_observers(args.destination)
+                emit({"complete": result["complete"], "usage": result["usage"],
+                      "report": str(args.destination.resolve() / "REPORT.md")})
+                return 0 if result["complete"] else 1
         elif args.command == "reliability":
             from .reliability import compare
 

@@ -222,6 +222,10 @@ class Controller:
                 self.db.event("progress_write_failed", {"reason": str(exc)})
 
     def _start(self) -> None:
+        if self.config["backend"] == "codex":
+            from .model_policy import require_identity
+
+            require_identity(self.config.get("codex", {}))
         verify_protected(self.root / "trusted", self.db.get("manifest"))
         if target_identity(self.config) != self.db.get("identity"):
             raise InfrastructureError(

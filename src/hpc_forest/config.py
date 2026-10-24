@@ -12,6 +12,7 @@ from .adaptive_budget import validate_adaptive
 from .core import ForestError
 from .forest import persistent_mother, validate_forest
 from .memory_contract import validate_settings as validate_memory
+from .model_policy import EFFORT, MODEL, require_identity
 from .model_skills import validate_settings as validate_skills
 from .submission import validate_submission
 from .support.budgets import (
@@ -57,7 +58,7 @@ DEFAULT = {
         "build_timeout_seconds": 120,
         "environment": {"OMP_NUM_THREADS": "2", "OMP_DYNAMIC": "FALSE", "OMP_PROC_BIND": "TRUE"},
     },
-    "codex": {"executable": "codex", "model": None},
+    "codex": {"executable": "codex", "model": MODEL, "reasoning_effort": EFFORT},
     "ollama": {
         "base_url": "http://127.0.0.1:11434",
         "model": "qwen2.5-coder:7b",
@@ -102,6 +103,8 @@ def load_config(path: Path | None = None) -> dict:
 
 
 def validate(c: dict) -> None:
+    if c.get("backend") == "codex":
+        require_identity(c.get("codex", {}))
     validate_memory(c)
     validate_submission(c)
     validate_skills(c.get("skills"))

@@ -301,7 +301,8 @@ def test_archived_mailbox_keeps_more_than_500_completed_requests_without_filling
     mailbox.initialize_channel(channel, "a" * 32, "fixture")
     for index in range(501):
         request = {"nonce": f"{index:032x}", "session_id": "a" * 32, "expires_at": None,
-                   "archive_request_after_response": True}
+                   "archive_request_after_response": True,
+                   "model": mailbox.MODEL, "reasoning_effort": mailbox.EFFORT}
         sha = mailbox.publish_request(channel, request)
         mailbox.publish_response(channel, mailbox.response_envelope(request, sha, data={"ok": True}))
         assert mailbox.wait_response(channel, request, sha)["data"]["ok"]

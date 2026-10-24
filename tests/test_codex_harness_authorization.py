@@ -5,6 +5,7 @@ import pytest
 
 from hpc_forest.codex_process import check_dependencies, run_codex
 from hpc_forest.core import InfrastructureError
+from hpc_forest.model_policy import EFFORT, MODEL
 
 
 def authorization():
@@ -12,7 +13,7 @@ def authorization():
         "schema": "hpc-forest-explicit-harness-comparison-v1",
         "status": "harness_comparison_explicitly_authorized",
         "scope_id": "gpt61sol-max-harness-20261015-r2",
-        "next_model": "gpt-6.1-sol", "reasoning_effort": "max",
+        "next_model": MODEL, "reasoning_effort": EFFORT,
         "problems": ["knn", "sum", "nbody"], "arms": ["reference", "mixed-harness"],
         "harness_enabled": True, "max_calls_per_harness_mission": 3,
         "planned_slots_per_problem_per_arm": 24, "wall_seconds_per_problem_per_arm": 7200,

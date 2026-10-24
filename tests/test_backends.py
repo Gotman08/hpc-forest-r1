@@ -61,7 +61,8 @@ def test_codex_contract_preserves_model_and_records_available_usage(
     result = backends.CodexBackend().generate(mission, {"deadline": 9999999999}, config, tmp_path)
     assert result.error is None
     assert result.tokens == (150 if with_usage else None)
-    assert "--model" not in captured["argv"]
+    assert captured["argv"][captured["argv"].index("--model") + 1] == "gpt-6-luna"
+    assert 'model_reasoning_effort="max"' in captured["argv"]
     assert "workspace-write" in captured["argv"]
     assert not any("bypass" in arg for arg in captured["argv"])
     assert "DATA_CONTEXT_BEGIN" in captured["stdin"]

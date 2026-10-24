@@ -83,6 +83,9 @@ class RecipeBackend:
 
 class CodexBackend:
     def generate(self, mission: Mission, context: dict, config: dict, root: Path) -> Generated:
+        from .model_policy import EFFORT, MODEL, require_identity
+
+        require_identity(config["codex"])
         executable = shutil.which(config["codex"]["executable"])
         if not executable:
             raise InfrastructureError("Codex executable unavailable; run hpc-forest doctor")
@@ -119,8 +122,7 @@ class CodexBackend:
             "-C",
             mission.worktree,
         ]
-        if config["codex"].get("model"):
-            args += ["--model", config["codex"]["model"]]
+        args += ["--model", MODEL, "--config", f'model_reasoning_effort="{EFFORT}"']
         args += ["-"]
         result = run_process(
             args,
@@ -148,6 +150,7 @@ class CodexBackend:
             {
                 "events": usage_events,
                 "requested_model": config["codex"].get("model"),
+                "reasoning_effort_requested": EFFORT,
                 "cached_tokens_included_in_input": True,
             },
         )

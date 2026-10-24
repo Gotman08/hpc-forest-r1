@@ -125,8 +125,9 @@ class NativeFixture:
             payload, source_text = kwargs["stdin"].split("\n\nCURRENT SOURCE AS DATA:\n", 1)
             payload = json.loads(payload)
             if payload["role"] != "G":
-                if not re.search(r"-h0[2-9]$", request["mission_id"]):
-                    self.barrier.wait()  # Every original tree is running concurrently.
+                if payload["ordinal"] == 1 and not re.search(r"-h0[2-9]$", request["mission_id"]):
+                    # Check concurrent initial admission, not artificial later waves.
+                    self.barrier.wait()
                 tile = int(payload["role"][1:]) * 8 + payload["ordinal"]
             else:
                 assert turn["phase"] == "assembly" and "resume" in argv
@@ -280,6 +281,8 @@ def test_checkpoint_keeps_original_conversation_until_assembly_and_no_g_research
         state = controller.run(max_batches=1)
         assert state["status"] == "checkpointed"
         original = state["mother_conversation"]
+        # Subsequent native turns must progress independently of this one-off rendezvous.
+        fixture.barrier.abort()
     with Controller(root) as controller:
         fixture.controller = controller
         state = controller.run(max_batches=2)

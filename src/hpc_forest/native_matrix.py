@@ -1,7 +1,7 @@
-"""Explicit per-process model identity for the isolated archive experiment.
+"""Compatibility adapter for native launchers, now restricted to GPT-6 Luna Max.
 
-Legacy transports retain their source and defaults. This adapter selects one
-authorized identity before a dedicated process performs any generation.
+Historical matrix artifacts remain readable; they are not authorization to run
+other models in the current experiment series.
 """
 from __future__ import annotations
 
@@ -10,9 +10,10 @@ import time
 from pathlib import Path
 
 from .core import InfrastructureError, file_digest
+from .model_policy import EFFORT, MODEL
 
-MODELS = ("gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra", "gpt-5.6-terra")
-EFFORTS = ("max", "xhigh", "high", "medium", "low")
+MODELS = (MODEL,)
+EFFORTS = (EFFORT,)
 SCOPE = "hpc-forest-archives-2020-2024-mother-r1"
 
 

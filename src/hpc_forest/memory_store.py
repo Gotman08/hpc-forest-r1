@@ -65,6 +65,11 @@ class MemoryStore:
                           "base_commit": mission["base_commit"], "parent_id": mission["parent_id"],
                           "delegation_parent": mission["delegation_parent"],
                           "source_ids": mission["sources"], "source_commits": mission["source_commits"],
+                          "kind": mission.get("kind", "research"),
+                          "base_source_id": mission.get("base_source_id"),
+                          "control_decision_id": mission.get("control_decision_id"),
+                          "advice_ids": mission.get("advice_ids", []),
+                          "authorized_import_ids": mission.get("import_ids", []),
                           "source_change": source_change},
                 "model_interpretation": {"hypothesis": mission["hypothesis"],
                                          "transformations": mission["transformations"]}})
@@ -86,7 +91,7 @@ class MemoryStore:
                     for index, lesson in enumerate(item.get("memory_lessons", [])):
                         refs = lesson.get("evidence_ids", [])
                         # Defense in depth: no cross-protocol or cross-tree lesson laundering.
-                        if not refs or any(not self.db.one(
+                        if not refs or any(ref not in mission.get("import_ids", []) and not self.db.one(
                             "SELECT 1 FROM memory_facts WHERE id=? AND epoch=? AND protocol_id=? "
                             "AND (?='G' OR tree_id=? OR tree_id='baseline')",
                             (ref, row["epoch"], protocol, row["role"], row["tree_id"]))

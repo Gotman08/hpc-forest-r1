@@ -167,7 +167,8 @@ class NativeFixture:
         (output / "agent-result.json").write_text(json.dumps(value))
         events = [
             {"type": "thread.started", "thread_id": thread},
-            {"type": "turn.completed", "usage": {"input_tokens": 2, "output_tokens": 1}},
+            {"type": "turn.completed", "usage": {"input_tokens": 2 * ((turn or {}).get("turn", 0) + 1),
+                                                "output_tokens": (turn or {}).get("turn", 0) + 1}},
         ]
         if self.romeo_mcp is not None:
             assert "mcp_servers.romeo.enabled=true" in argv

@@ -87,6 +87,8 @@ def parser():
                       help="Mother chooses N subjects; all N AB-MCTS trees run concurrently")
     init.add_argument("--plan-review-calls", type=int,
                       help="Bounded pre-launch critique turns; new --mother-trees campaigns default to 2")
+    init.add_argument("--active-mode", choices=["off", "local", "steering", "sharing", "full"],
+                      help="Live per-tree analysts and Mother milestones; fresh campaigns only")
     init.add_argument("--statement", type=Path, help="Problem text supplied to Mother as data")
     run = sub.add_parser("run", help="Run or resume bounded search")
     run.add_argument("workspace", type=Path)
@@ -195,6 +197,12 @@ def main(argv=None) -> int:
                 config["schedule"].update(trials_per_role_per_cycle=1, integrations_per_cycle=0)
             if args.plan_review_calls is not None:
                 config["forest"]["plan_review_calls"] = args.plan_review_calls
+            if args.active_mode is not None:
+                config.setdefault("forest", {})["active"] = {"mode": args.active_mode}
+                if args.active_mode != "off":
+                    config.setdefault("memory", {})["mode"] = "active"
+                    config["harness"]["enabled"] = True
+                    config["forest"]["integration"] = "memory-guided-v1"
             if args.statement:
                 config.setdefault("forest", {})["statement"] = args.statement.read_text(encoding="utf-8")
             emit(

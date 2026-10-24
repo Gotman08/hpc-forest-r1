@@ -25,7 +25,9 @@ class UnevenModels:
         if mission.ordinal == 1:
             self.initial.wait()
         if mission.role == "T2":
-            assert self.fast_settled.wait(10), "Slow tree was awaited before the fast tree could advance"
+            # This bounds a deadlock, not compilation speed: T1 builds and
+            # checks two real programs before release, including on Windows.
+            assert self.fast_settled.wait(60), "Slow tree was awaited before the fast tree could advance"
             self.slow_finished.set()
         elif self.fail_fast:
             raise InfrastructureError("Offline generation failure")

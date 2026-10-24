@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .adaptive_budget import admission_deadline
 from .core import FileLock, ForestError, atomic_json, digest, verify_protected
-from .forest import forest_plan, research_roles
+from .forest import assignment, forest_plan, research_roles
 from .gitops import git
 from .memory_store import memory_summary
 from .model_skills import campaign_traces
@@ -35,8 +35,12 @@ def report(root: Path, output: Path | None = None) -> Path:
                     "id": row["id"],
                     "epoch": row["epoch"],
                     "role": row["role"],
-                    "research_assignment": next((child for child in (forest_plan(db, row["epoch"]) or {}).get("children", [])
-                                                 if child["role"] == row["role"]), None),
+                    "research_assignment": assignment(db, row["role"], row["epoch"]),
+                    "kind": mission.get("kind", "research"),
+                    "base_source_id": mission.get("base_source_id"),
+                    "control_decision_id": mission.get("control_decision_id"),
+                    "advice_ids": mission.get("advice_ids", []),
+                    "authorized_import_ids": mission.get("import_ids", []),
                     "budget_phase": mission.get("budget_phase", "search"),
                     "tree_id": row["tree_id"],
                     "trial_id": row["trial_id"],
@@ -105,6 +109,9 @@ def report(root: Path, output: Path | None = None) -> Path:
             "epochs": db.rows("SELECT * FROM epochs ORDER BY id"),
             "search_topology": Search(db).snapshot(),
         }
+        from .active_reporting import export as export_active
+
+        payload["active_architecture"] = export_active(db, output)
         atomic_json(output / "experiments.json", payload)
         fields = [
             "id",
@@ -123,12 +130,14 @@ def report(root: Path, output: Path | None = None) -> Path:
             "mean_seconds",
             "score",
             "reason",
+            "kind", "base_source_id", "control_decision_id", "advice_ids", "authorized_import_ids",
         ]
         with (output / "experiments.csv").open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=fields, extrasaction="ignore")
             writer.writeheader()
             for row in rows:
-                writer.writerow({**row, "sources": json.dumps(row["sources"])})
+                writer.writerow({**row, **{k: json.dumps(row[k]) for k in
+                    ("sources", "advice_ids", "authorized_import_ids")}})
         best = db.get("best_confirmed")
         lines = [
             "# Rapport de campagne HPC Forest",

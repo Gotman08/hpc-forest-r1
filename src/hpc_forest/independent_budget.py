@@ -27,6 +27,8 @@ def forecast_independent(db, roles=(), *, now=None):
     generic_evaluation = median(measured_evaluations) if measured_evaluations else baseline
 
     def evaluation(role):
+        if role.startswith("@"):
+            return 0.0  # Analyst and steering calls never evaluate a program.
         return typical("evaluation_work:" + role, generic_evaluation)
 
     def generation(role):

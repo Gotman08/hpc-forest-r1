@@ -132,6 +132,9 @@ def validate(c: dict) -> None:
     if binary.get("enabled") and c["method"] not in {"H", "H-no-feedback"}:
         raise ForestError("Binary search requires separate H trees, without enumeration")
     validate_forest(c)
+    from .active_contract import validate_settings as validate_active
+
+    validate_active(c)
     harness = c.get("harness", {})
     if type(harness.get("enabled", False)) is not bool:
         raise ForestError("harness.enabled must be a boolean")

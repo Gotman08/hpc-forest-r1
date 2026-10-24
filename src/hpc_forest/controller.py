@@ -320,6 +320,11 @@ class Controller:
         return batches
 
     def _sources(self, mission: Mission) -> list[dict]:
+        if mission.kind == "intermediate_integration":
+            from .active_state import measured_source
+
+            child = assignment(self.db, mission.role, mission.epoch)
+            return [measured_source(self.db, mission.epoch, identity) for identity in child["source_ids"]]
         if mission.role != "G":
             return []
         if model_selected(self.config):
@@ -432,11 +437,36 @@ class Controller:
             from .mother import mother_context
 
             context = mother_context(self, mission, context)
+        from .active_contract import enabled as active_enabled
+
+        if active_enabled(self.config):
+            from .active_state import context as active_context
+            from .active_state import state as active_state
+
+            advice = active_context(self.db, mission)
+            context["active_advice_as_interpretation"] = advice
+            if mission.role == "G":
+                context["forest_reports_as_interpretations"] = active_state(self.db, mission.epoch)["analysts"]
+            if mission.kind == "intermediate_integration":
+                context["intermediate_integration"] = {
+                    "decision_id": mission.control_decision_id, "source_ids": mission.sources,
+                    "base_source_id": mission.base_source_id,
+                    "rule": "A new program evaluated independently; no source reward is copied"}
         from .memory_context import attach_memory
 
         return attach_memory(self, mission, context)
 
     def _new_mission(self, role: str, epoch: dict, reserved_slot=None) -> tuple[Mission, dict, str]:
+        from .active_contract import enabled as active_enabled
+
+        if active_enabled(self.config):
+            from .active_state import state as active_state
+
+            current = active_state(self.db, epoch["id"])
+            if current["closed"] or role in current["suspended"] or self.db.get(f"active_mother_broken:{epoch['id']}"):
+                raise BudgetExhausted("Active controller closed or suspended new admissions")
+            if assignment(self.db, role, epoch["id"]) is None:
+                raise InfrastructureError("Only Mother-assigned active trees can start")
         if persistent_mother(self.config):
             if self.db.get(f"mother_assembly_started:{epoch['id']}") is not None:
                 raise BudgetExhausted("Mother is assembling; research trees cannot be restarted")
@@ -451,14 +481,26 @@ class Controller:
             "SELECT count(*) AS n FROM trials WHERE epoch=? AND role=?", (epoch["id"], role)
         )["n"]
         actions = [*research_roles(self.db), "G"] if tree_role == "U" else [role]
+        child = assignment(self.db, role, epoch["id"]) if model_selected(self.config) else None
+        base_commit = (child or {}).get("base_commit", epoch["base_commit"])
         if role == "G" and self.config["method"] == "H-enumeration":
             mission = self.search.ask_enumeration(
                 tree_id, epoch["id"], epoch["base_commit"], count + 1, "", slot
             )
         else:
             mission = self.search.ask(
-                tree_id, actions, epoch["id"], epoch["base_commit"], count + 1, "", slot
+                tree_id, actions, epoch["id"], base_commit, count + 1, "", slot
             )
+        if active_enabled(self.config):
+            from .active_state import context as active_context
+
+            advice = active_context(self.db, mission)
+            mission.kind = (child or {}).get("kind", "research")
+            mission.base_source_id = (child or {}).get("base_source_id")
+            mission.control_decision_id = (child or {}).get("control_decision_id")
+            mission.import_ids = advice["authorized_import_ids"][:]
+            mission.advice_ids = [identity for identity in [advice.get("analyst_report_id"),
+                (advice.get("mother_interpretation") or {}).get("decision_id")] if identity]
         if tree_role == "U":
             # U chooses its action through TreeQuest, not through the outer scheduler.
             count = self.db.one(
@@ -629,7 +671,12 @@ class Controller:
             self._initialize_trees(epoch["id"])
             self.db.set("status", "running")
             if persistent_mother(self.config):
-                from .forest_scheduler import run_research
+                from .active_contract import enabled as active_enabled
+
+                if active_enabled(self.config):
+                    from .active_scheduler import run_research
+                else:
+                    from .forest_scheduler import run_research
 
                 run_research(self, epoch, baseline, max_rounds=max_batches)
                 if self.db.get("status") != "checkpointed":
@@ -887,8 +934,11 @@ class Controller:
             return self.epoch()
 
     def status(self) -> dict:
+        from .active_reporting import summary as active_summary
+
         return {
             "status": self.db.get("status"),
+            "active_architecture": active_summary(self.db),
             "epoch": self.db.get("current_epoch"),
             "costs": self.db.costs(),
             "deadline": self.db.get("deadline"),

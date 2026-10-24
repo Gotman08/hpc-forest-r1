@@ -201,8 +201,22 @@ def plan_for(controller, mission, context: dict, phase: str) -> dict:
                    roles=research_roles(controller.db, mission.epoch) if dynamic else None,
                    choose_trees=dynamic and phase == "preparation", skills=controller.config.get("skills"))}
     if persistent:
+        from .active_contract import enabled
+        from .active_contract import settings as active_settings
+
         request["conversation"] = first_turn()
         request["messages"][0]["content"] += (
+            " This is the initial planning turn of your persistent conversation. "
+            "The controller will launch the N initial trees concurrently. Each research tree "
+            "has an evidence analyst. Later this SAME conversation may resume at milestones "
+            "to continue, suspend, resume, create a new objective from a measured source, "
+            "share evidence, or request a measured intermediate combination as enabled by "
+            "the experiment. Objectives of existing trees remain immutable. Choose a useful "
+            "initial decomposition considering the supplied remaining duration and resources. "
+            "All control calls consume that duration; protect final assembly and confirmation. "
+            "Only the controller admits and executes work. After permanent research closure "
+            "you assemble final G yourself. The planning schema applies only to this turn."
+            if enabled(controller.config) else
             " This is the initial planning turn of your persistent conversation. "
             "The controller may request a bounded critique before committing this plan. "
             "The controller launches your N trees once as research processes. "
@@ -210,6 +224,15 @@ def plan_for(controller, mission, context: dict, phase: str) -> dict:
             "At that point you must assemble the code yourself and cannot launch, "
             "restart, replace or add research trees. The planning schema applies only to this turn."
         )
+        if enabled(controller.config):
+            payload = json.loads(request["messages"][1]["content"])
+            payload["active_architecture_as_data"] = {
+                **active_settings(controller.config), "deadline": controller.db.get("deadline"),
+                "remaining_seconds": max(0, controller.db.get("deadline") - time.time())
+                    if controller.db.get("deadline") else None,
+                "research_workers": "N chosen by Mother; dynamic trees share these N slots",
+                "all_roles": "GPT-6 Luna, reasoning max", "fresh_memory_per_program": True}
+            request["messages"][1]["content"] = json.dumps(payload, ensure_ascii=False)
     if context.get("deadline_policy") == FINISH_STARTED:
         request.update(deadline_policy=FINISH_STARTED,
                        budget_phase="postprocess" if postprocess else "search")
@@ -322,8 +345,14 @@ def prepare_forest(controller, epoch: dict, baseline: dict) -> dict:
 
 def publish_forest(controller, record):
     settings = controller.config["codex"]
+    from .active_contract import VERSION, enabled
+    from .active_contract import settings as active_settings
+
+    capacity = ({"active_control": {"version": VERSION,
+                 "control_workers": active_settings(controller.config)["control_workers"]}}
+                if enabled(controller.config) else {})
     atomic_json(Path(settings["mailbox_dir"]) / "forest-plan.json",
-                {**record, "session_id": settings["session_id"]})
+                {**record, "session_id": settings["session_id"], **capacity})
 
 
 def mother_context(controller, mission, context):

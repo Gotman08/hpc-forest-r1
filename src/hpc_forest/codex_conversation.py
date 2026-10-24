@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 from .core import FileLock, InfrastructureError, atomic_json
+from .native_usage import conversation_usage
 
 
 def _thread_id(value) -> bool:
@@ -26,7 +27,7 @@ def validate_turn(turn: dict) -> None:
         valid = (turn["phase"] == "planning" and turn["thread_id"] is None
                  and turn["previous_request_sha256"] is None)
     else:
-        valid = (turn["phase"] in {"plan-review", "assembly"} and _thread_id(turn["thread_id"])
+        valid = (turn["phase"] in {"plan-review", "steering", "assembly"} and _thread_id(turn["thread_id"])
                  and isinstance(turn["previous_request_sha256"], str)
                  and re.fullmatch(r"[a-f0-9]{64}", turn["previous_request_sha256"]))
     if not valid:
@@ -42,8 +43,10 @@ def next_turn(receipt: dict, *, phase="assembly") -> dict:
     if (not isinstance(receipt, dict) or type(receipt.get("turn")) is not int
             or not {"id", "thread_id", "request_sha256"}.issubset(receipt)):
         raise InfrastructureError("Mother continuation requires the preceding native receipt")
-    if phase == "plan-review" and receipt.get("phase") == "assembly":
+    if phase in {"plan-review", "steering"} and receipt.get("phase") == "assembly":
         raise InfrastructureError("Mother cannot review the plan after assembly starts")
+    if phase == "plan-review" and receipt.get("phase") == "steering":
+        raise InfrastructureError("Mother cannot revise the initial plan after steering starts")
     turn = {"id": receipt["id"], "turn": receipt["turn"] + 1, "phase": phase,
             "thread_id": receipt["thread_id"], "previous_request_sha256": receipt["request_sha256"]}
     validate_turn(turn)
@@ -85,12 +88,15 @@ def run_turn(request: dict, request_sha: str, output: Path, invoke) -> dict:
                 or previous.get("thread_id") != turn["thread_id"]
                 or previous.get("request_sha256") != turn["previous_request_sha256"]):
             raise InfrastructureError("Mother continuation has no matching completed native conversation")
-        if previous and previous.get("phase") == "assembly" and turn["phase"] == "plan-review":
+        if previous and previous.get("phase") == "assembly" and turn["phase"] in {"plan-review", "steering"}:
             raise InfrastructureError("Mother cannot return to planning after assembly")
+        if previous and previous.get("phase") == "steering" and turn["phase"] == "plan-review":
+            raise InfrastructureError("Mother cannot revise the initial plan after steering")
         state = {**turn, "identity": identity, "request_sha256": request_sha, "status": "started"}
         atomic_json(path, state)
         try:
             response = invoke()
+            state["usage_cumulative"] = conversation_usage(response, previous, turn["turn"])
             if not response.get("error") and not response.get("infrastructure_error"):
                 threads = set()
                 for line in (output / "codex.jsonl").read_text(encoding="utf-8").splitlines():

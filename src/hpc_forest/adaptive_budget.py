@@ -51,7 +51,9 @@ def forecast(db, roles=(), *, now: float | None = None) -> dict:
     configured margin. A research repair is not a sample of a Mother fusion.
     Historical fixed-tree profiles keep their maximum-based estimator.
     """
-    if db.get(f"research_scheduler:{db.get('current_epoch')}", {}).get("policy") == "independent-v1":
+    if db.get(f"research_scheduler:{db.get('current_epoch')}", {}).get("policy") in {
+        "independent-v1", "active-independent-v1",
+    }:
         from .independent_budget import forecast_independent
 
         return forecast_independent(db, roles, now=now)

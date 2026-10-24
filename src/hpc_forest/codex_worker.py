@@ -146,6 +146,10 @@ def validate_request(request: dict, session_id: str, nonce: str):
         raise InfrastructureError("Downloaded request belongs to another session or model")
     if request.get("kind") not in {"source-proposal", "transport-smoke"}:
         raise InfrastructureError("Unsupported mailbox request kind")
+    if "active_control" in request:
+        from .active_contract import validate_request as validate_control
+
+        validate_control(request)
     if "expires_at" not in request or (request["expires_at"] is not None and (
         type(request["expires_at"]) not in {int, float} or not math.isfinite(request["expires_at"])
     )):

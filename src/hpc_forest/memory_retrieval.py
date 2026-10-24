@@ -77,8 +77,15 @@ class MemoryReader:
         self.scope = "epoch=? AND protocol_id=?"
         self.args = [mission.epoch, protocol_id]
         if mission.role != "G":
-            self.scope += " AND (tree_id=? OR tree_id='baseline')"
+            from .active_contract import enabled as active_enabled
+
+            imported = mission.import_ids if active_enabled(config) else []
+            self.scope += " AND (tree_id=? OR tree_id='baseline'"
             self.args.append(mission.tree_id)
+            if imported:
+                self.scope += " OR id IN (" + ",".join("?" for _ in imported) + ")"
+                self.args.extend(imported)
+            self.scope += ")"
 
     def __enter__(self):
         return self
@@ -114,6 +121,10 @@ class MemoryReader:
         row = self.connection.execute("SELECT value FROM metadata WHERE key=?",
                                       (f"forest_plan:{self.mission.epoch}",)).fetchone()
         children = json.loads(row["value"])["children"] if row else []
+        active = self.connection.execute("SELECT value FROM metadata WHERE key=?",
+                                         (f"active_forest:{self.mission.epoch}",)).fetchone()
+        if active:
+            children.extend(json.loads(active["value"])["children"])
         if self.mission.role != "G":
             children = [item for item in children if item["role"] == self.mission.role]
         items = [{"role": child["role"], "subject": child["subject"][:600],

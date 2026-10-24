@@ -11,7 +11,7 @@ de synthèse, rôles A/B/C et intégration G, véritable TreeQuest AB-MCTS-A 0.3
 évaluateur externe et confirmations séparées. La lecture du code ne lance aucun
 modèle, aucune campagne ni allocation.
 
-## Premier lot Forest + analystes
+## Forest + analystes
 
 Tous les rôles Codex de la série actuelle utilisent explicitement **GPT-6 Luna,
 effort `max`** : Mother, recherche, réparations, fusion et analystes. Une identité
@@ -23,11 +23,17 @@ restent dans un répertoire séparé. Aucun avis n'entre dans les prompts, la
 mémoire de recherche, les admissions, les récompenses ou la sélection AB-MCTS.
 Consulter [le mode d'emploi et les garanties](docs/ANALYSTES-OBSERVATION.md).
 
+La [boucle active](docs/ARCHITECTURE-ACTIVE.md) est disponible pour les nouvelles
+campagnes avec `--active-mode full` : analyses pendant la recherche, décisions
+de Mother aux jalons, branches dérivées, imports explicites et combinaisons
+intermédiaires mesurées. Les modes `local`, `steering` et `sharing` permettent
+d'isoler ces contributions. Le défaut `off` conserve l'ordonnanceur historique.
+
 ![Architecture Forest + JEV proposée](docs/images/forest-architecture-proposee.png)
 
-*Schéma fourni par l'utilisateur : architecture proposée. Ce lot implémente
-uniquement les analystes en observation après confirmation. Les retours vers
-Mother aux jalons et les combinaisons intermédiaires restent à évaluer. « JEV »
+*Schéma fourni par l'utilisateur : architecture de référence. La boucle active
+implémente les retours vers Mother aux jalons et les combinaisons intermédiaires.
+Leur effet sur les performances doit être établi par les mesures. « JEV »
 désigne ici le rôle d'analyste réalisé par Luna Max, sans service TypeSafe AI.*
 
 ## Organisation
@@ -36,6 +42,10 @@ désigne ici le rôle d'analyste réalisé par Luna Max, sans service TypeSafe A
 | --- | --- |
 | src/hpc_forest/controller.py | Ordonnancement et vie de la campagne |
 | src/hpc_forest/forest_scheduler.py | Progression indépendante des N arbres parallèles |
+| src/hpc_forest/active_scheduler.py | Recherche et appels de contrôle pendant les jalons |
+| src/hpc_forest/active_control.py | Instantanés, appels durables et reçus de Mother |
+| src/hpc_forest/active_state.py | Décisions, branches, suspensions et imports autorisés |
+| src/hpc_forest/active_reporting.py | Coûts, couverture et liens décision → essai → résultat |
 | src/hpc_forest/independent_budget.py | Réserve par phase et prévision de la file de mesures |
 | src/hpc_forest/completion.py | Synthèse et intégration finales après fermeture des admissions |
 | src/hpc_forest/search.py | TreeQuest et persistance ask/tell |
@@ -119,6 +129,10 @@ lance aucun job. Le [contrat de fin de recherche](docs/FIN-DE-RECHERCHE.md)
 décrit les prévisions de temps, la confirmation et les contrats historiques.
 
 ## N arbres choisis par Mother
+
+Le parcours ci-dessous décrit le mode historique `forest.active.mode=off`.
+Le [mode actif](docs/ARCHITECTURE-ACTIVE.md) conserve le départ commun et ajoute
+le pilotage pendant la recherche.
 
 Avec `--mother-trees`, Mother choisit le nombre d'arbres AB-MCTS et attribue un
 sujet précis à chacun selon le code et le problème, sans recevoir la durée

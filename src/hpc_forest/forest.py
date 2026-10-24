@@ -26,11 +26,24 @@ def forest_plan(db, epoch: int | None = None) -> dict | None:
 def research_roles(db, epoch: int | None = None) -> list[str]:
     if not model_selected(db.get("config")):
         return db.get("config")["roles"][:]
+    from .active_contract import enabled
+
+    if enabled(db.get("config")):
+        from .active_state import children
+
+        return [c["role"] for c in children(db, epoch if epoch is not None else db.get("current_epoch"))
+                if c.get("kind") != "intermediate_integration"]
     plan = forest_plan(db, epoch)
     return [child["role"] for child in plan["children"]] if plan else []
 
 
 def assignment(db, role: str, epoch: int) -> dict | None:
+    from .active_contract import enabled
+
+    if enabled(db.get("config")):
+        from .active_state import children
+
+        return next((child for child in children(db, epoch) if child["role"] == role), None)
     plan = forest_plan(db, epoch)
     return next((child for child in plan["children"] if child["role"] == role), None) if plan else None
 
@@ -57,7 +70,15 @@ def forest_width(record: dict, session_id: str) -> int:
             or any(not isinstance(child, dict) or child.get("role") != f"T{index}"
                    for index, child in enumerate(children, 1))):
         raise ForestError("Invalid or unrelated controller research forest")
-    return len(children)
+    extra = record.get("active_control")
+    if extra is not None:
+        from .active_contract import VERSION
+
+        if (not isinstance(extra, dict) or set(extra) != {"version", "control_workers"}
+                or extra["version"] != VERSION or type(extra["control_workers"]) is not int
+                or not 1 <= extra["control_workers"] <= 4):
+            raise ForestError("Invalid declared active control capacity")
+    return len(children) + (extra["control_workers"] if extra else 0)
 
 
 def validate_forest(config: dict) -> None:

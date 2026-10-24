@@ -227,6 +227,11 @@ def run_codex(request: dict, request_sha: str, output: Path, dependency_receipt:
               required_jobs: set[str], executable="codex", *, romeo_mcp: RomeoMCP | None = None,
               documentation_mcp: DocumentationMCP | None = None) -> dict:
     gate = check_dependencies(dependency_receipt, required_jobs)
+    if "active_control" in request:
+        from .active_contract import validate_request
+
+        validate_request(request)
+        romeo_mcp = documentation_mcp = None  # Read frozen evidence only; no model side effects.
     if (gate.get("status") in {"parallel_pilot_explicitly_authorized",
                                "harness_comparison_explicitly_authorized"}
             and request.get("session_id") != gate.get("session_id")):

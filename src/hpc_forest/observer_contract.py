@@ -58,7 +58,10 @@ def schema_for(final_call=False):
     if final_call:
         schema["properties"]["action"]["enum"] = ["report"]
         for key, value in empty_read().items():
-            schema["properties"]["read"]["properties"][key]["enum"] = [value]
+            # deepcopy preserves shared TEXT aliases: replacing the property
+            # avoids also constraining claims and evidence IDs to empty strings.
+            fields = schema["properties"]["read"]["properties"]
+            fields[key] = {**fields[key], "enum": [value]}
     return schema
 
 

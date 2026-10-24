@@ -227,6 +227,11 @@ class Mission:
     source_commits: list[str] = field(default_factory=list)
     transformations: dict[str, Any] = field(default_factory=dict)
     budget_phase: str = "search"
+    kind: str = "research"
+    base_source_id: str | None = None
+    control_decision_id: str | None = None
+    import_ids: list[str] = field(default_factory=list)
+    advice_ids: list[str] = field(default_factory=list)
 
 
 @dataclass

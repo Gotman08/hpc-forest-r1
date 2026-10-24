@@ -39,6 +39,11 @@ conserve les gains, les régressions et les limites observées. Le
 et le [CSV principal](experiments/architecture-active-20261024/COMPARAISON.csv)
 mettent côte à côte les speedups publiés et ceux mesurés sur le même matériel.
 
+Sous Windows, les preuves conservent des chemins longs. Activer leur prise en
+charge dans le dépôt avec `git config --local core.longpaths true`. Pour un
+nouveau clone, utiliser `git clone -c core.longpaths=true <URL-du-depot>` afin
+que Git puisse aussi extraire ces fichiers pendant le clonage.
+
 ![Architecture Forest + JEV proposée](docs/images/forest-architecture-proposee.png)
 
 *Schéma fourni par l'utilisateur : architecture de référence. La boucle active

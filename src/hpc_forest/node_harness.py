@@ -20,7 +20,7 @@ from .core import (
     protected_manifest,
     verify_protected,
 )
-from .evaluator import Evaluator
+from .evaluator import create_evaluator
 from .gitops import assert_allowed_changes, git, initialize_source, worktree_tree_hash
 from .harness_research import DocumentationReader
 from .memory_context import bounded_history
@@ -284,7 +284,7 @@ class NodeHarness:
                 probe = root / "harness-probes" / mission.id / f"attempt-{number:02d}"
                 probe.parent.mkdir(parents=True, exist_ok=True)
                 commit = initialize_source(worktree, probe)
-                evaluator = Evaluator(root, config, manifest, context["protocol_id"], deadline)
+                evaluator = create_evaluator(root, config, manifest, context["protocol_id"], deadline)
                 outcome = evaluator.precheck(child.id, mission.epoch, probe, commit)
                 data = asdict(outcome)
                 data.pop("score", None)

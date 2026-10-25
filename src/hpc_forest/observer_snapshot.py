@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 
 from .core import ForestError, atomic_json, digest, file_digest
-from .model_policy import EFFORT, MODEL, require_identity
+from .model_policy import require_identity
 from .observer_contract import VERSION
 from .support.sources import committed_source_snapshot
 
@@ -122,7 +122,7 @@ def freeze(campaign: Path):
                     "problem": config.get("problem"), "statement": config["forest"].get("statement"),
                     "protocol": config["protocol"], "hardware": meta.get("identity"),
                     "compiler": config.get("compiler"), "protected_manifest": meta.get("manifest"),
-                    "model": MODEL, "reasoning_effort": EFFORT,
+                    "model": config["codex"]["model"], "reasoning_effort": config["codex"]["reasoning_effort"],
                     "confirmation_finished": meta[f"confirmation_finished:{epoch}"]}
         dossiers = []
         for tree in trees:
@@ -167,7 +167,7 @@ def prepare(campaign: Path, destination: Path, *, max_calls=8):
                       "role": dossier["tree"]["role"], "sha256": digest(dossier)})
     manifest = {"schema": VERSION, "mode": "observation-only", "session_id": uuid.uuid4().hex,
                 "source_campaign": str(campaign), "source_receipt": receipt,
-                "model": MODEL, "reasoning_effort": EFFORT, "max_calls_per_tree": max_calls,
+                "model": dossiers[0]["contract"]["model"], "reasoning_effort": dossiers[0]["contract"]["reasoning_effort"], "max_calls_per_tree": max_calls,
                 "trees": trees, "search_feedback_enabled": False}
     atomic_json(destination / "manifest.json", manifest)
     return destination / "manifest.json"

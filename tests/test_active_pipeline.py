@@ -18,10 +18,16 @@ from hpc_forest.reporting import report
 
 
 @pytest.mark.parametrize("failed_integration", [False, True])
-def test_live_loop_branches_integrates_closes_and_confirms(tmp_path, monkeypatch, need_compiler, failed_integration):
+@pytest.mark.parametrize("corrected", [False, True])
+def test_live_loop_branches_integrates_closes_and_confirms(tmp_path, monkeypatch, need_compiler, failed_integration, corrected):
     cfg = persistent_settings(tmp_path)
     cfg["budget"]["wall_seconds"] = 3600
-    cfg["forest"]["active"] = {"mode": "full", "analysis_every": 1, "analysis_calls": 1, "steering_calls": 1}
+    cfg["forest"]["active"] = {"mode": "full", "analysis_every": 1, "analysis_calls": 1, "steering_calls": 1,
+                               "code_analysis": corrected, "closure_guards": corrected}
+    if corrected:
+        # This pipeline exercises closure when protected work no longer fits;
+        # the complementary two-experiment continuation is covered directly.
+        cfg["forest"]["active"]["progress_budget_fraction"] = 0.001
     cfg["memory"] = {"mode": "active", "context_characters": 64000}
     cfg["harness"].update(enabled=True, max_attempts=1)
     monkeypatch.setattr("test_mother_conversation.persistent_settings", lambda _: copy.deepcopy(cfg))
@@ -43,6 +49,10 @@ def test_live_loop_branches_integrates_closes_and_confirms(tmp_path, monkeypatch
             sources = [v["id"] for v in catalog if v["kind"] == "trial" and v["measured_outcome"]["correct"]]
             if request["active_control"]["kind"] == "analyst":
                 value = report_data(sources[0] if sources else "baseline-e1")
+                if corrected:
+                    page = payload["code_packet"]["sources"][0]
+                    value["code_findings"] = [{"mechanism": "Fixture examines the versioned tile parameter",
+                        "citations": [{k: page[k] for k in ("evidence_id", "path", "sha256", "start_line", "end_line")}]}]
                 assert "--ephemeral" in argv
             else:
                 assert "resume" in argv and turn["phase"] == "steering"
@@ -53,6 +63,11 @@ def test_live_loop_branches_integrates_closes_and_confirms(tmp_path, monkeypatch
                                action("share", "T1", sources=sources[:1]), action("suspend", "T2")]
                 elif "Gm1" in trees and trees["Gm1"]["completed_ids"]:
                     actions = [action("close")]
+                    if corrected:
+                        actions[0]["hypothesis_review"] = [{"report_id": h["report_id"], "index": h["index"],
+                            "disposition": "rejected", "evidence_ids": [],
+                            "reason": "The fixture has no further distinct experiment after the bounded trial allowance"}
+                            for h in payload["closure_hypotheses"]]
                 else:
                     actions = [action("continue", "T1")]
                 value = decision(payload, *actions)
@@ -94,6 +109,9 @@ def test_live_loop_branches_integrates_closes_and_confirms(tmp_path, monkeypatch
         assert result["status"] == "confirmed"
         runtime = state(controller.db, 1)
         assert runtime["closed"]
+        if corrected:
+            assert runtime["lifecycle"]["closure_history"][-1]["closure_confirmed"]
+            assert all(a["coverage"]["cited_sources"] for a in runtime["analysts"].values() if a.get("report_id"))
         assert [c["role"] for c in runtime["children"]] == ["T3", "Gm1"]
         gm = controller.db.one("SELECT * FROM trials WHERE role='Gm1'")
         assert gm is not None and gm["state"] == "completed"

@@ -28,6 +28,14 @@ from .gitops import ensure_clean, git
 from .support.budgets import expired, time_left
 
 
+def create_evaluator(root, config, manifest, protocol_id, deadline=None):
+    """Use the same protected evaluator for search, harness checks and confirmation."""
+    if config.get("app_protocol"):
+        from .webapp.runner_support import ProjectEvaluator
+        return ProjectEvaluator(root, config, manifest, protocol_id, deadline)
+    return Evaluator(root, config, manifest, protocol_id, deadline)
+
+
 def target_identity(config: dict) -> dict:
     return {
         "target": config["target_id"],

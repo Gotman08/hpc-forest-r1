@@ -12,12 +12,13 @@ from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
-import treequest as tq
 
 from .binary_search import VERSION as BINARY_VERSION
 from .binary_search import BinaryGreedy, enabled
-from .core import ForestError, InfrastructureError, Mission, Outcome, canonical
+from .core import ForestError, InfrastructureError, Mission, Outcome, canonical, digest
+from .model_policy import generator_pool
 from .registry import Registry
+from .search_policy import DEFAULT, make_algorithm, settings
 
 VERSION = importlib.metadata.version("treequest")
 
@@ -55,9 +56,15 @@ def _extract_roofline(outcome: Outcome) -> dict:
 class Search:
     def __init__(self, db: Registry):
         self.db = db
-        self.binary = enabled(db.get("config", {}))
-        self.algo = BinaryGreedy() if self.binary else tq.ABMCTSA()
-        self.version = BINARY_VERSION if self.binary else VERSION
+        config = db.get("config", {})
+        self.binary = enabled(config)
+        self.settings = settings(config)
+        self.pool = generator_pool(config["codex"]) if config.get("codex", {}).get("generator_pool") else []
+        self.policy = "binary-greedy" if self.binary else self.settings["algorithm"]
+        self.algo = BinaryGreedy() if self.binary else make_algorithm(self.settings)
+        self.version = BINARY_VERSION if self.binary else VERSION if (
+            self.settings == DEFAULT and not self.pool
+        ) else VERSION + ":" + digest({"search": self.settings, "generators": self.pool})[:20]
 
     def initialize(self, epoch: int, role: str, seed: int) -> str:
         tree_id = f"e{epoch}:{role}"
@@ -103,6 +110,9 @@ class Search:
                 item = {"id": node_id, "label": labels.get(node_id, row["role"]),
                         "parent": parent_id, "depth": node.depth, "score": node.score,
                         "child_count": len(node.children)}
+                if node.state:
+                    item.update(generator=node.state.get("generator", {}),
+                                action=node.state.get("search_action", ""))
                 if self.binary and node.state:
                     item.update(side=node.state["side"], pruned=node.state["pruned"])
                 nodes.append(item)
@@ -113,7 +123,7 @@ class Search:
             if self.binary:
                 tree.update(decisions=state.decisions, stopped=state.stopped)
             trees.append(tree)
-        return {"policy": "binary-greedy" if self.binary else "ab-mcts-a",
+        return {"policy": self.policy, "settings": self.settings, "generator_pool": self.pool,
                 "scored_nodes": scored, "max_depth": max_depth,
                 "max_children": max_children, "trees": trees}
 
@@ -128,6 +138,7 @@ class Search:
         slot_id: str,
         *,
         budget_phase: str = "search",
+        route_generators: bool = True,
     ) -> Mission:
         if self.db.one("SELECT id FROM trials WHERE tree_id=? AND state='pending'", (tree_id,)):
             raise ForestError("Only one pending trial per local tree; parallelize across trees")
@@ -136,26 +147,42 @@ class Search:
         if slot is None or slot["phase"] != budget_phase:
             raise ForestError("Mission and reservation belong to different budget phases")
         global_rng = np.random.get_state()
+        choices = {}
+        for role in actions:
+            if self.pool and role != "G" and budget_phase == "search" and route_generators:
+                for model in self.pool:
+                    choices[role + "|" + model["model"] + "|" + model["reasoning_effort"]] = (role, model)
+            else:
+                choices[role] = (role, {})
+        started = time.perf_counter()
         try:
             np.random.set_state(rng)
-            state, trial = self.algo.ask(state, actions)
+            state, trial = self.algo.ask(state, list(choices))
             next_rng = np.random.get_state()
         finally:
             np.random.set_state(global_rng)
         parent = trial.parent_state
+        role, generator = choices[trial.action]
+        selected_parent = state.tree.get_node(trial.node_to_expand)
+        selection = {"policy": self.policy, "distribution": self.settings.get("distribution"),
+                     "parent_children_before": len(selected_parent.children),
+                     "expansion": "root" if not parent else "sibling" if selected_parent.children else "refinement",
+                     "seconds": time.perf_counter() - started,
+                     "available_actions": list(choices)}
         mission = Mission(
             id=uuid.uuid4().hex[:16],
             tree_id=tree_id,
             trial_id=str(trial.trial_id),
             epoch=epoch,
-            role=trial.action,
+            role=role,
             base_commit=parent["commit"] if parent else base,
             parent_id=parent["experiment_id"] if parent else None,
-            delegation_parent=f"R/{trial.action}",
+            delegation_parent=f"R/{role}",
             depth=parent["depth"] + 1 if parent else 1,
             ordinal=ordinal,
             worktree=worktree,
             budget_phase=budget_phase,
+            generator=generator.copy(), search_action=trial.action, selection=selection,
         )
         blob = pack(state, next_rng)
         with self.db.connection:
@@ -202,6 +229,7 @@ class Search:
                 "experiment_id": mission.id,
                 "commit": outcome.commit or mission.base_commit,
                 "depth": mission.depth,
+                "generator": mission.generator, "search_action": mission.search_action,
             }
             if self.binary:
                 node.update(status=outcome.status, correct=outcome.correct,

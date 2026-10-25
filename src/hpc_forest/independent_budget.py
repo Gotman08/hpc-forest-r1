@@ -122,6 +122,7 @@ def forecast_independent(db, roles=(), *, now=None):
         "estimation_policy": "independent_phase_medians",
         "confirmation_seconds": confirmation, "archive_seconds": archive,
         "safety_factor": safety, "next_work_seconds": next_work,
+        "candidate_work_seconds": safety * sum(generation(role) + evaluation(role) for role in roles),
         "pending_roles": list(roles), "inflight_roles": [node["role"] for node in active],
         "predicted_drain_seconds": tail,
         "sample_counts": {key: len(values) for key, values in history.items()},

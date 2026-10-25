@@ -10,6 +10,7 @@ from pathlib import Path
 from statistics import mean, median
 
 from .core import ForestError, digest
+from .search_policy import label as search_label
 
 
 def positive(value):
@@ -97,6 +98,8 @@ def _read(connection, database):
     return {"registry": str(database), "campaign_id": campaign_identity, "epoch": epoch,
         "independent_start": epoch == 1 and len(epochs) == 1, "source_identity": source_identity,
         "benchmark_id": benchmark, "strategy_id": strategy(config, identity),
+        "search_policy": search_label(config), "generator_pool": config.get("codex", {}).get("generator_pool", []),
+        "evolution_archive": config.get("evolution", {}).get("enabled", False),
         "problem": config.get("problem"), "model": config.get("codex", {}).get("model")
             if config.get("backend") == "codex" else config.get("ollama", {}).get("model")
             if config.get("backend") == "ollama" else config.get("backend"),

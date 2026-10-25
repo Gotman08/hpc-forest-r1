@@ -2,12 +2,17 @@
 
 import json
 
+import pytest
+
 from hpc_forest.registry import Registry
 from hpc_forest.reporting import report
 
 
-def test_report_distinguishes_admission_deadline_drain_and_postprocessing(tmp_path, finish_started_config):
+@pytest.mark.parametrize("application", [False, True])
+def test_report_distinguishes_admission_deadline_drain_and_postprocessing(tmp_path, finish_started_config, application):
     finish_started_config["budget"]["wall_seconds"] = 1800
+    if application:
+        finish_started_config["app_protocol"] = {"binary": "program"}
     root = tmp_path / "campaign"
     root.mkdir()
     registry = Registry(root / "registry.sqlite3")
@@ -29,3 +34,8 @@ def test_report_distinguishes_admission_deadline_drain_and_postprocessing(tmp_pa
     assert data["timing"]["postprocess_elapsed_seconds"] == 50
     assert data["timing"]["confirmation_deadline"] == 2030
     assert set(data["phase_costs"]) == {"search", "postprocess", "confirmation"}
+    text = (root / "report/rapport.md").read_text(encoding="utf-8")
+    assert ("d'autres cas de correction" in text) is not application
+    if application:
+        assert "commande de test fournie" in text
+        assert "commande complète" in text

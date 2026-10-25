@@ -11,11 +11,25 @@ de synthèse, rôles A/B/C et intégration G, véritable TreeQuest AB-MCTS-A 0.3
 évaluateur externe et confirmations séparées. La lecture du code ne lance aucun
 modèle, aucune campagne ni allocation.
 
+## Application locale
+
+L'[application locale à cinq écrans](docs/APPLICATION.md) permet d'importer un
+projet, de figer son contrat, de lancer Forest sur ROMEO puis de télécharger le
+code confirmé, son rapport et ses mesures. Le contrôleur et le client Codex OAuth
+tournent sur ROMEO sans relais du PC. Le modèle et l'effort se choisissent par
+mission : GPT-6 Luna, GPT-6.1 Sol ou GPT-6 Astra. Les arbres à la craie affichent
+les essais réellement enregistrés dans une interface classique.
+Démarrage : `pip install -e ".[web]"`, puis `python -m hpc_forest.webapp`.
+Voir la configuration du connecteur et les limites CPU/GPU dans la documentation,
+et les [preuves du parcours autonome](docs/VALIDATION-APPLICATION-AUTONOME-20261025.md).
+
 ## Forest + analystes
 
-Tous les rôles Codex de la série actuelle utilisent explicitement **GPT-6 Luna,
-effort `max`** : Mother, recherche, réparations, fusion et analystes. Une identité
-différente est refusée ; les anciennes campagnes ne sont pas converties.
+Le défaut reste **GPT-6 Luna, effort `max`** pour tous les rôles : Mother,
+recherche, réparations, fusion et analystes. Une nouvelle mission peut choisir
+explicitement une autre identité prise en charge par l'application ; ce même
+modèle et cet effort sont figés pour tous ses rôles. Les campagnes historiques
+conservent leur identité et ne sont pas converties.
 
 Le premier lot ajoute **un analyste indépendant par arbre de recherche**, en
 observation seulement, après la confirmation finale. Ses dossiers et bilans
@@ -29,8 +43,25 @@ de Mother aux jalons, branches dérivées, imports explicites et combinaisons
 intermédiaires mesurées. Les modes `local`, `steering` et `sharing` permettent
 d'isoler ces contributions. Le défaut `off` conserve l'ordonnanceur historique.
 
-La validation du moteur actif compte **878 tests réussis**, aucun échec ni saut,
-avec Ruff validé. La [campagne ROMEO du 24 octobre 2026](experiments/architecture-active-20261024/README.md)
+Les corrections de la boucle active ajoutent des extraits de code avec citations
+vérifiées pour les JEV, une exploration bornée des progrès récents et une clôture
+en deux décisions après la fin des essais admis. Un résultat nouveau invalide
+une décision d'arrêt devenue périmée. Le moteur corrigé passe **895 tests**, sans
+échec ni saut, et la vérification Ruff.
+
+La [comparaison des corrections sur ROMEO](experiments/architecture-corrections-20261024/RAPPORT.md)
+remesure SGEMM, UTF-8 et Mandelbrot avec les anciennes versions dans la même
+allocation par cas : gains de 2,37× et 4,92× sur l'active précédente pour les
+deux premiers, légère régression de Mandelbrot. Le
+[tableau de bord](experiments/architecture-corrections-20261024/TABLEAU-DE-BORD.html),
+les [CSV](experiments/architecture-corrections-20261024/comparaison.csv) et les
+preuves conservent aussi les limites : références contradictoires dans certaines
+revues de clôture, diagnostics demandés mais non exécutés comme tels, et
+vectorisation insuffisante de Mandelbrot. Les tests réussis ne signifient pas
+que ces défauts observés sont résolus.
+
+La validation initiale du moteur actif comptait **878 tests réussis**.
+La [campagne ROMEO du 24 octobre 2026](experiments/architecture-active-20261024/README.md)
 documente les 21 programmes du tableau, leurs arbres, les décisions de Mother,
 les coûts et les remesures appariées avec les anciens candidats. Le
 [diagnostic détaillé](experiments/architecture-active-20261024/ANALYSE.md)
@@ -59,6 +90,8 @@ désigne ici le rôle d'analyste réalisé par Luna Max, sans service TypeSafe A
 | src/hpc_forest/forest_scheduler.py | Progression indépendante des N arbres parallèles |
 | src/hpc_forest/active_scheduler.py | Recherche et appels de contrôle pendant les jalons |
 | src/hpc_forest/active_control.py | Instantanés, appels durables et reçus de Mother |
+| src/hpc_forest/active_analysis.py | Extraits de source, différences et validation des citations JEV |
+| src/hpc_forest/active_lifecycle.py | Progrès protégés, preuves nouvelles et revue de clôture |
 | src/hpc_forest/active_state.py | Décisions, branches, suspensions et imports autorisés |
 | src/hpc_forest/active_reporting.py | Coûts, couverture et liens décision → essai → résultat |
 | src/hpc_forest/independent_budget.py | Réserve par phase et prévision de la file de mesures |
@@ -69,7 +102,7 @@ désigne ici le rôle d'analyste réalisé par Luna Max, sans service TypeSafe A
 | src/hpc_forest/node_harness.py | Développement borné d'un candidat |
 | src/hpc_forest/assets/skills/ | Six skills génériques pour Mother, les enfants et la fusion |
 | src/hpc_forest/model_skills.py | Chargement par rôle, empreintes et traces d'utilisation |
-| src/hpc_forest/model_policy.py | Identité unique GPT-6 Luna Max pour la série actuelle |
+| src/hpc_forest/model_policy.py | Modèles et efforts autorisés ; Luna Max par défaut, identité figée par mission |
 | src/hpc_forest/observer_snapshot.py | Dossiers figés par arbre, registre lu sans modification |
 | src/hpc_forest/tree_observer.py | Analystes après confirmation, budget et rapports séparés |
 | src/hpc_forest/evaluator.py | Compilation, correction et mesures |
@@ -212,3 +245,11 @@ Les résultats, caches, sessions, autorisations et intentions historiques ne son
 pas importés. Les transports hérités et les scripts d'exemples restent du code de
 référence ; leur présence n'autorise pas leur exécution ni la réutilisation d'une
 ancienne identité de campagne.
+# Extensions Sakana AI
+
+Forest propose les variantes officielles AB-MCTS-A (gaussien/bêta) et AB-MCTS-M
+optionnelle de TreeQuest, des modes témoins, un mélange explicite de générateurs
+et une archive de diversité inspirée de ShinkaEvolve. GPT-6 Luna Max reste le
+défaut. Les réglages sont disponibles dans la préparation de l'application.
+
+Voir [l'intégration, les limites et le protocole de comparaison](docs/SAKANA-INTEGRATION.md).

@@ -84,6 +84,7 @@ def test_native_model_has_no_subprocess_timer_only_with_completion_authorization
         return SimpleNamespace(returncode=0, timed_out=False, log=str(log))
     monkeypatch.setattr(codex_process, "run_process", process)
     request = {"nonce": "b" * 32, "session_id": "a" * 32, "expires_at": None,
+               "model": mailbox.MODEL, "reasoning_effort": mailbox.EFFORT,
                "deadline_policy": FINISH_STARTED, "budget_phase": "postprocess",
                "token_policy": token_policy,
                "messages": [{"role": "system", "content": "fixture"}, {"role": "user", "content": "fixture"}]}
@@ -177,6 +178,7 @@ def test_unlimited_mailbox_still_verifies_identity_and_receives_completed_respon
     channel = tmp_path / "mailbox"
     mailbox.initialize_channel(channel, "a" * 32, "offline-test")
     request = {"nonce": "b" * 32, "session_id": "a" * 32,
+               "model": mailbox.MODEL, "reasoning_effort": mailbox.EFFORT,
                "expires_at": None, "deadline_policy": FINISH_STARTED}
     request_sha = digest(request)
     response = mailbox.response_envelope(request, request_sha, data={"finished": True})
@@ -196,7 +198,8 @@ def test_unlimited_mailbox_still_verifies_identity_and_receives_completed_respon
 def test_unlimited_wait_distinguishes_long_running_model_from_dead_worker(tmp_path, monkeypatch, alive):
     channel = tmp_path / "mailbox"
     mailbox.initialize_channel(channel, "a" * 32, "offline-test")
-    request = {"nonce": "b" * 32, "session_id": "a" * 32, "expires_at": None}
+    request = {"nonce": "b" * 32, "session_id": "a" * 32, "expires_at": None,
+               "model": mailbox.MODEL, "reasoning_effort": mailbox.EFFORT}
     sha = digest(request)
     clock = [0]
     def tick(_):

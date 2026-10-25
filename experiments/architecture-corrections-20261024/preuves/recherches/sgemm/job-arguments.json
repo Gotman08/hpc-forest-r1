@@ -1,0 +1,13 @@
+{
+  "arch": "armgpu",
+  "command": "FOREST_CUDA_PREFIX=$(spack location -i /uxlsycgnldislqswr4gcj6hlc6u2pdxp)\ntest -f \"$FOREST_CUDA_PREFIX/lib64/libcublas.so.12\"\nexport LD_LIBRARY_PATH=\"$FOREST_CUDA_PREFIX/lib64:${LD_LIBRARY_PATH:-}\"\nroot=/scratch_p/nimarano/forest-active-corrected-v2-sgemm-410747676bbb4389b9f1ffc82f0453ca\ntest ! -e \"$root\"\necho 'a5a5a38c316001d309a62628c7d58d2974b3c615362d7da367817b091636e077  /scratch_p/nimarano/forest-active-corrected-v2-sgemm-410747676bbb4389b9f1ffc82f0453ca.tar.gz' | sha256sum -c -\nmkdir \"$root\"\ntar -xzf \"$root.tar.gz\" -C \"$root\"\nexport PYTHONPATH=\"$root/project/src\" PYTHONDONTWRITEBYTECODE=1 OPENBLAS_NUM_THREADS=1\nexport FOREST_REFERENCE_DRIVER=/scratch_p/nimarano/forest-reference-gpu-suite-20261023/gpu_driver\nmkdir -p \"$root/cache\"\necho '{\"architecture\":\"aarch64\",\"retained_protected_suite\":true}' > \"$root/cache/preflight.json\"\nlscpu > \"$root/allocation-cpu.txt\"\nnvidia-smi -q > \"$root/allocation-gpu.txt\"\nsha256sum \"$FOREST_CUDA_PREFIX/lib64/libcublas.so.12\" > \"$root/allocation-cublas.txt\"\ncd \"$root\"\nset +e\n/scratch_p/nimarano/hpc-forest-localmodels-20261015-r1/venv-r3/bin/python -u pilot.py --root \"$root\"\nrc=$?\necho \"$rc\" > engine-exit-code.txt\ntar -czf \"$root.results.tar.gz\" results-* allocation-cpu.txt allocation-gpu.txt allocation-cublas.txt engine-exit-code.txt\nexit \"$rc\"\n",
+  "cpus_per_task": 4,
+  "gpus_per_node": 1,
+  "mem_gb": 16,
+  "name": "forest-active-corrected-v2-sgemm",
+  "time_limit": "02:00:00",
+  "spack_packages": [
+    "/uxlsycgnldislqswr4gcj6hlc6u2pdxp"
+  ],
+  "workdir": "/scratch_p/nimarano"
+}

@@ -46,7 +46,10 @@ def decision(snapshot, *actions):
 @pytest.fixture
 def campaign(tmp_path, monkeypatch):
     cfg = persistent_settings(tmp_path)
-    cfg["forest"]["active"] = {"mode": "full", "analysis_every": 1, "analysis_calls": 2, "steering_calls": 2}
+    # Preserve the original active-loop contract as an explicit ablation. The
+    # corrected defaults have separate source/closure tests and pipeline coverage.
+    cfg["forest"]["active"] = {"mode": "full", "analysis_every": 1, "analysis_calls": 2, "steering_calls": 2,
+                               "code_analysis": False, "closure_guards": False}
     cfg["memory"] = {"mode": "active"}
     cfg["harness"]["enabled"] = True
     validate(cfg)

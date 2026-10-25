@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import time
 import uuid
@@ -14,7 +15,14 @@ from .core import CandidateRejected, InfrastructureError, Mission, atomic_json
 from .forest import persistent_mother
 from .harness_research import extract_research
 from .memory_contract import extract_memory
-from .model_policy import EFFORT, MODEL, require_identity
+from .model_policy import (
+    EFFORT,
+    MODEL,
+    generator_pool,
+    mission_identity,
+    require_identity,
+    require_request_identity,
+)
 from .ollama_backend import validate_files
 from .source_request import proposal_messages
 from .support.budgets import (
@@ -32,6 +40,9 @@ PROTOCOL = "hpc-forest-codex-mailbox-v1"
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 HEARTBEAT_GRACE_SECONDS = 180
+# Windows can briefly deny reads while an atomic rename closes its handle.
+# Persistent denial still fails; no permissions or content checks are relaxed.
+_FILE_READ_RETRY_DELAYS = (0.02, 0.05, 0.1, 0.2) if os.name == "nt" else ()
 # Historical budgeted campaigns used this accounting reservation. New requests
 # have no application ceiling and never present this estimate as a real bound.
 TOKEN_CEILING = NATIVE_TOKEN_CEILING
@@ -53,10 +64,17 @@ def sha256(raw: bytes) -> str:
 
 
 def bounded_json(path: Path, maximum: int = MAX_RESPONSE_BYTES) -> dict:
-    if path.is_symlink() or not path.is_file():
-        raise InfrastructureError("Mailbox entry is not a regular file")
-    with path.open("rb") as stream:
-        raw = stream.read(maximum + 1)
+    for attempt in range(len(_FILE_READ_RETRY_DELAYS) + 1):
+        if path.is_symlink() or not path.is_file():
+            raise InfrastructureError("Mailbox entry is not a regular file")
+        try:
+            with path.open("rb") as stream:
+                raw = stream.read(maximum + 1)
+            break
+        except PermissionError:
+            if attempt == len(_FILE_READ_RETRY_DELAYS):
+                raise
+            time.sleep(_FILE_READ_RETRY_DELAYS[attempt])
     if len(raw) > maximum:
         raise InfrastructureError("Mailbox entry exceeds its size limit")
     data = json.loads(raw)
@@ -65,33 +83,40 @@ def bounded_json(path: Path, maximum: int = MAX_RESPONSE_BYTES) -> dict:
     return data
 
 
-def initialize_channel(root: Path, session_id: str, owner: str) -> dict:
+def initialize_channel(root: Path, session_id: str, owner: str, *, model=MODEL, effort=EFFORT, generators=None) -> dict:
+    selected = {"model": model, "reasoning_effort": effort, "generator_pool": generators or []}
+    pool = generator_pool(selected)
     if not re.fullmatch(r"[0-9a-f]{32}", session_id):
         raise InfrastructureError("An explicit random channel session is required")
     root.mkdir(parents=True, exist_ok=False)
     for name in ["requests", "responses", "logs"]:
         (root / name).mkdir()
     marker = {"protocol": PROTOCOL, "session_id": session_id, "owner": owner,
-              "model": MODEL, "reasoning_effort": EFFORT}
+              "model": model, "reasoning_effort": effort}
+    if generators:
+        marker["generator_pool"] = pool
     atomic_json(root / "OWNER.json", marker)
     return marker
 
 
-def check_channel(root: Path, session_id: str) -> dict:
+def check_channel(root: Path, session_id: str, *, model=MODEL, effort=EFFORT, generators=None) -> dict:
     if root.is_symlink():
         raise InfrastructureError("Channel root must not be a symlink")
     marker = bounded_json(root / "OWNER.json", 4096)
     if any(marker.get(k) != v for k, v in {
-        "protocol": PROTOCOL, "session_id": session_id, "model": MODEL,
-        "reasoning_effort": EFFORT,
+        "protocol": PROTOCOL, "session_id": session_id, "model": model,
+        "reasoning_effort": effort,
     }.items()):
         raise InfrastructureError("Mailbox ownership/model contract changed")
+    expected = generator_pool({"model": model, "reasoning_effort": effort, "generator_pool": generators or []})
+    if generator_pool(marker) != expected:
+        raise InfrastructureError("Mailbox generator pool changed")
     return marker
 
 
 def make_request(mission: Mission, context: dict, config: dict) -> dict:
     settings = config["codex"]
-    require_identity(settings)
+    selected = mission_identity(config, mission)
     if not unlimited_tokens(config) and config["budget"]["mission_tokens"] < TOKEN_CEILING:
         raise InfrastructureError("Insufficient conservative Codex token reservation")
     if context.get("assembly_selection"):
@@ -102,11 +127,14 @@ def make_request(mission: Mission, context: dict, config: dict) -> dict:
         rendered = proposal_messages(Path(mission.worktree), mission, context, skills=config.get("skills"))
     request = {
         "protocol": PROTOCOL, "kind": "source-proposal", "nonce": uuid.uuid4().hex,
-        "session_id": settings["session_id"], "model": MODEL, "reasoning_effort": EFFORT,
+        "session_id": settings["session_id"], **selected,
         "mission_id": mission.id, "integration_source_ids": mission.sources,
         "expires_at": generation_deadline(context, config["budget"]["generation_seconds"]),
         "token_ceiling": None if unlimited_tokens(config) else TOKEN_CEILING, **rendered,
     }
+    if mission.generator:
+        request.update(budget_phase="search", generator_selection={
+            "identity": selected, "role": mission.role, "action": mission.search_action})
     if unlimited_tokens(config):
         request["token_policy"] = OBSERVE_TOKENS
     if adaptive(config):
@@ -160,7 +188,7 @@ def publish_request(channel: Path, request: dict) -> str:
 def response_envelope(request: dict, request_sha256: str, **values) -> dict:
     return {"protocol": PROTOCOL, "nonce": request["nonce"],
             "session_id": request["session_id"], "request_sha256": request_sha256,
-            "model": MODEL, "reasoning_effort": EFFORT, **values}
+            "model": request["model"], "reasoning_effort": request["reasoning_effort"], **values}
 
 
 def publish_response(channel: Path, response: dict) -> None:
@@ -206,10 +234,9 @@ def wait_response(channel: Path, request: dict, request_sha256: str, poll_second
             heartbeat_path = channel / "worker-heartbeat.json"
             if heartbeat_path.exists():
                 heartbeat = bounded_json(heartbeat_path, 4096)
-                if any(heartbeat.get(key) != value for key, value in {
-                    "session_id": request["session_id"], "model": MODEL, "reasoning_effort": EFFORT,
-                }.items()):
+                if heartbeat.get("session_id") != request["session_id"]:
                     raise InfrastructureError("The worker heartbeat belongs to another session or model")
+                require_request_identity(request, heartbeat)
                 stamp = sha256(heartbeat_path.read_bytes())
                 if stamp != last_heartbeat:
                     last_heartbeat, last_alive = stamp, time.monotonic()
@@ -245,8 +272,10 @@ class CodexMailboxBackend:
                              error="Search generation deadline reached before invocation")
         settings = config["codex"]
         channel = Path(settings["mailbox_dir"])
-        check_channel(channel, settings["session_id"])
+        check_channel(channel, settings["session_id"], model=settings["model"], effort=settings["reasoning_effort"],
+                      generators=settings.get("generator_pool"))
         request = make_request(mission, context, config)
+        selected = mission_identity(config, mission)
         logs = root / "logs" / mission.id
         atomic_json(logs / "codex-request.json", request)
         request_sha = publish_request(channel, request)
@@ -257,8 +286,7 @@ class CodexMailboxBackend:
             # Never replay it or invent an exact token count.
             missing = unavailable_usage(request)
             return Generated(missing["tokens"], {
-                "backend": "codex-mailbox", "llm_calls": 1, "model": MODEL,
-                "reasoning_effort": EFFORT, "request_sha256": request_sha,
+                "backend": "codex-mailbox", "llm_calls": 1, **selected, "request_sha256": request_sha,
                 **missing,
             }, str(exc), infrastructure_error=True,
                 tokens_upper_bound=missing["token_accounting"] == "upper_bound")
@@ -275,7 +303,7 @@ class CodexMailboxBackend:
             tokens = None
             usage = {**usage, "tokens": None, "token_accounting": "unknown"}
         generated = Generated(tokens, {"backend": "codex-mailbox", **usage,
-                              "model": MODEL, "reasoning_effort": EFFORT,
+                              **selected,
                               "request_sha256": request_sha}, response.get("error"),
                               response.get("infrastructure_error", False),
                               not unlimited_tokens(config) and usage.get("token_accounting") == "upper_bound")

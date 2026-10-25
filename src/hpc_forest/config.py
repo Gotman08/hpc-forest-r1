@@ -103,6 +103,20 @@ def load_config(path: Path | None = None) -> dict:
 
 
 def validate(c: dict) -> None:
+    from .model_policy import generator_pool
+    from .search_policy import settings as search_settings
+
+    search_settings(c)
+    from .evolution_archive import settings as evolution_settings
+
+    evolution_settings(c)
+    codex = c.get("codex", {})
+    if not isinstance(codex, dict):
+        raise ForestError("codex must be an object")
+    if "generator_pool" in codex:
+        generator_pool(codex)
+        if codex["generator_pool"] and (c["backend"] != "codex" or c.get("binary_tree", {}).get("enabled")):
+            raise ForestError("Mixed generators require the Codex backend and a non-binary search policy")
     if c.get("backend") == "codex":
         require_identity(c.get("codex", {}))
     validate_memory(c)

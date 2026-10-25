@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from .active_contract import VERSION
+from .active_contract import VERSION, settings
 from .active_state import children, imports, state
 from .core import digest
 from .independent_budget import forecast_independent
@@ -62,7 +62,21 @@ def freeze(controller, epoch, role=None):
                "contract": {"protocol_id": db.get("protocol_id"), "protocol": controller.config["protocol"],
                    "hardware": db.get("identity"), "compiler": controller.config.get("compiler"),
                    "statement": controller.config["forest"].get("statement"),
-                   "model": controller.config["codex"]["model"], "reasoning_effort": "max"},
+                   "model": controller.config["codex"]["model"], "reasoning_effort": controller.config["codex"]["reasoning_effort"]},
                "budget": forecast_independent(db), "inflight": db.get(f"research_pending:{epoch}", [])}
+    from .evolution_archive import view as diversity_view
+
+    archive = diversity_view(db, epoch, role=role, authorized_ids=allowed or ())
+    if archive is not None:
+        dossier["diverse_measured_sources"] = archive
+    if role and settings(controller.config)["code_analysis"]:
+        from .active_analysis import packet
+
+        dossier["code_packet"] = packet(dossier)
+    from .active_lifecycle import guarded, hypotheses, lifecycle
+
+    if guarded(db):
+        dossier.update(closure_guard=True, lifecycle=lifecycle(current),
+                       closure_hypotheses=hypotheses(current) if role is None else [])
     dossier["snapshot_id"] = digest(dossier)
     return dossier

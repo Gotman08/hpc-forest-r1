@@ -42,6 +42,7 @@ def test_native_failure_classification_preserves_guards(
     monkeypatch.setattr(codex_process, "command_for", command)
     monkeypatch.setattr(codex_process, "run_process", run)
     request = {"nonce": "a" * 32, "session_id": "b" * 32,
+               "model": "gpt-6-luna", "reasoning_effort": "max",
                "messages": [{"content": "system"}, {"content": "source"}]}
     response = codex_process._invoke(request, "c" * 64, tmp_path, "fake-codex", 10, True,
                                      documentation_mcp=Documentation())

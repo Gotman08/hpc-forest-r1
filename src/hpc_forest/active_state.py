@@ -48,7 +48,8 @@ def measured_source(db, epoch, identity):
     return result
 
 
-def _action(db, epoch, current, action, decision_id):
+def _action(db, epoch, current, action, decision_id, snapshot):
+    from .active_lifecycle import guarded, lifecycle, request_close
     from .independent_budget import forecast_independent
 
     kind, role = action["kind"], action["tree"]
@@ -59,6 +60,8 @@ def _action(db, epoch, current, action, decision_id):
         raise InfrastructureError("Intermediate integration is disabled in this ablation")
     if current["closed"]:
         raise InfrastructureError("Research admissions are permanently closed")
+    if guarded(db) and kind in {"resume", "continue", "branch", "integrate"}:
+        lifecycle(current)["closing"] = None
     if kind in {"branch", "integrate"}:
         selected = [measured_source(db, epoch, identity) for identity in action["source_ids"]]
         if len({item["commit"] for item in selected}) != len(selected):
@@ -88,6 +91,8 @@ def _action(db, epoch, current, action, decision_id):
         current["imports"][role] = action["source_ids"][:]
         return {"created_tree": role, "base_source_id": base["id"]}
     if kind == "close":
+        if guarded(db):
+            return request_close(db, epoch, current, action, snapshot, decision_id)
         current["closed"] = True
     elif kind == "suspend":
         if role not in current["suspended"]:
@@ -108,6 +113,8 @@ def apply(db, epoch, job_id, snapshot, decision):
     No TreeQuest, evaluator, file or model side effect takes place here. Tree
     initialization and admissions consume this durable desired state afterwards.
     """
+    from .active_lifecycle import guarded, invalidate, lifecycle
+
     current = state(db, epoch)
     if job_id in current["decisions"]:
         return current["decisions"][job_id]
@@ -121,11 +128,16 @@ def apply(db, epoch, job_id, snapshot, decision):
                 raise InfrastructureError("Stale plan revision; decision not applied")
             if db.get(f"search_closed:{epoch}") is not None:
                 raise InfrastructureError("Search already closed")
-            detail = _action(db, epoch, proposed, action, identity)
+            if guarded(db) and action["kind"] == "close" and len(decision["decisions"]) != 1:
+                raise InfrastructureError("Closure review must be a standalone decision")
+            invalidate(db, epoch, snapshot, action)
+            detail = _action(db, epoch, proposed, action, identity, snapshot)
             current = proposed
             results.append({"id": identity, "action": action, "status": "applied", **detail})
         except InfrastructureError as exc:
             results.append({"id": identity, "action": action, "status": "rejected", "reason": str(exc)})
+    if guarded(db) and any(r["status"] == "rejected" and "New measured evidence" in r["reason"] for r in results):
+        lifecycle(current)["review_revision"] += 1
     if any(item["status"] == "applied" for item in results):
         current["revision"] += 1
     receipt = {"snapshot_id": snapshot["snapshot_id"], "plan_revision": snapshot["plan_revision"],
@@ -149,4 +161,5 @@ def context(db, mission):
             "analyst_interpretation": analyst.get("report"),
             "mother_interpretation": current["advice"].get(mission.role),
             "authorized_import_ids": current["imports"].get(mission.role, []),
+            "protected_progress": current.get("lifecycle", {}).get("protections", {}).get(mission.role),
             "warning": "Model interpretations, not correctness, rewards or measured performance"}

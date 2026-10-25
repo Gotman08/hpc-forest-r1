@@ -18,6 +18,9 @@ def summary(db):
     known = [c["usage"]["tokens"] for c in calls if c.get("usage", {}).get("token_accounting") == "exact"
              and type(c["usage"].get("tokens")) is int]
     return {"mode": settings(db.get("config"))["mode"], "revision": current["revision"],
+            "settings": settings(db.get("config")),
+            "lifecycle": current.get("lifecycle"),
+            "scheduler": db.get(f"research_scheduler:{db.get('current_epoch')}", {}),
             "created_trees": current["children"], "suspended": current["suspended"], "closed": current["closed"],
             "analysts": {r: {k: v for k, v in a.items() if k != "report"} for r, a in current["analysts"].items()},
             "control_calls": len(calls), "known_tokens": sum(known), "unknown_usage_calls": len(calls) - len(known),
@@ -44,7 +47,10 @@ def export(db, output):
                 "elapsed_seconds": call.get("elapsed_seconds"), "tokens": usage.get("tokens"),
                 "accounting": usage.get("token_accounting", "unknown"), "error": call.get("error"),
                 "visible_records": len(job["visible_ids"]), "total_records": job["coverage"]["total_records"],
-                "detailed_reads": len(job["coverage"]["reads"])})
+                "detailed_reads": len(job["coverage"]["reads"]),
+                "provided_source_excerpts": len(job["coverage"].get("provided_sources", [])),
+                "source_citations": len(job["coverage"].get("cited_sources", [])),
+                "code_analysis_complete": job["coverage"].get("code_analysis_complete", False)})
     decisions = []
     for batch in current["decisions"].values():
         for action in batch["actions"]:
@@ -57,12 +63,19 @@ def export(db, output):
                 "revision": batch["resulting_revision"], "kind": action["action"]["kind"],
                 "tree": action.get("created_tree", action["action"]["tree"]), "status": action["status"],
                 "reason": action.get("reason", ""), "rationale": action["action"]["rationale"],
+                "closure_pending": action.get("closure_pending"),
+                "closure_confirmed": action.get("closure_confirmed", False),
+                "closure_deferred": action.get("closure_deferred", ""),
+                "newer_evidence_ids": json.dumps(batch.get("newer_evidence_ids", [])),
+                "hypothesis_review": json.dumps(action["action"].get("hypothesis_review", [])),
                 "sources": json.dumps(action["action"]["source_ids"]), "descendants": json.dumps(descendants)})
     for name, rows, fields in [
         ("active-control.csv", calls, ["job_id", "kind", "tree", "snapshot_id", "call", "status", "elapsed_seconds",
-          "tokens", "accounting", "error", "visible_records", "total_records", "detailed_reads"]),
+          "tokens", "accounting", "error", "visible_records", "total_records", "detailed_reads",
+          "provided_source_excerpts", "source_citations", "code_analysis_complete"]),
         ("active-decisions.csv", decisions, ["decision_id", "snapshot_id", "revision", "kind", "tree", "status",
-          "reason", "rationale", "sources", "descendants"]),
+          "reason", "rationale", "closure_pending", "closure_confirmed", "closure_deferred", "newer_evidence_ids",
+          "hypothesis_review", "sources", "descendants"]),
     ]:
         with (output / name).open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=fields)

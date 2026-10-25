@@ -37,6 +37,15 @@ def proposal_messages(worktree: Path, mission: Mission, context: dict, *, skills
         "or correctness diagnostic still describes that program."
     )
     schema = json.loads(json.dumps(SOURCE_SCHEMA))
+    protected = context.get("active_advice_as_interpretation", {}).get("protected_progress")
+    if protected and protected.get("remaining", 0) > 0:
+        system += (
+            " This is a bounded follow-up to measured progress. Examine the tree analyst's "
+            "code findings and proposed tests. Choose one compatible, discriminating experiment "
+            "and state its mechanism, expected observation and stop condition in your hypothesis "
+            "and notes. Do not repeat an unchanged candidate. Analyst advice remains a hypothesis; "
+            "do not claim a performance improvement before measurement."
+        )
     kept_schema = schema["properties"]["sources_kept"]
     kept_schema["uniqueItems"] = True
     if mission.sources:

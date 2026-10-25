@@ -1,0 +1,1244 @@
+[
+  {
+    "job_id": "active-analyst-f80983d401a44a4a9e13c0e9274f5f2c",
+    "tree": "T1",
+    "status": "unavailable",
+    "code_packet": {
+      "sources": [
+        {
+          "evidence_id": "c83eb37f57414970",
+          "path": "src/candidate.cu",
+          "commit": "887241f5eda0d0ad387f1a44252a02e3035010c7",
+          "sha256": "31627aa20699cfe12824996a721b38b72ccf0f276fa0e74f810e7594128cd29d",
+          "start_line": 1,
+          "end_line": 96,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stddef.h>\n3: \n4: namespace {\n5: constexpr int kBlockM = 64;\n6: constexpr int kBlockN = 32;\n7: constexpr int kBlockK = 16;\n8: constexpr int kThreadsX = 32;\n9: constexpr int kThreadsY = 8;\n10: constexpr int kRowsPerThread = kBlockM / kThreadsY;\n11: \n12: __global__ void sgemm_tiled(int M, int N, int K, float alpha,\n13:                             const float* A, const float* B, float beta,\n14:                             float* C) {\n15:   __shared__ float sharedA[kBlockM * kBlockK];\n16:   __shared__ float sharedB[kBlockK * kBlockN];\n17: \n18:   const int tx = threadIdx.x;\n19:   const int ty = threadIdx.y;\n20:   const int tid = ty * blockDim.x + tx;\n21:   const int threadCount = blockDim.x * blockDim.y;\n22:   const int rowBase = static_cast<int>(blockIdx.y) * kBlockM + ty;\n23:   const int col = static_cast<int>(blockIdx.x) * kBlockN + tx;\n24: \n25:   float accum[kRowsPerThread] = {0.0f, 0.0f, 0.0f, 0.0f,\n26:                                  0.0f, 0.0f, 0.0f, 0.0f};\n27: \n28:   for (int kBase = 0; kBase < K; kBase += kBlockK) {\n29:     for (int idx = tid; idx < kBlockM * kBlockK; idx += threadCount) {\n30:       const int tileRow = idx / kBlockK;\n31:       const int tileK = idx % kBlockK;\n32:       const int globalRow = static_cast<int>(blockIdx.y) * kBlockM + tileRow;\n33:       const int globalK = kBase + tileK;\n34:       float value = 0.0f;\n35:       if (globalRow < M && globalK < K) {\n36:         const size_t offset = static_cast<size_t>(globalRow) * K + globalK;\n37:         value = A[offset];\n38:       }\n39:       sharedA[idx] = value;\n40:     }\n41: \n42:     for (int idx = tid; idx < kBlockK * kBlockN; idx += threadCount) {\n43:       const int tileK = idx / kBlockN;\n44:       const int tileCol = idx % kBlockN;\n45:       const int globalK = kBase + tileK;\n46:       const int globalCol = static_cast<int>(blockIdx.x) * kBlockN + tileCol;\n47:       float value = 0.0f;\n48:       if (globalK < K && globalCol < N) {\n49:         const size_t offset = static_cast<size_t>(globalK) * N + globalCol;\n50:         value = B[offset];\n51:       }\n52:       sharedB[idx] = value;\n53:     }\n54: \n55:     __syncthreads();\n56: \n57:     #pragma unroll\n58:     for (int p = 0; p < kBlockK; ++p) {\n59:       const float b = sharedB[p * kBlockN + tx];\n60:       #pragma unroll\n61:       for (int r = 0; r < kRowsPerThread; ++r) {\n62:         const int tileRow = ty + r * kThreadsY;\n63:         const float a = sharedA[tileRow * kBlockK + p];\n64:         accum[r] = fmaf(a, b, accum[r]);\n65:       }\n66:     }\n67: \n68:     __syncthreads();\n69:   }\n70: \n71:   #pragma unroll\n72:   for (int r = 0; r < kRowsPerThread; ++r) {\n73:     const int row = rowBase + r * kThreadsY;\n74:     if (row < M && col < N) {\n75:       const size_t offset = static_cast<size_t>(row) * N + col;\n76:       float value = alpha * accum[r];\n77:       if (beta != 0.0f) {\n78:         value += beta * C[offset];\n79:       }\n80:       C[offset] = value;\n81:     }\n82:   }\n83: }\n84: }  // namespace\n85: \n86: extern \"C\" void run(const float* A, const float* B, float* C, float* scratch,\n87:                     int n, int m, int k, float alpha, float beta) {\n88:   (void)scratch;\n89:   if (n <= 0 || m <= 0) {\n90:     return;\n91:   }\n92: \n93:   const dim3 block(kThreadsX, kThreadsY);\n94:   const dim3 grid(1 + (m - 1) / kBlockN, 1 + (n - 1) / kBlockM);\n95:   sgemm_tiled<<<grid, block>>>(n, m, k, alpha, A, B, beta, C);\n96: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "baseline-e1",
+          "path": "src/candidate.cu",
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "end_line": 32,
+          "text": "1: #pragma once\n2: \n3: #include <cstdio>\n4: #include <cstdlib>\n5: #include <cublas_v2.h>\n6: #include <cuda_runtime.h>\n7: \n8: /*\n9: \n10: Matrix sizes:\n11: MxK * KxN = MxN\n12: \n13: */\n14: \n15: __global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n16:                             const float *B, float beta, float *C) {\n17:   const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n18:   const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n19: \n20:   // if statement is necessary to make things work under tile quantization\n21:   if (x < M && y < N) {\n22:     float tmp = 0.0;\n23:     for (int i = 0; i < K; ++i) {\n24:       tmp += A[x * K + i] * B[i * N + y];\n25:     }\n26:     // C = α*(A@B)+β*C\n27:     C[x * N + y] = alpha * tmp + beta * C[x * N + y];\n28:   }\n29: }\n30: #include <cuda_runtime.h>\n31: extern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n32: { sgemm_naive<<<dim3((n+31)/32,(m+31)/32),dim3(32,32)>>>(n,m,k,alpha,A,B,beta,C); }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        }
+      ],
+      "diffs": [
+        {
+          "from": "baseline-e1",
+          "to": "c83eb37f57414970",
+          "path": "src/candidate.cu",
+          "text": "--- baseline-e1/src/candidate.cu\n\n+++ c83eb37f57414970/src/candidate.cu\n\n@@ -1,32 +1,96 @@\n\n-#pragma once\n+#include <cuda_runtime.h>\n+#include <stddef.h>\n \n-#include <cstdio>\n-#include <cstdlib>\n-#include <cublas_v2.h>\n-#include <cuda_runtime.h>\n+namespace {\n+constexpr int kBlockM = 64;\n+constexpr int kBlockN = 32;\n+constexpr int kBlockK = 16;\n+constexpr int kThreadsX = 32;\n+constexpr int kThreadsY = 8;\n+constexpr int kRowsPerThread = kBlockM / kThreadsY;\n \n-/*\n+__global__ void sgemm_tiled(int M, int N, int K, float alpha,\n+                            const float* A, const float* B, float beta,\n+                            float* C) {\n+  __shared__ float sharedA[kBlockM * kBlockK];\n+  __shared__ float sharedB[kBlockK * kBlockN];\n \n-Matrix sizes:\n-MxK * KxN = MxN\n+  const int tx = threadIdx.x;\n+  const int ty = threadIdx.y;\n+  const int tid = ty * blockDim.x + tx;\n+  const int threadCount = blockDim.x * blockDim.y;\n+  const int rowBase = static_cast<int>(blockIdx.y) * kBlockM + ty;\n+  const int col = static_cast<int>(blockIdx.x) * kBlockN + tx;\n \n-*/\n+  float accum[kRowsPerThread] = {0.0f, 0.0f, 0.0f, 0.0f,\n+                                 0.0f, 0.0f, 0.0f, 0.0f};\n \n-__global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n-                            const float *B, float beta, float *C) {\n-  const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n-  const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n+  for (int kBase = 0; kBase < K; kBase += kBlockK) {\n+    for (int idx = tid; idx < kBlockM * kBlockK; idx += threadCount) {\n+      const int tileRow = idx / kBlockK;\n+      const int tileK = idx % kBlockK;\n+      const int globalRow = static_cast<int>(blockIdx.y) * kBlockM + tileRow;\n+      const int globalK = kBase + tileK;\n+      float value = 0.0f;\n+      if (globalRow < M && globalK < K) {\n+        const size_t offset = static_cast<size_t>(globalRow) * K + globalK;\n+        value = A[offset];\n+      }\n+      sharedA[idx] = value;\n+    }\n \n-  // if statement is necessary to make things work under tile quantization\n-  if (x < M && y < N) {\n-    float tmp = 0.0;\n-    for (int i = 0; i < K; ++i) {\n-      tmp += A[x * K + i] * B[i * N + y];\n+    for (int idx = tid; idx < kBlockK * kBlockN; idx += threadCount) {\n+      const int tileK = idx / kBlockN;\n+      const int tileCol = idx % kBlockN;\n+      const int globalK = kBase + tileK;\n+      const int globalCol = static_cast<int>(blockIdx.x) * kBlockN + tileCol;\n+      float value = 0.0f;\n+      if (globalK < K && globalCol < N) {\n+        const size_t offset = static_cast<size_t>(globalK) * N + globalCol;\n+        value = B[offset];\n+      }\n+      sharedB[idx] = value;\n     }\n-    // C = α*(A@B)+β*C\n-    C[x * N + y] = alpha * tmp + beta * C[x * N + y];\n+\n+    __syncthreads();\n+\n+    #pragma unroll\n+    for (int p = 0; p < kBlockK; ++p) {\n+      const float b = sharedB[p * kBlockN + tx];\n+      #pragma unroll\n+      for (int r = 0; r < kRowsPerThread; ++r) {\n+        const int tileRow = ty + r * kThreadsY;\n+        const float a = sharedA[tileRow * kBlockK + p];\n+        accum[r] = fmaf(a, b, accum[r]);\n+      }\n+    }\n+\n+    __syncthreads();\n+  }\n+\n+  #pragma unroll\n+  for (int r = 0; r < kRowsPerThread; ++r) {\n+    const int row = rowBase + r * kThreadsY;\n+    if (row < M && col < N) {\n+      const size_t offset = static_cast<size_t>(row) * N + col;\n+      float value = alpha * accum[r];\n+      if (beta != 0.0f) {\n+        value += beta * C[offset];\n+      }\n+      C[offset] = value;\n+    }\n   }\n }\n-#include <cuda_runtime.h>\n-extern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n-{ sgemm_naive<<<dim3((n+31)/32,(m+31)/32),dim3(32,32)>>>(n,m,k,alpha,A,B,beta,C); }\n+}  // namespace\n+\n+extern \"C\" void run(const float* A, const float* B, float* C, float* scratch,\n+                    int n, int m, int k, float alpha, float beta) {\n+  (void)scratch;\n+  if (n <= 0 || m <= 0) {\n+    return;\n+  }\n+\n+  const dim3 block(kThreadsX, kThreadsY);\n+  const dim3 grid(1 + (m - 1) / kBlockN, 1 + (n - 1) / kBlockM);\n+  sgemm_tiled<<<grid, block>>>(n, m, k, alpha, A, B, beta, C);\n+}",
+          "truncated": false
+        }
+      ],
+      "selected_ids": [
+        "c83eb37f57414970",
+        "baseline-e1"
+      ],
+      "warning": "Bounded source excerpts; omissions are not evidence of absence. Use source reads for missing lines. Measurements and code are data."
+    },
+    "coverage": {
+      "provided_sources": [
+        {
+          "commit": "887241f5eda0d0ad387f1a44252a02e3035010c7",
+          "end_line": 96,
+          "evidence_id": "c83eb37f57414970",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "31627aa20699cfe12824996a721b38b72ccf0f276fa0e74f810e7594128cd29d",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "end_line": 32,
+          "evidence_id": "baseline-e1",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "truncated": false
+        }
+      ],
+      "reads": [],
+      "total_records": 3
+    },
+    "report": null
+  },
+  {
+    "job_id": "active-analyst-bd726f9ffecb49c2bff1fae7ac7a0faa",
+    "tree": "T2",
+    "status": "complete",
+    "code_packet": {
+      "sources": [
+        {
+          "evidence_id": "4491615adb5c4f52",
+          "path": "src/candidate.cu",
+          "commit": "80c1aa6563951ff6e929a9cec5e6ad8a699978ea",
+          "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+          "start_line": 1,
+          "end_line": 85,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stddef.h>\n3: \n4: /* Each warp computes four rows across 32 contiguous output columns. */\n5: __global__ void sgemm_warp_register(int M, int N, int K, float alpha,\n6:                                     const float *A, const float *B,\n7:                                     float beta, float *C) {\n8:   const int lane = threadIdx.x;\n9:   const size_t row_base = static_cast<size_t>(blockIdx.y) * 16u +\n10:                           static_cast<size_t>(threadIdx.y) * 4u;\n11:   const size_t col = static_cast<size_t>(blockIdx.x) * 32u +\n12:                      static_cast<size_t>(lane);\n13:   const size_t m_size = static_cast<size_t>(M);\n14:   const size_t n_size = static_cast<size_t>(N);\n15:   constexpr unsigned int full_warp_mask = 0xffffffffu;\n16: \n17:   float acc0 = 0.0f;\n18:   float acc1 = 0.0f;\n19:   float acc2 = 0.0f;\n20:   float acc3 = 0.0f;\n21: \n22:   for (int kk = 0; kk < K; ++kk) {\n23:     const size_t b_index = static_cast<size_t>(kk) * n_size + col;\n24:     const float b = col < n_size ? B[b_index] : 0.0f;\n25: \n26:     float a0 = lane == 0 && row_base < m_size\n27:                    ? A[row_base * static_cast<size_t>(K) +\n28:                        static_cast<size_t>(kk)]\n29:                    : 0.0f;\n30:     float a1 = lane == 0 && row_base + 1u < m_size\n31:                    ? A[(row_base + 1u) * static_cast<size_t>(K) +\n32:                        static_cast<size_t>(kk)]\n33:                    : 0.0f;\n34:     float a2 = lane == 0 && row_base + 2u < m_size\n35:                    ? A[(row_base + 2u) * static_cast<size_t>(K) +\n36:                        static_cast<size_t>(kk)]\n37:                    : 0.0f;\n38:     float a3 = lane == 0 && row_base + 3u < m_size\n39:                    ? A[(row_base + 3u) * static_cast<size_t>(K) +\n40:                        static_cast<size_t>(kk)]\n41:                    : 0.0f;\n42: \n43:     a0 = __shfl_sync(full_warp_mask, a0, 0);\n44:     a1 = __shfl_sync(full_warp_mask, a1, 0);\n45:     a2 = __shfl_sync(full_warp_mask, a2, 0);\n46:     a3 = __shfl_sync(full_warp_mask, a3, 0);\n47: \n48:     acc0 = __fmaf_rn(a0, b, acc0);\n49:     acc1 = __fmaf_rn(a1, b, acc1);\n50:     acc2 = __fmaf_rn(a2, b, acc2);\n51:     acc3 = __fmaf_rn(a3, b, acc3);\n52:   }\n53: \n54:   if (col < n_size) {\n55:     if (row_base < m_size) {\n56:       const size_t index = row_base * n_size + col;\n57:       C[index] = alpha * acc0 + beta * C[index];\n58:     }\n59:     if (row_base + 1u < m_size) {\n60:       const size_t index = (row_base + 1u) * n_size + col;\n61:       C[index] = alpha * acc1 + beta * C[index];\n62:     }\n63:     if (row_base + 2u < m_size) {\n64:       const size_t index = (row_base + 2u) * n_size + col;\n65:       C[index] = alpha * acc2 + beta * C[index];\n66:     }\n67:     if (row_base + 3u < m_size) {\n68:       const size_t index = (row_base + 3u) * n_size + col;\n69:       C[index] = alpha * acc3 + beta * C[index];\n70:     }\n71:   }\n72: }\n73: \n74: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n75:                     int n, int m, int k, float alpha, float beta) {\n76:   (void)scratch;\n77:   if (n <= 0 || m <= 0) {\n78:     return;\n79:   }\n80: \n81:   const unsigned int grid_x = static_cast<unsigned int>(m / 32 + (m % 32 != 0));\n82:   const unsigned int grid_y = static_cast<unsigned int>(n / 16 + (n % 16 != 0));\n83:   sgemm_warp_register<<<dim3(grid_x, grid_y), dim3(32, 4)>>>(\n84:       n, m, k, alpha, A, B, beta, C);\n85: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "baseline-e1",
+          "path": "src/candidate.cu",
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "end_line": 32,
+          "text": "1: #pragma once\n2: \n3: #include <cstdio>\n4: #include <cstdlib>\n5: #include <cublas_v2.h>\n6: #include <cuda_runtime.h>\n7: \n8: /*\n9: \n10: Matrix sizes:\n11: MxK * KxN = MxN\n12: \n13: */\n14: \n15: __global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n16:                             const float *B, float beta, float *C) {\n17:   const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n18:   const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n19: \n20:   // if statement is necessary to make things work under tile quantization\n21:   if (x < M && y < N) {\n22:     float tmp = 0.0;\n23:     for (int i = 0; i < K; ++i) {\n24:       tmp += A[x * K + i] * B[i * N + y];\n25:     }\n26:     // C = α*(A@B)+β*C\n27:     C[x * N + y] = alpha * tmp + beta * C[x * N + y];\n28:   }\n29: }\n30: #include <cuda_runtime.h>\n31: extern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n32: { sgemm_naive<<<dim3((n+31)/32,(m+31)/32),dim3(32,32)>>>(n,m,k,alpha,A,B,beta,C); }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        }
+      ],
+      "diffs": [
+        {
+          "from": "baseline-e1",
+          "to": "4491615adb5c4f52",
+          "path": "src/candidate.cu",
+          "text": "--- baseline-e1/src/candidate.cu\n\n+++ 4491615adb5c4f52/src/candidate.cu\n\n@@ -1,32 +1,85 @@\n\n-#pragma once\n+#include <cuda_runtime.h>\n+#include <stddef.h>\n \n-#include <cstdio>\n-#include <cstdlib>\n-#include <cublas_v2.h>\n-#include <cuda_runtime.h>\n+/* Each warp computes four rows across 32 contiguous output columns. */\n+__global__ void sgemm_warp_register(int M, int N, int K, float alpha,\n+                                    const float *A, const float *B,\n+                                    float beta, float *C) {\n+  const int lane = threadIdx.x;\n+  const size_t row_base = static_cast<size_t>(blockIdx.y) * 16u +\n+                          static_cast<size_t>(threadIdx.y) * 4u;\n+  const size_t col = static_cast<size_t>(blockIdx.x) * 32u +\n+                     static_cast<size_t>(lane);\n+  const size_t m_size = static_cast<size_t>(M);\n+  const size_t n_size = static_cast<size_t>(N);\n+  constexpr unsigned int full_warp_mask = 0xffffffffu;\n \n-/*\n+  float acc0 = 0.0f;\n+  float acc1 = 0.0f;\n+  float acc2 = 0.0f;\n+  float acc3 = 0.0f;\n \n-Matrix sizes:\n-MxK * KxN = MxN\n+  for (int kk = 0; kk < K; ++kk) {\n+    const size_t b_index = static_cast<size_t>(kk) * n_size + col;\n+    const float b = col < n_size ? B[b_index] : 0.0f;\n \n-*/\n+    float a0 = lane == 0 && row_base < m_size\n+                   ? A[row_base * static_cast<size_t>(K) +\n+                       static_cast<size_t>(kk)]\n+                   : 0.0f;\n+    float a1 = lane == 0 && row_base + 1u < m_size\n+                   ? A[(row_base + 1u) * static_cast<size_t>(K) +\n+                       static_cast<size_t>(kk)]\n+                   : 0.0f;\n+    float a2 = lane == 0 && row_base + 2u < m_size\n+                   ? A[(row_base + 2u) * static_cast<size_t>(K) +\n+                       static_cast<size_t>(kk)]\n+                   : 0.0f;\n+    float a3 = lane == 0 && row_base + 3u < m_size\n+                   ? A[(row_base + 3u) * static_cast<size_t>(K) +\n+                       static_cast<size_t>(kk)]\n+                   : 0.0f;\n \n-__global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n-                            const float *B, float beta, float *C) {\n-  const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n-  const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n+    a0 = __shfl_sync(full_warp_mask, a0, 0);\n+    a1 = __shfl_sync(full_warp_mask, a1, 0);\n+    a2 = __shfl_sync(full_warp_mask, a2, 0);\n+    a3 = __shfl_sync(full_warp_mask, a3, 0);\n \n-  // if statement is necessary to make things work under tile quantization\n-  if (x < M && y < N) {\n-    float tmp = 0.0;\n-    for (int i = 0; i < K; ++i) {\n-      tmp += A[x * K + i] * B[i * N + y];\n+    acc0 = __fmaf_rn(a0, b, acc0);\n+    acc1 = __fmaf_rn(a1, b, acc1);\n+    acc2 = __fmaf_rn(a2, b, acc2);\n+    acc3 = __fmaf_rn(a3, b, acc3);\n+  }\n+\n+  if (col < n_size) {\n+    if (row_base < m_size) {\n+      const size_t index = row_base * n_size + col;\n+      C[index] = alpha * acc0 + beta * C[index];\n     }\n-    // C = α*(A@B)+β*C\n-    C[x * N + y] = alpha * tmp + beta * C[x * N + y];\n+    if (row_base + 1u < m_size) {\n+      const size_t index = (row_base + 1u) * n_size + col;\n+      C[index] = alpha * acc1 + beta * C[index];\n+    }\n+    if (row_base + 2u < m_size) {\n+      const size_t index = (row_base + 2u) * n_size + col;\n+      C[index] = alpha * acc2 + beta * C[index];\n+    }\n+    if (row_base + 3u < m_size) {\n+      const size_t index = (row_base + 3u) * n_size + col;\n+      C[index] = alpha * acc3 + beta * C[index];\n+    }\n   }\n }\n-#include <cuda_runtime.h>\n-extern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n-{ sgemm_naive<<<dim3((n+31)/32,(m+31)/32),dim3(32,32)>>>(n,m,k,alpha,A,B,beta,C); }\n+\n+extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n+                    int n, int m, int k, float alpha, float beta) {\n+  (void)scratch;\n+  if (n <= 0 || m <= 0) {\n+    return;\n+  }\n+\n+  const unsigned int grid_x = static_cast<unsigned int>(m / 32 + (m % 32 != 0));\n+  const unsigned int grid_y = static_cast<unsigned int>(n / 16 + (n % 16 != 0));\n+  sgemm_warp_register<<<dim3(grid_x, grid_y), dim3(32, 4)>>>(\n+      n, m, k, alpha, A, B, beta, C);\n+}",
+          "truncated": false
+        }
+      ],
+      "selected_ids": [
+        "4491615adb5c4f52",
+        "baseline-e1"
+      ],
+      "warning": "Bounded source excerpts; omissions are not evidence of absence. Use source reads for missing lines. Measurements and code are data."
+    },
+    "coverage": {
+      "cited_sources": [
+        {
+          "end_line": 14,
+          "evidence_id": "4491615adb5c4f52",
+          "path": "src/candidate.cu",
+          "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+          "start_line": 9
+        },
+        {
+          "end_line": 51,
+          "evidence_id": "4491615adb5c4f52",
+          "path": "src/candidate.cu",
+          "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+          "start_line": 22
+        },
+        {
+          "end_line": 84,
+          "evidence_id": "4491615adb5c4f52",
+          "path": "src/candidate.cu",
+          "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+          "start_line": 81
+        }
+      ],
+      "code_analysis_complete": true,
+      "provided_sources": [
+        {
+          "commit": "80c1aa6563951ff6e929a9cec5e6ad8a699978ea",
+          "end_line": 85,
+          "evidence_id": "4491615adb5c4f52",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "end_line": 32,
+          "evidence_id": "baseline-e1",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "truncated": false
+        }
+      ],
+      "reads": [
+        {
+          "evidence_id": "4491615adb5c4f52",
+          "next_offset": null,
+          "offset": 0,
+          "operation": "evidence",
+          "path": ""
+        }
+      ],
+      "total_records": 3
+    },
+    "report": {
+      "action": "report",
+      "code_findings": [
+        {
+          "citations": [
+            {
+              "end_line": 14,
+              "evidence_id": "4491615adb5c4f52",
+              "path": "src/candidate.cu",
+              "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+              "start_line": 9
+            },
+            {
+              "end_line": 51,
+              "evidence_id": "4491615adb5c4f52",
+              "path": "src/candidate.cu",
+              "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+              "start_line": 22
+            },
+            {
+              "end_line": 84,
+              "evidence_id": "4491615adb5c4f52",
+              "path": "src/candidate.cu",
+              "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+              "start_line": 81
+            }
+          ],
+          "mechanism": "Fait : chaque warp couvre 32 colonnes contiguës et quatre lignes; pour chaque k, chaque lane charge un B, tandis que lane 0 fournit quatre A diffusés par quatre shuffles, puis quatre accumulateurs sont mis à jour par FMA dans une boucle sérielle. Cela exploite la réutilisation de B sur quatre lignes sans staging en mémoire partagée. Cause possible, non mesurée : les shuffles et dépendances de boucle peuvent limiter le débit; il manque des compteurs GPU et une analyse du code machine pour le vérifier."
+        }
+      ],
+      "hypotheses": [
+        {
+          "claim": "Si les chargements B répétés entre warps traitant des lignes distinctes limitent les performances, traiter huit lignes par warp pourrait accroître la réutilisation de chaque B chargé.",
+          "evidence_ids": [
+            "4491615adb5c4f52"
+          ],
+          "proposed_test": "Tester une variante à huit accumulateurs par lane et huit lignes par warp, puis vérifier tous les cas de correction et mesurer 4096 avec le même protocole et les mêmes conditions que le candidat actuel.",
+          "stop_condition": "Arrêter cette variante si une vérification échoue ou si la moyenne des trois mesures à 4096 n'est pas inférieure à 0,0227574628 s; cela n'invaliderait pas toute la famille des kernels résidents en registres."
+        }
+      ],
+      "observations": [
+        {
+          "claim": "Le trial 4491615adb5c4f52 est déclaré valide et correct; sa moyenne mesurée est 0,022757462819 s, avec trois échantillons entre 0,022703 et 0,022791 s.",
+          "evidence_ids": [
+            "4491615adb5c4f52"
+          ]
+        },
+        {
+          "claim": "Le journal de correction rapporte zéro erreur sur huit cas (tailles 128, 256, 512 et 4096, deux seeds); l'erreur absolue maximale rapportée est 0,000335693359375.",
+          "evidence_ids": [
+            "4491615adb5c4f52"
+          ]
+        },
+        {
+          "claim": "La baseline est déclarée valide et correcte avec une moyenne mesurée de 0,275569234212 s. Elle constitue une référence plus lente; ces mesures ne sont pas une confirmation indépendante du candidat.",
+          "evidence_ids": [
+            "baseline-e1"
+          ]
+        },
+        {
+          "claim": "Une entrée de développement h01 est répertoriée comme correcte, mais sans mesure de temps ni score.",
+          "evidence_ids": [
+            "4491615adb5c4f52-h01"
+          ]
+        }
+      ],
+      "read": {
+        "evidence_id": "",
+        "offset": 0,
+        "operation": "none",
+        "path": ""
+      },
+      "uncertainties": [
+        "Les éléments visibles sont des mesures de recherche; aucune mesure de confirmation indépendante du candidat n'est fournie.",
+        "Aucun compteur de performance, rapport d'occupation ou code machine n'est disponible; le goulot d'étranglement reste incertain.",
+        "Le développement h01 n'a pas de mesure de performance visible."
+      ]
+    }
+  },
+  {
+    "job_id": "active-analyst-52b4c13ed5224285b981d9cac458c684",
+    "tree": "T3",
+    "status": "complete",
+    "code_packet": {
+      "sources": [
+        {
+          "evidence_id": "8b2e18a3b62842ff",
+          "path": "src/candidate.cu",
+          "commit": "fffcc2a2a7b797a501db859f01f2dffc58acfb43",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 1,
+          "end_line": 190,
+          "text": "1: #include <cuda_runtime.h>\n2: \n3: namespace {\n4: \n5: constexpr int kBlockX = 32;\n6: constexpr int kBlockY = 8;\n7: constexpr int kTileM = 16;\n8: constexpr int kTileN = 64;\n9: constexpr int kTileK = 32;\n10: constexpr int kThreads = kBlockX * kBlockY;\n11: \n12: template <bool Async>\n13: __device__ __forceinline__ void copy_to_shared(float *dst, const float *src,\n14:                                                bool valid) {\n15:   if (!valid) {\n16:     *dst = 0.0f;\n17:     return;\n18:   }\n19: \n20:   if (Async) {\n21:     const unsigned int shared_address =\n22:         static_cast<unsigned int>(__cvta_generic_to_shared(dst));\n23:     asm volatile(\"cp.async.ca.shared.global [%0], [%1], 4;\"\n24:                  :\n25:                  : \"r\"(shared_address), \"l\"(src)\n26:                  : \"memory\");\n27:   } else {\n28:     *dst = *src;\n29:   }\n30: }\n31: \n32: template <bool Async>\n33: __device__ __forceinline__ void commit_copies() {\n34:   if (Async) {\n35:     asm volatile(\"cp.async.commit_group;\" ::: \"memory\");\n36:   }\n37: }\n38: \n39: template <bool Async>\n40: __device__ __forceinline__ void wait_for_copies() {\n41:   if (Async) {\n42:     asm volatile(\"cp.async.wait_group 0;\" ::: \"memory\");\n43:   }\n44: }\n45: \n46: template <bool Async>\n47: __device__ __forceinline__ void stage_tile(\n48:     const float *A, const float *B, int M, int N, int K, int row_origin,\n49:     int col_origin, int k_origin, float *shared_a, float *shared_b) {\n50:   const int tid = static_cast<int>(threadIdx.y) * kBlockX +\n51:                   static_cast<int>(threadIdx.x);\n52: \n53:   for (int i = tid; i < kTileM * kTileK; i += kThreads) {\n54:     const int tile_row = i / kTileK;\n55:     const int tile_k = i % kTileK;\n56:     const int row = row_origin + tile_row;\n57:     const int k = k_origin + tile_k;\n58:     const bool valid = row < M && k < K;\n59:     const float *src = valid\n60:                            ? A + static_cast<unsigned long long>(row) * K + k\n61:                            : A;\n62:     copy_to_shared<Async>(&shared_a[i], src, valid);\n63:   }\n64: \n65:   for (int i = tid; i < kTileK * kTileN; i += kThreads) {\n66:     const int tile_k = i / kTileN;\n67:     const int tile_col = i % kTileN;\n68:     const int k = k_origin + tile_k;\n69:     const int col = col_origin + tile_col;\n70:     const bool valid = k < K && col < N;\n71:     const float *src = valid\n72:                            ? B + static_cast<unsigned long long>(k) * N + col\n73:                            : B;\n74:     copy_to_shared<Async>(&shared_b[i], src, valid);\n75:   }\n76: }\n77: \n78: template <bool Async>\n79: __global__ void sgemm_tiled(int M, int N, int K, float alpha, const float *A,\n80:                             const float *B, float beta, float *C) {\n81:   __shared__ float shared_a[2][kTileM * kTileK];\n82:   __shared__ float shared_b[2][kTileK * kTileN];\n83: \n84:   const int row_origin = static_cast<int>(blockIdx.y) * kTileM;\n85:   const int col_origin = static_cast<int>(blockIdx.x) * kTileN;\n86:   const int row0 = row_origin + static_cast<int>(threadIdx.y);\n87:   const int row1 = row0 + kBlockY;\n88:   const int col0 = col_origin + static_cast<int>(threadIdx.x);\n89:   const int col1 = col0 + kBlockX;\n90:   const int k_tiles = K / kTileK + ((K % kTileK) != 0);\n91: \n92:   float acc00 = 0.0f;\n93:   float acc01 = 0.0f;\n94:   float acc10 = 0.0f;\n95:   float acc11 = 0.0f;\n96: \n97:   if (k_tiles > 0) {\n98:     stage_tile<Async>(A, B, M, N, K, row_origin, col_origin, 0,\n99:                       shared_a[0], shared_b[0]);\n100:     commit_copies<Async>();\n101:     wait_for_copies<Async>();\n102:     __syncthreads();\n103: \n104:     int current_buffer = 0;\n105:     for (int tile = 0; tile < k_tiles; ++tile) {\n106:       const bool has_next = tile + 1 < k_tiles;\n107:       const int next_buffer = current_buffer ^ 1;\n108:       if (has_next) {\n109:         stage_tile<Async>(A, B, M, N, K, row_origin, col_origin,\n110:                           (tile + 1) * kTileK, shared_a[next_buffer],\n111:                           shared_b[next_buffer]);\n112:         commit_copies<Async>();\n113:       }\n114: \n115:       for (int kk = 0; kk < kTileK; ++kk) {\n116:         const float a0 = shared_a[current_buffer]\n117:                                   [static_cast<int>(threadIdx.y) * kTileK + kk];\n118:         const float a1 = shared_a[current_buffer]\n119:                                   [(static_cast<int>(threadIdx.y) + kBlockY) *\n120:                                        kTileK +\n121:                                    kk];\n122:         const float b0 = shared_b[current_buffer][kk * kTileN +\n123:                                                    static_cast<int>(threadIdx.x)];\n124:         const float b1 = shared_b[current_buffer]\n125:                                   [kk * kTileN + static_cast<int>(threadIdx.x) +\n126:                                    kBlockX];\n127:         acc00 += a0 * b0;\n128:         acc01 += a0 * b1;\n129:         acc10 += a1 * b0;\n130:         acc11 += a1 * b1;\n131:       }\n132: \n133:       if (has_next) {\n134:         wait_for_copies<Async>();\n135:         __syncthreads();\n136:         current_buffer = next_buffer;\n137:       }\n138:     }\n139:   }\n140: \n141:   if (row0 < M && col0 < N) {\n142:     const unsigned long long offset =\n143:         static_cast<unsigned long long>(row0) * N + col0;\n144:     C[offset] = alpha * acc00 + beta * C[offset];\n145:   }\n146:   if (row0 < M && col1 < N) {\n147:     const unsigned long long offset =\n148:         static_cast<unsigned long long>(row0) * N + col1;\n149:     C[offset] = alpha * acc01 + beta * C[offset];\n150:   }\n151:   if (row1 < M && col0 < N) {\n152:     const unsigned long long offset =\n153:         static_cast<unsigned long long>(row1) * N + col0;\n154:     C[offset] = alpha * acc10 + beta * C[offset];\n155:   }\n156:   if (row1 < M && col1 < N) {\n157:     const unsigned long long offset =\n158:         static_cast<unsigned long long>(row1) * N + col1;\n159:     C[offset] = alpha * acc11 + beta * C[offset];\n160:   }\n161: }\n162: \n163: template <bool Async>\n164: void launch_sgemm(int M, int N, int K, float alpha, const float *A,\n165:                   const float *B, float beta, float *C) {\n166:   if (M <= 0 || N <= 0) {\n167:     return;\n168:   }\n169: \n170:   const dim3 block(kBlockX, kBlockY);\n171:   const dim3 grid(static_cast<unsigned int>((N - 1) / kTileN + 1),\n172:                   static_cast<unsigned int>((M - 1) / kTileM + 1));\n173:   sgemm_tiled<Async><<<grid, block>>>(M, N, K, alpha, A, B, beta, C);\n174: }\n175: \n176: }  // namespace\n177: \n178: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n179:                      int n, int m, int k, float alpha, float beta) {\n180:   (void)scratch;\n181:   launch_sgemm<true>(n, m, k, alpha, A, B, beta, C);\n182: }\n183: \n184: // Matched synchronous staging control; each entry point launches one kernel.\n185: extern \"C\" void run_sync(const float *A, const float *B, float *C,\n186:                           float *scratch, int n, int m, int k, float alpha,\n187:                           float beta) {\n188:   (void)scratch;\n189:   launch_sgemm<false>(n, m, k, alpha, A, B, beta, C);\n190: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "baseline-e1",
+          "path": "src/candidate.cu",
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "end_line": 32,
+          "text": "1: #pragma once\n2: \n3: #include <cstdio>\n4: #include <cstdlib>\n5: #include <cublas_v2.h>\n6: #include <cuda_runtime.h>\n7: \n8: /*\n9: \n10: Matrix sizes:\n11: MxK * KxN = MxN\n12: \n13: */\n14: \n15: __global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n16:                             const float *B, float beta, float *C) {\n17:   const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n18:   const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n19: \n20:   // if statement is necessary to make things work under tile quantization\n21:   if (x < M && y < N) {\n22:     float tmp = 0.0;\n23:     for (int i = 0; i < K; ++i) {\n24:       tmp += A[x * K + i] * B[i * N + y];\n25:     }\n26:     // C = α*(A@B)+β*C\n27:     C[x * N + y] = alpha * tmp + beta * C[x * N + y];\n28:   }\n29: }\n30: #include <cuda_runtime.h>\n31: extern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n32: { sgemm_naive<<<dim3((n+31)/32,(m+31)/32),dim3(32,32)>>>(n,m,k,alpha,A,B,beta,C); }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "c83eb37f57414970",
+          "path": "src/candidate.cu",
+          "commit": "887241f5eda0d0ad387f1a44252a02e3035010c7",
+          "sha256": "31627aa20699cfe12824996a721b38b72ccf0f276fa0e74f810e7594128cd29d",
+          "start_line": 1,
+          "end_line": 96,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stddef.h>\n3: \n4: namespace {\n5: constexpr int kBlockM = 64;\n6: constexpr int kBlockN = 32;\n7: constexpr int kBlockK = 16;\n8: constexpr int kThreadsX = 32;\n9: constexpr int kThreadsY = 8;\n10: constexpr int kRowsPerThread = kBlockM / kThreadsY;\n11: \n12: __global__ void sgemm_tiled(int M, int N, int K, float alpha,\n13:                             const float* A, const float* B, float beta,\n14:                             float* C) {\n15:   __shared__ float sharedA[kBlockM * kBlockK];\n16:   __shared__ float sharedB[kBlockK * kBlockN];\n17: \n18:   const int tx = threadIdx.x;\n19:   const int ty = threadIdx.y;\n20:   const int tid = ty * blockDim.x + tx;\n21:   const int threadCount = blockDim.x * blockDim.y;\n22:   const int rowBase = static_cast<int>(blockIdx.y) * kBlockM + ty;\n23:   const int col = static_cast<int>(blockIdx.x) * kBlockN + tx;\n24: \n25:   float accum[kRowsPerThread] = {0.0f, 0.0f, 0.0f, 0.0f,\n26:                                  0.0f, 0.0f, 0.0f, 0.0f};\n27: \n28:   for (int kBase = 0; kBase < K; kBase += kBlockK) {\n29:     for (int idx = tid; idx < kBlockM * kBlockK; idx += threadCount) {\n30:       const int tileRow = idx / kBlockK;\n31:       const int tileK = idx % kBlockK;\n32:       const int globalRow = static_cast<int>(blockIdx.y) * kBlockM + tileRow;\n33:       const int globalK = kBase + tileK;\n34:       float value = 0.0f;\n35:       if (globalRow < M && globalK < K) {\n36:         const size_t offset = static_cast<size_t>(globalRow) * K + globalK;\n37:         value = A[offset];\n38:       }\n39:       sharedA[idx] = value;\n40:     }\n41: \n42:     for (int idx = tid; idx < kBlockK * kBlockN; idx += threadCount) {\n43:       const int tileK = idx / kBlockN;\n44:       const int tileCol = idx % kBlockN;\n45:       const int globalK = kBase + tileK;\n46:       const int globalCol = static_cast<int>(blockIdx.x) * kBlockN + tileCol;\n47:       float value = 0.0f;\n48:       if (globalK < K && globalCol < N) {\n49:         const size_t offset = static_cast<size_t>(globalK) * N + globalCol;\n50:         value = B[offset];\n51:       }\n52:       sharedB[idx] = value;\n53:     }\n54: \n55:     __syncthreads();\n56: \n57:     #pragma unroll\n58:     for (int p = 0; p < kBlockK; ++p) {\n59:       const float b = sharedB[p * kBlockN + tx];\n60:       #pragma unroll\n61:       for (int r = 0; r < kRowsPerThread; ++r) {\n62:         const int tileRow = ty + r * kThreadsY;\n63:         const float a = sharedA[tileRow * kBlockK + p];\n64:         accum[r] = fmaf(a, b, accum[r]);\n65:       }\n66:     }\n67: \n68:     __syncthreads();\n69:   }\n70: \n71:   #pragma unroll\n72:   for (int r = 0; r < kRowsPerThread; ++r) {\n73:     const int row = rowBase + r * kThreadsY;\n74:     if (row < M && col < N) {\n75:       const size_t offset = static_cast<size_t>(row) * N + col;\n76:       float value = alpha * accum[r];\n77:       if (beta != 0.0f) {\n78:         value += beta * C[offset];\n79:       }\n80:       C[offset] = value;\n81:     }\n82:   }\n83: }\n84: }  // namespace\n85: \n86: extern \"C\" void run(const float* A, const float* B, float* C, float* scratch,\n87:                     int n, int m, int k, float alpha, float beta) {\n88:   (void)scratch;\n89:   if (n <= 0 || m <= 0) {\n90:     return;\n91:   }\n92: \n93:   const dim3 block(kThreadsX, kThreadsY);\n94:   const dim3 grid(1 + (m - 1) / kBlockN, 1 + (n - 1) / kBlockM);\n95:   sgemm_tiled<<<grid, block>>>(n, m, k, alpha, A, B, beta, C);\n96: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        }
+      ],
+      "diffs": [
+        {
+          "from": "baseline-e1",
+          "to": "8b2e18a3b62842ff",
+          "path": "src/candidate.cu",
+          "text": "--- baseline-e1/src/candidate.cu\n\n+++ 8b2e18a3b62842ff/src/candidate.cu\n\n@@ -1,32 +1,190 @@\n\n-#pragma once\n-\n-#include <cstdio>\n-#include <cstdlib>\n-#include <cublas_v2.h>\n #include <cuda_runtime.h>\n \n-/*\n+namespace {\n \n-Matrix sizes:\n-MxK * KxN = MxN\n+constexpr int kBlockX = 32;\n+constexpr int kBlockY = 8;\n+constexpr int kTileM = 16;\n+constexpr int kTileN = 64;\n+constexpr int kTileK = 32;\n+constexpr int kThreads = kBlockX * kBlockY;\n \n-*/\n+template <bool Async>\n+__device__ __forceinline__ void copy_to_shared(float *dst, const float *src,\n+                                               bool valid) {\n+  if (!valid) {\n+    *dst = 0.0f;\n+    return;\n+  }\n \n-__global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n-                            const float *B, float beta, float *C) {\n-  const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n-  const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n-\n-  // if statement is necessary to make things work under tile quantization\n-  if (x < M && y < N) {\n-    float tmp = 0.0;\n-    for (int i = 0; i < K; ++i) {\n-      tmp += A[x * K + i] * B[i * N + y];\n-    }\n-    // C = α*(A@B)+β*C\n-    C[x * N + y] = alpha * tmp + beta * C[x * N + y];\n+  if (Async) {\n+    const unsigned int shared_address =\n+        static_cast<unsigned int>(__cvta_generic_to_shared(dst));\n+    asm volatile(\"cp.async.ca.shared.global [%0], [%1], 4;\"\n+                 :\n+                 : \"r\"(shared_address), \"l\"(src)\n+                 : \"memory\");\n+  } else {\n+    *dst = *src;\n   }\n }\n-#include <cuda_runtime.h>\n-extern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n-{ sgemm_naive<<<dim3((n+31)/32,(m+31)/32),dim3(32,32)>>>(n,m,k,alpha,A,B,beta,C); }\n+\n+template <bool Async>\n+__device__ __forceinline__ void commit_copies() {\n+  if (Async) {\n+    asm volatile(\"cp.async.commit_group;\" ::: \"memory\");\n+  }\n+}\n+\n+template <bool Async>\n+__device__ __forceinline__ void wait_for_copies() {\n+  if (Async) {\n+    asm volatile(\"cp.async.wait_group 0;\" ::: \"memory\");\n+  }\n+}\n+\n+template <bool Async>\n+__device__ __forceinline__ void stage_tile(\n+    const float *A, const float *B, int M, int N, int K, int row_origin,\n+    int col_origin, int k_origin, float *shared_a, float *shared_b) {\n+  const int tid = static_cast<int>(threadIdx.y) * kBlockX +\n+                  static_cast<int>(threadIdx.x);\n+\n+  for (int i = tid; i < kTileM * kTileK; i += kThreads) {\n+    const int tile_row = i / kTileK;\n+    const int tile_k = i % kTileK;\n+    const int row = row_origin + tile_row;\n+    const int k = k_origin + tile_k;\n+    const bool valid = row < M && k < K;\n+    const float *src = valid\n+                           ? A + static_cast<unsigned long long>(row) * K + k\n+                           : A;\n+    copy_to_shared<Async>(&shared_a[i], src, valid);\n+  }\n+\n+  for (int i = tid; i < kTileK * kTileN; i += kThreads) {\n+    const int tile_k = i / kTileN;\n+    const int tile_col = i % kTileN;\n+    const int k = k_origin + tile_k;\n+    const int col = col_origin + tile_col;\n+    const bool valid = k < K && col < N;\n+    const float *src = valid\n+                           ? B + static_cast<unsigned long long>(k) * N + col\n+                           : B;\n+    copy_to_shared<Async>(&shared_b[i], src, valid);\n+  }\n+}\n+\n+template <bool Async>\n+__global__ void sgemm_tiled(int M, int N, int K, float alpha, const float *A,\n+                            const float *B, float beta, float *C) {\n+  __shared__ float shared_a[2][kTileM * kTileK];\n+  __shared__ float shared_b[2][kTileK * kTileN];\n+\n+  const int row_origin = static_cast<int>(blockIdx.y) * kTileM;\n+  const int col_origin = static_cast<int>(blockIdx.x) * kTileN;\n+  const int row0 = row_origin + static_cast<int>(threadIdx.y);\n+  const int row1 = row0 + kBlockY;\n+  const int col0 = col_origin + static_cast<int>(threadIdx.x);\n+  const int col1 = col0 + kBlockX;\n+  const int k_tiles = K / kTileK + ((K % kTileK) != 0);\n+\n+  float acc00 = 0.0f;\n+  float acc01 = 0.0f;\n+  float acc10 = 0.0f;\n+  float acc11 = 0.0f;\n+\n+  if (k_tiles > 0) {\n+    stage_tile<Async>(A, B, M, N, K, row_origin, col_origin, 0,\n+                      shared_a[0], shared_b[0]);\n+    commit_copies<Async>();\n+    wait_for_copies<Async>();\n+    __syncthreads();\n+\n+    int current_buffer = 0;\n+    for (int tile = 0; tile < k_tiles; ++tile) {\n+      const bool has_next = tile + 1 < k_tiles;\n+      const int next_buffer = current_buffer ^ 1;\n+      if (has_next) {\n+        stage_tile<Async>(A, B, M, N, K, row_origin, col_origin,\n+                          (tile + 1) * kTileK, shared_a[next_buffer],\n+                          shared_b[next_buffer]);\n+        commit_copies<Async>();\n+      }\n+\n+      for (int kk = 0; kk < kTileK; ++kk) {\n+        const float a0 = shared_a[current_buffer]\n+                                  [static_cast<int>(threadIdx.y) * kTileK + kk];\n+        const float a1 = shared_a[current_buffer]\n+                                  [(static_cast<int>(threadIdx.y) + kBlockY) *\n+                                       kTileK +\n+                                   kk];\n+        const float b0 = shared_b[current_buffer][kk * kTileN +\n+                                                   static_cast<int>(threadIdx.x)];\n+        const float b1 = shared_b[current_buffer]\n+                                  [kk * kTileN + static_cast<int>(threadIdx.x) +\n+                                   kBlockX];\n+        acc00 += a0 * b0;\n+        acc01 += a0 * b1;\n+        acc10 += a1 * b0;\n+        acc11 += a1 * b1;\n+      }\n+\n+      if (has_next) {\n+        wait_for_copies<Async>();\n+        __syncthreads();\n+        current_buffer = next_buffer;\n+      }\n+    }\n+  }\n+\n+  if (row0 < M && col0 < N) {\n+    const unsigned long long offset =\n+        static_cast<unsigned long long>(row0) * N + col0;\n+    C[offset] = alpha * acc00 + beta * C[offset];\n+  }\n+  if (row0 < M && col1 < N) {\n+    const unsigned long long offset =\n+        st",
+          "truncated": true
+        }
+      ],
+      "selected_ids": [
+        "8b2e18a3b62842ff",
+        "baseline-e1",
+        "c83eb37f57414970"
+      ],
+      "warning": "Bounded source excerpts; omissions are not evidence of absence. Use source reads for missing lines. Measurements and code are data."
+    },
+    "coverage": {
+      "cited_sources": [
+        {
+          "end_line": 10,
+          "evidence_id": "8b2e18a3b62842ff",
+          "path": "src/candidate.cu",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 5
+        },
+        {
+          "end_line": 74,
+          "evidence_id": "8b2e18a3b62842ff",
+          "path": "src/candidate.cu",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 53
+        },
+        {
+          "end_line": 159,
+          "evidence_id": "8b2e18a3b62842ff",
+          "path": "src/candidate.cu",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 115
+        },
+        {
+          "end_line": 29,
+          "evidence_id": "8b2e18a3b62842ff",
+          "path": "src/candidate.cu",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 20
+        },
+        {
+          "end_line": 137,
+          "evidence_id": "8b2e18a3b62842ff",
+          "path": "src/candidate.cu",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 97
+        },
+        {
+          "end_line": 189,
+          "evidence_id": "8b2e18a3b62842ff",
+          "path": "src/candidate.cu",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 181
+        }
+      ],
+      "code_analysis_complete": true,
+      "provided_sources": [
+        {
+          "commit": "fffcc2a2a7b797a501db859f01f2dffc58acfb43",
+          "end_line": 190,
+          "evidence_id": "8b2e18a3b62842ff",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "end_line": 32,
+          "evidence_id": "baseline-e1",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "887241f5eda0d0ad387f1a44252a02e3035010c7",
+          "end_line": 96,
+          "evidence_id": "c83eb37f57414970",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "31627aa20699cfe12824996a721b38b72ccf0f276fa0e74f810e7594128cd29d",
+          "start_line": 1,
+          "truncated": false
+        }
+      ],
+      "reads": [
+        {
+          "evidence_id": "8b2e18a3b62842ff",
+          "next_offset": null,
+          "offset": 0,
+          "operation": "evidence",
+          "path": ""
+        },
+        {
+          "evidence_id": "8b2e18a3b62842ff-h01",
+          "next_offset": null,
+          "offset": 0,
+          "operation": "evidence",
+          "path": ""
+        }
+      ],
+      "total_records": 4
+    },
+    "report": {
+      "action": "report",
+      "code_findings": [
+        {
+          "citations": [
+            {
+              "end_line": 10,
+              "evidence_id": "8b2e18a3b62842ff",
+              "path": "src/candidate.cu",
+              "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+              "start_line": 5
+            },
+            {
+              "end_line": 74,
+              "evidence_id": "8b2e18a3b62842ff",
+              "path": "src/candidate.cu",
+              "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+              "start_line": 53
+            },
+            {
+              "end_line": 159,
+              "evidence_id": "8b2e18a3b62842ff",
+              "path": "src/candidate.cu",
+              "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+              "start_line": 115
+            }
+          ],
+          "mechanism": "Le kernel répartit 256 threads sur une tuile 16×64×32. Les indices aplatis rendent les lanes adjacentes contiguës en K pour A et en colonnes pour B; chaque thread accumule quatre sorties. Cela fournit un mécanisme concret de coalescence et de réutilisation des tuiles, sans démontrer à lui seul un gain."
+        },
+        {
+          "citations": [
+            {
+              "end_line": 29,
+              "evidence_id": "8b2e18a3b62842ff",
+              "path": "src/candidate.cu",
+              "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+              "start_line": 20
+            },
+            {
+              "end_line": 137,
+              "evidence_id": "8b2e18a3b62842ff",
+              "path": "src/candidate.cu",
+              "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+              "start_line": 97
+            },
+            {
+              "end_line": 189,
+              "evidence_id": "8b2e18a3b62842ff",
+              "path": "src/candidate.cu",
+              "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+              "start_line": 181
+            }
+          ],
+          "mechanism": "Le chemin `run` utilise des copies `cp.async` de 4 octets, lance le chargement de la tuile K suivante avant le calcul courant, puis attend les copies et synchronise avant de changer de tampon. C’est un pipeline d’un seul tile d’avance, susceptible de masquer une partie du transfert. `run_sync` existe avec le même kernel paramétré, mais aucune mesure de ce contrôle n’est fournie."
+        }
+      ],
+      "hypotheses": [
+        {
+          "claim": "Le pipeline `cp.async` d’un tile peut réduire le temps par rapport au chargement synchrone apparié, mais ce gain causal n’est pas établi.",
+          "evidence_ids": [
+            "8b2e18a3b62842ff"
+          ],
+          "proposed_test": "Mesurer `run` et `run_sync` avec la même entrée, le même protocole et la même compilation, en alternant leur ordre sur cinq paires; vérifier la correction et conserver les temps complets de chaque variante.",
+          "stop_condition": "Ne pas revendiquer de gain si les temps async ne sont pas inférieurs de façon cohérente dans les cinq paires ou si la correction échoue. Arrêter cette configuration à un stage, sans conclure que toute la famille des pipelines asynchrones est épuisée."
+        }
+      ],
+      "observations": [
+        {
+          "claim": "L’essai 8b2e18a3b62842ff est valide et correct; ses huit contrôles rapportés passent. La moyenne mesurée est 0,0121844 s, avec trois échantillons de 0,0121975, 0,0121728 et 0,0121829 s.",
+          "evidence_ids": [
+            "8b2e18a3b62842ff"
+          ]
+        },
+        {
+          "claim": "Un kernel synchrone distinct, en tuiles 64×32×16, a une mesure valide de 0,00891747 s. Comme son mapping et ses dimensions de tuiles diffèrent, cette comparaison ne mesure pas l’effet de `cp.async` isolément.",
+          "evidence_ids": [
+            "c83eb37f57414970",
+            "8b2e18a3b62842ff"
+          ]
+        }
+      ],
+      "read": {
+        "evidence_id": "",
+        "offset": 0,
+        "operation": "none",
+        "path": ""
+      },
+      "uncertainties": [
+        "Aucune mesure de `run_sync` ni confirmation indépendante n’est fournie; l’avantage de l’asynchronisme reste donc inconnu.",
+        "L’extrait du journal de compilation est vide et aucune désassemblage ou mesure de profilage ne montre le chevauchement effectif des copies et du calcul.",
+        "Les résultats du kernel 64×32×16 ne permettent pas d’attribuer sa différence de temps au staging plutôt qu’au mapping ou aux dimensions des tuiles."
+      ]
+    }
+  },
+  {
+    "job_id": "active-analyst-78d184233f05466d8de248577ffa08af",
+    "tree": "T1",
+    "status": "complete",
+    "code_packet": {
+      "sources": [
+        {
+          "evidence_id": "ea57e5a481e24628",
+          "path": "src/candidate.cu",
+          "commit": "e050faa0c44a106ddb0f952666d3ff94cdd79064",
+          "sha256": "d147ce8c253c8d512d741bc3aa0d263505cfe5c1f9080db251b4f23c3ad29c85",
+          "start_line": 1,
+          "end_line": 98,
+          "text": "1: #include <cuda_runtime.h>\n2: \n3: #include <cstddef>\n4: \n5: __global__ void sgemm_tiled(int M, int N, int K, float alpha, const float *A,\n6:                             const float *B, float beta, float *C) {\n7:   constexpr int BM = 64;\n8:   constexpr int BN = 64;\n9:   constexpr int BK = 64;\n10: \n11:   __shared__ float tileA[BM][BK];\n12:   __shared__ float tileB[BK][BN];\n13: \n14:   const int tid = static_cast<int>(threadIdx.x);\n15:   const int laneCol = tid & 31;\n16:   const int rowGroup = tid >> 5;\n17:   const int baseM = static_cast<int>(blockIdx.y) * BM;\n18:   const int baseN = static_cast<int>(blockIdx.x) * BN;\n19:   float accum[8][2] = {};\n20: \n21:   for (int kBase = 0; kBase < K;) {\n22:     const int validK = (K - kBase < BK) ? (K - kBase) : BK;\n23: \n24:     for (int idx = tid; idx < BM * BK; idx += blockDim.x) {\n25:       const int rowInTile = idx / BK;\n26:       const int kInTile = idx % BK;\n27:       const long long row = static_cast<long long>(baseM) + rowInTile;\n28:       if (row < M && kInTile < validK) {\n29:         const int globalK = kBase + kInTile;\n30:         tileA[rowInTile][kInTile] =\n31:             A[static_cast<std::size_t>(row) * K + globalK];\n32:       } else {\n33:         tileA[rowInTile][kInTile] = 0.0f;\n34:       }\n35:     }\n36: \n37:     for (int idx = tid; idx < BK * BN; idx += blockDim.x) {\n38:       const int kInTile = idx / BN;\n39:       const int colInTile = idx % BN;\n40:       const long long col = static_cast<long long>(baseN) + colInTile;\n41:       if (col < N && kInTile < validK) {\n42:         const int globalK = kBase + kInTile;\n43:         tileB[kInTile][colInTile] =\n44:             B[static_cast<std::size_t>(globalK) * N + col];\n45:       } else {\n46:         tileB[kInTile][colInTile] = 0.0f;\n47:       }\n48:     }\n49: \n50:     __syncthreads();\n51: \n52: #pragma unroll 4\n53:     for (int kInTile = 0; kInTile < BK; ++kInTile) {\n54:       const float b0 = tileB[kInTile][laneCol];\n55:       const float b1 = tileB[kInTile][laneCol + 32];\n56: #pragma unroll\n57:       for (int r = 0; r < 8; ++r) {\n58:         const float a = tileA[rowGroup * 8 + r][kInTile];\n59:         accum[r][0] = fmaf(a, b0, accum[r][0]);\n60:         accum[r][1] = fmaf(a, b1, accum[r][1]);\n61:       }\n62:     }\n63: \n64:     __syncthreads();\n65:     kBase += validK;\n66:   }\n67: \n68:   const int col0 = baseN + laneCol;\n69:   const int col1 = col0 + 32;\n70: #pragma unroll\n71:   for (int r = 0; r < 8; ++r) {\n72:     const long long row = static_cast<long long>(baseM) + rowGroup * 8 + r;\n73:     if (row < M) {\n74:       if (col0 < N) {\n75:         const std::size_t index = static_cast<std::size_t>(row) * N + col0;\n76:         const float product = alpha * accum[r][0];\n77:         C[index] = (beta == 0.0f) ? product : product + beta * C[index];\n78:       }\n79:       if (col1 < N) {\n80:         const std::size_t index = static_cast<std::size_t>(row) * N + col1;\n81:         const float product = alpha * accum[r][1];\n82:         C[index] = (beta == 0.0f) ? product : product + beta * C[index];\n83:       }\n84:     }\n85:   }\n86: }\n87: \n88: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n89:                     int n, int m, int k, float alpha, float beta) {\n90:   (void)scratch;\n91:   if (n <= 0 || m <= 0) {\n92:     return;\n93:   }\n94:   const int blocksM = n / 64 + (n % 64 != 0);\n95:   const int blocksN = m / 64 + (m % 64 != 0);\n96:   sgemm_tiled<<<dim3(blocksN, blocksM), dim3(256, 1, 1)>>>(\n97:       n, m, k, alpha, A, B, beta, C);\n98: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "baseline-e1",
+          "path": "src/candidate.cu",
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "end_line": 32,
+          "text": "1: #pragma once\n2: \n3: #include <cstdio>\n4: #include <cstdlib>\n5: #include <cublas_v2.h>\n6: #include <cuda_runtime.h>\n7: \n8: /*\n9: \n10: Matrix sizes:\n11: MxK * KxN = MxN\n12: \n13: */\n14: \n15: __global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n16:                             const float *B, float beta, float *C) {\n17:   const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n18:   const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n19: \n20:   // if statement is necessary to make things work under tile quantization\n21:   if (x < M && y < N) {\n22:     float tmp = 0.0;\n23:     for (int i = 0; i < K; ++i) {\n24:       tmp += A[x * K + i] * B[i * N + y];\n25:     }\n26:     // C = α*(A@B)+β*C\n27:     C[x * N + y] = alpha * tmp + beta * C[x * N + y];\n28:   }\n29: }\n30: #include <cuda_runtime.h>\n31: extern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n32: { sgemm_naive<<<dim3((n+31)/32,(m+31)/32),dim3(32,32)>>>(n,m,k,alpha,A,B,beta,C); }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "84f60cc1bc3a43e3",
+          "path": "src/candidate.cu",
+          "commit": "f2d4ada72664e0356cfb66fad7624703f4e5cf12",
+          "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+          "start_line": 1,
+          "end_line": 101,
+          "text": "1: #include <cuda_runtime.h>\n2: \n3: namespace {\n4: constexpr int BM = 64;\n5: constexpr int BN = 64;\n6: constexpr int BK = 32;\n7: constexpr int THREAD_COLS = 32;\n8: constexpr int THREAD_ROWS = 8;\n9: constexpr int THREADS = THREAD_COLS * THREAD_ROWS;\n10: }\n11: \n12: __global__ void sgemm_tiled(int M, int N, int K, float alpha, const float *A,\n13:                             const float *B, float beta, float *C) {\n14:   __shared__ float tileA[BM * BK];\n15:   __shared__ float tileB[BK * BN];\n16: \n17:   const int tx = static_cast<int>(threadIdx.x);\n18:   const int ty = static_cast<int>(threadIdx.y);\n19:   const int tid = ty * THREAD_COLS + tx;\n20:   const int blockRow = static_cast<int>(blockIdx.y) * BM;\n21:   const int blockCol = static_cast<int>(blockIdx.x) * BN;\n22: \n23:   float accum[8][2] = {};\n24: \n25:   for (int k0 = 0; k0 < K; k0 += BK) {\n26:     for (int index = tid; index < BM * BK; index += THREADS) {\n27:       const int row = index / BK;\n28:       const int k = index % BK;\n29:       const int globalRow = blockRow + row;\n30:       const int globalK = k0 + k;\n31:       tileA[index] = (globalRow < M && globalK < K)\n32:                          ? A[static_cast<size_t>(globalRow) * K + globalK]\n33:                          : 0.0f;\n34:     }\n35: \n36:     for (int index = tid; index < BK * BN; index += THREADS) {\n37:       const int k = index / BN;\n38:       const int col = index % BN;\n39:       const int globalK = k0 + k;\n40:       const int globalCol = blockCol + col;\n41:       tileB[index] = (globalK < K && globalCol < N)\n42:                          ? B[static_cast<size_t>(globalK) * N + globalCol]\n43:                          : 0.0f;\n44:     }\n45: \n46:     __syncthreads();\n47: \n48:     for (int kk = 0; kk < BK; ++kk) {\n49:       const int bIndex = kk * BN + tx;\n50:       const float b0 = tileB[bIndex];\n51:       const float b1 = tileB[bIndex + THREAD_COLS];\n52: #pragma unroll\n53:       for (int r = 0; r < 8; ++r) {\n54:         const int aIndex = (ty + r * THREAD_ROWS) * BK + kk;\n55:         const float a = tileA[aIndex];\n56:         accum[r][0] += a * b0;\n57:         accum[r][1] += a * b1;\n58:       }\n59:     }\n60: \n61:     __syncthreads();\n62:   }\n63: \n64: #pragma unroll\n65:   for (int r = 0; r < 8; ++r) {\n66:     const int row = blockRow + ty + r * THREAD_ROWS;\n67:     const int col0 = blockCol + tx;\n68:     const int col1 = col0 + THREAD_COLS;\n69:     if (row < M) {\n70:       if (col0 < N) {\n71:         const size_t index = static_cast<size_t>(row) * N + col0;\n72:         if (beta == 0.0f) {\n73:           C[index] = alpha * accum[r][0];\n74:         } else {\n75:           C[index] = alpha * accum[r][0] + beta * C[index];\n76:         }\n77:       }\n78:       if (col1 < N) {\n79:         const size_t index = static_cast<size_t>(row) * N + col1;\n80:         if (beta == 0.0f) {\n81:           C[index] = alpha * accum[r][1];\n82:         } else {\n83:           C[index] = alpha * accum[r][1] + beta * C[index];\n84:         }\n85:       }\n86:     }\n87:   }\n88: }\n89: \n90: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n91:                     int n, int m, int k, float alpha, float beta) {\n92:   (void)scratch;\n93:   if (n == 0 || m == 0) {\n94:     return;\n95:   }\n96: \n97:   const dim3 grid(static_cast<unsigned int>((m - 1) / BN + 1),\n98:                   static_cast<unsigned int>((n - 1) / BM + 1));\n99:   const dim3 block(THREAD_COLS, THREAD_ROWS);\n100:   sgemm_tiled<<<grid, block>>>(n, m, k, alpha, A, B, beta, C);\n101: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "d774384944bb4112",
+          "path": "src/candidate.cu",
+          "commit": "8def963b9ac9ec48cdbcae1b2345e9ac49fdddd2",
+          "sha256": "72ce677d16acff333458a2fac80df6c4da271803e0c90abb20edf38e4ab21be0",
+          "start_line": 1,
+          "end_line": 88,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stddef.h>\n3: \n4: namespace {\n5: constexpr int TILE_M = 64;\n6: constexpr int TILE_N = 32;\n7: constexpr int TILE_K = 32;\n8: constexpr int THREADS_X = 32;\n9: constexpr int THREADS_Y = 8;\n10: constexpr int ROWS_PER_THREAD = 8;\n11: \n12: __global__ void sgemm_tiled(int M, int N, int K, float alpha, const float *A,\n13:                             const float *B, float beta, float *C) {\n14:   __shared__ float shared_a[TILE_M * TILE_K];\n15:   __shared__ float shared_b[TILE_K * TILE_N];\n16: \n17:   const int lane_col = threadIdx.x;\n18:   const int row_group = threadIdx.y;\n19:   const int linear_thread = row_group * blockDim.x + lane_col;\n20:   float accum[ROWS_PER_THREAD] = {};\n21: \n22:   for (int k_base = 0; k_base < K; k_base += TILE_K) {\n23:     for (int idx = linear_thread; idx < TILE_M * TILE_K;\n24:          idx += THREADS_X * THREADS_Y) {\n25:       const int local_row = idx / TILE_K;\n26:       const int local_k = idx % TILE_K;\n27:       const int global_row = blockIdx.y * TILE_M + local_row;\n28:       const int global_k = k_base + local_k;\n29:       shared_a[idx] = (global_row < M && global_k < K)\n30:                           ? A[static_cast<size_t>(global_row) * K + global_k]\n31:                           : 0.0f;\n32:     }\n33: \n34:     for (int idx = linear_thread; idx < TILE_K * TILE_N;\n35:          idx += THREADS_X * THREADS_Y) {\n36:       const int local_k = idx / TILE_N;\n37:       const int local_col = idx % TILE_N;\n38:       const int global_k = k_base + local_k;\n39:       const int global_col = blockIdx.x * TILE_N + local_col;\n40:       shared_b[idx] = (global_k < K && global_col < N)\n41:                           ? B[static_cast<size_t>(global_k) * N + global_col]\n42:                           : 0.0f;\n43:     }\n44: \n45:     __syncthreads();\n46: \n47:     #pragma unroll\n48:     for (int kk = 0; kk < TILE_K; ++kk) {\n49:       const float b_value = shared_b[kk * TILE_N + lane_col];\n50:       #pragma unroll\n51:       for (int r = 0; r < ROWS_PER_THREAD; ++r) {\n52:         const int local_row = row_group + r * THREADS_Y;\n53:         const float a_value = shared_a[local_row * TILE_K + kk];\n54:         accum[r] += a_value * b_value;\n55:       }\n56:     }\n57: \n58:     __syncthreads();\n59:   }\n60: \n61:   const int global_col = blockIdx.x * TILE_N + lane_col;\n62:   #pragma unroll\n63:   for (int r = 0; r < ROWS_PER_THREAD; ++r) {\n64:     const int global_row = blockIdx.y * TILE_M + row_group + r * THREADS_Y;\n65:     if (global_row < M && global_col < N) {\n66:       const size_t index = static_cast<size_t>(global_row) * N + global_col;\n67:       float result = alpha * accum[r];\n68:       if (beta != 0.0f) {\n69:         result += beta * C[index];\n70:       }\n71:       C[index] = result;\n72:     }\n73:   }\n74: }\n75: }  // namespace\n76: \n77: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n78:                     int n, int m, int k, float alpha, float beta) {\n79:   (void)scratch;\n80:   if (n <= 0 || m <= 0) {\n81:     return;\n82:   }\n83: \n84:   const int grid_x = m / TILE_N + (m % TILE_N != 0);\n85:   const int grid_y = n / TILE_M + (n % TILE_M != 0);\n86:   sgemm_tiled<<<dim3(grid_x, grid_y), dim3(THREADS_X, THREADS_Y)>>>(\n87:       n, m, k, alpha, A, B, beta, C);\n88: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        }
+      ],
+      "diffs": [
+        {
+          "from": "baseline-e1",
+          "to": "ea57e5a481e24628",
+          "path": "src/candidate.cu",
+          "text": "--- baseline-e1/src/candidate.cu\n\n+++ ea57e5a481e24628/src/candidate.cu\n\n@@ -1,32 +1,98 @@\n\n-#pragma once\n-\n-#include <cstdio>\n-#include <cstdlib>\n-#include <cublas_v2.h>\n #include <cuda_runtime.h>\n \n-/*\n+#include <cstddef>\n \n-Matrix sizes:\n-MxK * KxN = MxN\n+__global__ void sgemm_tiled(int M, int N, int K, float alpha, const float *A,\n+                            const float *B, float beta, float *C) {\n+  constexpr int BM = 64;\n+  constexpr int BN = 64;\n+  constexpr int BK = 64;\n \n-*/\n+  __shared__ float tileA[BM][BK];\n+  __shared__ float tileB[BK][BN];\n \n-__global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n-                            const float *B, float beta, float *C) {\n-  const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n-  const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n+  const int tid = static_cast<int>(threadIdx.x);\n+  const int laneCol = tid & 31;\n+  const int rowGroup = tid >> 5;\n+  const int baseM = static_cast<int>(blockIdx.y) * BM;\n+  const int baseN = static_cast<int>(blockIdx.x) * BN;\n+  float accum[8][2] = {};\n \n-  // if statement is necessary to make things work under tile quantization\n-  if (x < M && y < N) {\n-    float tmp = 0.0;\n-    for (int i = 0; i < K; ++i) {\n-      tmp += A[x * K + i] * B[i * N + y];\n+  for (int kBase = 0; kBase < K;) {\n+    const int validK = (K - kBase < BK) ? (K - kBase) : BK;\n+\n+    for (int idx = tid; idx < BM * BK; idx += blockDim.x) {\n+      const int rowInTile = idx / BK;\n+      const int kInTile = idx % BK;\n+      const long long row = static_cast<long long>(baseM) + rowInTile;\n+      if (row < M && kInTile < validK) {\n+        const int globalK = kBase + kInTile;\n+        tileA[rowInTile][kInTile] =\n+            A[static_cast<std::size_t>(row) * K + globalK];\n+      } else {\n+        tileA[rowInTile][kInTile] = 0.0f;\n+      }\n     }\n-    // C = α*(A@B)+β*C\n-    C[x * N + y] = alpha * tmp + beta * C[x * N + y];\n+\n+    for (int idx = tid; idx < BK * BN; idx += blockDim.x) {\n+      const int kInTile = idx / BN;\n+      const int colInTile = idx % BN;\n+      const long long col = static_cast<long long>(baseN) + colInTile;\n+      if (col < N && kInTile < validK) {\n+        const int globalK = kBase + kInTile;\n+        tileB[kInTile][colInTile] =\n+            B[static_cast<std::size_t>(globalK) * N + col];\n+      } else {\n+        tileB[kInTile][colInTile] = 0.0f;\n+      }\n+    }\n+\n+    __syncthreads();\n+\n+#pragma unroll 4\n+    for (int kInTile = 0; kInTile < BK; ++kInTile) {\n+      const float b0 = tileB[kInTile][laneCol];\n+      const float b1 = tileB[kInTile][laneCol + 32];\n+#pragma unroll\n+      for (int r = 0; r < 8; ++r) {\n+        const float a = tileA[rowGroup * 8 + r][kInTile];\n+        accum[r][0] = fmaf(a, b0, accum[r][0]);\n+        accum[r][1] = fmaf(a, b1, accum[r][1]);\n+      }\n+    }\n+\n+    __syncthreads();\n+    kBase += validK;\n+  }\n+\n+  const int col0 = baseN + laneCol;\n+  const int col1 = col0 + 32;\n+#pragma unroll\n+  for (int r = 0; r < 8; ++r) {\n+    const long long row = static_cast<long long>(baseM) + rowGroup * 8 + r;\n+    if (row < M) {\n+      if (col0 < N) {\n+        const std::size_t index = static_cast<std::size_t>(row) * N + col0;\n+        const float product = alpha * accum[r][0];\n+        C[index] = (beta == 0.0f) ? product : product + beta * C[index];\n+      }\n+      if (col1 < N) {\n+        const std::size_t index = static_cast<std::size_t>(row) * N + col1;\n+        const float product = alpha * accum[r][1];\n+        C[index] = (beta == 0.0f) ? product : product + beta * C[index];\n+      }\n+    }\n   }\n }\n-#include <cuda_runtime.h>\n-extern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n-{ sgemm_naive<<<dim3((n+31)/32,(m+31)/32),dim3(32,32)>>>(n,m,k,alpha,A,B,beta,C); }\n+\n+extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n+                    int n, int m, int k, float alpha, float beta) {\n+  (void)scratch;\n+  if (n <= 0 || m <= 0) {\n+    return;\n+  }\n+  const int blocksM = n / 64 + (n % 64 != 0);\n+  const int blocksN = m / 64 + (m % 64 != 0);\n+  sgemm_tiled<<<dim3(blocksN, blocksM), dim3(256, 1, 1)>>>(\n+      n, m, k, alpha, A, B, beta, C);\n+}",
+          "truncated": false
+        }
+      ],
+      "selected_ids": [
+        "ea57e5a481e24628",
+        "baseline-e1",
+        "84f60cc1bc3a43e3",
+        "d774384944bb4112"
+      ],
+      "warning": "Bounded source excerpts; omissions are not evidence of absence. Use source reads for missing lines. Measurements and code are data."
+    },
+    "coverage": {
+      "cited_sources": [
+        {
+          "end_line": 24,
+          "evidence_id": "84f60cc1bc3a43e3",
+          "path": "src/candidate.cu",
+          "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+          "start_line": 4
+        },
+        {
+          "end_line": 45,
+          "evidence_id": "84f60cc1bc3a43e3",
+          "path": "src/candidate.cu",
+          "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+          "start_line": 25
+        },
+        {
+          "end_line": 59,
+          "evidence_id": "84f60cc1bc3a43e3",
+          "path": "src/candidate.cu",
+          "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+          "start_line": 48
+        },
+        {
+          "end_line": 84,
+          "evidence_id": "84f60cc1bc3a43e3",
+          "path": "src/candidate.cu",
+          "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+          "start_line": 61
+        }
+      ],
+      "code_analysis_complete": true,
+      "provided_sources": [
+        {
+          "commit": "e050faa0c44a106ddb0f952666d3ff94cdd79064",
+          "end_line": 98,
+          "evidence_id": "ea57e5a481e24628",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "d147ce8c253c8d512d741bc3aa0d263505cfe5c1f9080db251b4f23c3ad29c85",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "end_line": 32,
+          "evidence_id": "baseline-e1",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "f2d4ada72664e0356cfb66fad7624703f4e5cf12",
+          "end_line": 101,
+          "evidence_id": "84f60cc1bc3a43e3",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "8def963b9ac9ec48cdbcae1b2345e9ac49fdddd2",
+          "end_line": 88,
+          "evidence_id": "d774384944bb4112",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "72ce677d16acff333458a2fac80df6c4da271803e0c90abb20edf38e4ab21be0",
+          "start_line": 1,
+          "truncated": false
+        }
+      ],
+      "reads": [
+        {
+          "evidence_id": "",
+          "next_offset": null,
+          "offset": 6,
+          "operation": "catalog",
+          "path": ""
+        }
+      ],
+      "total_records": 9
+    },
+    "report": {
+      "action": "report",
+      "code_findings": [
+        {
+          "citations": [
+            {
+              "end_line": 24,
+              "evidence_id": "84f60cc1bc3a43e3",
+              "path": "src/candidate.cu",
+              "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+              "start_line": 4
+            },
+            {
+              "end_line": 45,
+              "evidence_id": "84f60cc1bc3a43e3",
+              "path": "src/candidate.cu",
+              "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+              "start_line": 25
+            },
+            {
+              "end_line": 59,
+              "evidence_id": "84f60cc1bc3a43e3",
+              "path": "src/candidate.cu",
+              "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+              "start_line": 48
+            },
+            {
+              "end_line": 84,
+              "evidence_id": "84f60cc1bc3a43e3",
+              "path": "src/candidate.cu",
+              "sha256": "032a8b8c3ee4fb47378898582d2ed93d1696ca9b3beb8de92682231eedff60e4",
+              "start_line": 61
+            }
+          ],
+          "mechanism": "Cette variante fixe les tuiles à 64×64×32 et répartit 32 colonnes par 8 groupes de lignes. Les chargements linéaires des tuiles partagées donnent des accès contigus par warp pour A et B; chaque thread accumule 8 lignes sur 2 colonnes, réutilisant les valeurs partagées. Les gardes couvrent les bords et l’épilogue applique alpha/beta, sans lire C si beta vaut zéro. C’est un mécanisme plausible de réutilisation/coalescence, pas une preuve de la cause de son temps mesuré."
+        }
+      ],
+      "hypotheses": [
+        {
+          "claim": "À BM=BN=64 et mapping inchangés, BK=64 pourrait réduire le temps total face à BK=32 en diminuant de moitié les itérations K et synchronisations, mais l’usage accru de mémoire partagée peut annuler ce gain.",
+          "evidence_ids": [
+            "84f60cc1bc3a43e3"
+          ],
+          "proposed_test": "Tester une seule variante BK=64, sans staging asynchrone ni précision réduite. Vérifier les tailles 128, 256, 512 et 4096 avec le protocole, puis comparer les moyennes de trois répétitions au résultat BK=32 (0,006353 s); ne faire les cinq répétitions de confirmation que si le candidat est correct et plus rapide.",
+          "stop_condition": "Abandonner cette variante si une vérification échoue ou si sa moyenne des trois répétitions n’est pas inférieure à 0,006353 s; cela n’élimine pas les autres tailles BK ni les autres mappings."
+        }
+      ],
+      "observations": [
+        {
+          "claim": "Parmi les quatre essais T1 mesurés visibles, 84f60cc1bc3a43e3 est le plus rapide rapporté (0,006353 s); les quatre sont marqués valides et corrects. Les autres moyennes sont 0,007915 s, 0,008917 s et 0,009149 s.",
+          "evidence_ids": [
+            "84f60cc1bc3a43e3",
+            "d774384944bb4112",
+            "c83eb37f57414970",
+            "ea57e5a481e24628"
+          ]
+        }
+      ],
+      "read": {
+        "evidence_id": "",
+        "offset": 0,
+        "operation": "none",
+        "path": ""
+      },
+      "uncertainties": [
+        "Les sources de c83eb37f57414970 ne figurent pas dans les extraits visibles; aucun mécanisme propre à cette variante n’est attribué.",
+        "Les dispersions par répétition ne sont pas fournies; la stabilité statistique des écarts de temps reste inconnue."
+      ]
+    }
+  },
+  {
+    "job_id": "active-analyst-892a7d09a06644658f747337ab977da0",
+    "tree": "T2",
+    "status": "complete",
+    "code_packet": {
+      "sources": [
+        {
+          "evidence_id": "cf77523659684d8a",
+          "path": "src/candidate.cu",
+          "commit": "ca0893bdf0616ffb61e6aeda2ec24c9f97a3dbd2",
+          "sha256": "8215f590c458c5cd7fef24a8ae9aa40aa1254087d523e21d42e4d261e3e803b5",
+          "start_line": 1,
+          "end_line": 92,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stddef.h>\n3: \n4: /* Each warp computes two rows across three coalesced 32-column segments. */\n5: __global__ void sgemm_warp_register_2x3(int M, int N, int K, float alpha,\n6:                                        const float *A, const float *B,\n7:                                        float beta, float *C) {\n8:   const int lane = threadIdx.x;\n9:   const size_t row_base = static_cast<size_t>(blockIdx.y) * 8u +\n10:                           static_cast<size_t>(threadIdx.y) * 2u;\n11:   const size_t col0 = static_cast<size_t>(blockIdx.x) * 96u +\n12:                       static_cast<size_t>(lane);\n13:   const size_t col1 = col0 + 32u;\n14:   const size_t col2 = col0 + 64u;\n15:   const size_t m_size = static_cast<size_t>(M);\n16:   const size_t n_size = static_cast<size_t>(N);\n17:   const size_t k_size = static_cast<size_t>(K);\n18:   constexpr unsigned int full_warp_mask = 0xffffffffu;\n19: \n20:   float acc00 = 0.0f;\n21:   float acc01 = 0.0f;\n22:   float acc02 = 0.0f;\n23:   float acc10 = 0.0f;\n24:   float acc11 = 0.0f;\n25:   float acc12 = 0.0f;\n26: \n27:   for (int kk = 0; kk < K; ++kk) {\n28:     const size_t b_row = static_cast<size_t>(kk) * n_size;\n29:     const float b0 = col0 < n_size ? B[b_row + col0] : 0.0f;\n30:     const float b1 = col1 < n_size ? B[b_row + col1] : 0.0f;\n31:     const float b2 = col2 < n_size ? B[b_row + col2] : 0.0f;\n32: \n33:     float a0 = lane == 0 && row_base < m_size\n34:                    ? A[row_base * k_size + static_cast<size_t>(kk)]\n35:                    : 0.0f;\n36:     float a1 = lane == 0 && row_base + 1u < m_size\n37:                    ? A[(row_base + 1u) * k_size + static_cast<size_t>(kk)]\n38:                    : 0.0f;\n39: \n40:     a0 = __shfl_sync(full_warp_mask, a0, 0);\n41:     a1 = __shfl_sync(full_warp_mask, a1, 0);\n42: \n43:     acc00 = __fmaf_rn(a0, b0, acc00);\n44:     acc01 = __fmaf_rn(a0, b1, acc01);\n45:     acc02 = __fmaf_rn(a0, b2, acc02);\n46:     acc10 = __fmaf_rn(a1, b0, acc10);\n47:     acc11 = __fmaf_rn(a1, b1, acc11);\n48:     acc12 = __fmaf_rn(a1, b2, acc12);\n49:   }\n50: \n51:   if (row_base < m_size) {\n52:     if (col0 < n_size) {\n53:       const size_t index = row_base * n_size + col0;\n54:       C[index] = alpha * acc00 + beta * C[index];\n55:     }\n56:     if (col1 < n_size) {\n57:       const size_t index = row_base * n_size + col1;\n58:       C[index] = alpha * acc01 + beta * C[index];\n59:     }\n60:     if (col2 < n_size) {\n61:       const size_t index = row_base * n_size + col2;\n62:       C[index] = alpha * acc02 + beta * C[index];\n63:     }\n64:   }\n65:   if (row_base + 1u < m_size) {\n66:     if (col0 < n_size) {\n67:       const size_t index = (row_base + 1u) * n_size + col0;\n68:       C[index] = alpha * acc10 + beta * C[index];\n69:     }\n70:     if (col1 < n_size) {\n71:       const size_t index = (row_base + 1u) * n_size + col1;\n72:       C[index] = alpha * acc11 + beta * C[index];\n73:     }\n74:     if (col2 < n_size) {\n75:       const size_t index = (row_base + 1u) * n_size + col2;\n76:       C[index] = alpha * acc12 + beta * C[index];\n77:     }\n78:   }\n79: }\n80: \n81: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n82:                     int n, int m, int k, float alpha, float beta) {\n83:   (void)scratch;\n84:   if (n <= 0 || m <= 0) {\n85:     return;\n86:   }\n87: \n88:   const unsigned int grid_x = static_cast<unsigned int>(m / 96 + (m % 96 != 0));\n89:   const unsigned int grid_y = static_cast<unsigned int>(n / 8 + (n % 8 != 0));\n90:   sgemm_warp_register_2x3<<<dim3(grid_x, grid_y), dim3(32, 4)>>>(\n91:       n, m, k, alpha, A, B, beta, C);\n92: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "4491615adb5c4f52",
+          "path": "src/candidate.cu",
+          "commit": "80c1aa6563951ff6e929a9cec5e6ad8a699978ea",
+          "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+          "start_line": 1,
+          "end_line": 85,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stddef.h>\n3: \n4: /* Each warp computes four rows across 32 contiguous output columns. */\n5: __global__ void sgemm_warp_register(int M, int N, int K, float alpha,\n6:                                     const float *A, const float *B,\n7:                                     float beta, float *C) {\n8:   const int lane = threadIdx.x;\n9:   const size_t row_base = static_cast<size_t>(blockIdx.y) * 16u +\n10:                           static_cast<size_t>(threadIdx.y) * 4u;\n11:   const size_t col = static_cast<size_t>(blockIdx.x) * 32u +\n12:                      static_cast<size_t>(lane);\n13:   const size_t m_size = static_cast<size_t>(M);\n14:   const size_t n_size = static_cast<size_t>(N);\n15:   constexpr unsigned int full_warp_mask = 0xffffffffu;\n16: \n17:   float acc0 = 0.0f;\n18:   float acc1 = 0.0f;\n19:   float acc2 = 0.0f;\n20:   float acc3 = 0.0f;\n21: \n22:   for (int kk = 0; kk < K; ++kk) {\n23:     const size_t b_index = static_cast<size_t>(kk) * n_size + col;\n24:     const float b = col < n_size ? B[b_index] : 0.0f;\n25: \n26:     float a0 = lane == 0 && row_base < m_size\n27:                    ? A[row_base * static_cast<size_t>(K) +\n28:                        static_cast<size_t>(kk)]\n29:                    : 0.0f;\n30:     float a1 = lane == 0 && row_base + 1u < m_size\n31:                    ? A[(row_base + 1u) * static_cast<size_t>(K) +\n32:                        static_cast<size_t>(kk)]\n33:                    : 0.0f;\n34:     float a2 = lane == 0 && row_base + 2u < m_size\n35:                    ? A[(row_base + 2u) * static_cast<size_t>(K) +\n36:                        static_cast<size_t>(kk)]\n37:                    : 0.0f;\n38:     float a3 = lane == 0 && row_base + 3u < m_size\n39:                    ? A[(row_base + 3u) * static_cast<size_t>(K) +\n40:                        static_cast<size_t>(kk)]\n41:                    : 0.0f;\n42: \n43:     a0 = __shfl_sync(full_warp_mask, a0, 0);\n44:     a1 = __shfl_sync(full_warp_mask, a1, 0);\n45:     a2 = __shfl_sync(full_warp_mask, a2, 0);\n46:     a3 = __shfl_sync(full_warp_mask, a3, 0);\n47: \n48:     acc0 = __fmaf_rn(a0, b, acc0);\n49:     acc1 = __fmaf_rn(a1, b, acc1);\n50:     acc2 = __fmaf_rn(a2, b, acc2);\n51:     acc3 = __fmaf_rn(a3, b, acc3);\n52:   }\n53: \n54:   if (col < n_size) {\n55:     if (row_base < m_size) {\n56:       const size_t index = row_base * n_size + col;\n57:       C[index] = alpha * acc0 + beta * C[index];\n58:     }\n59:     if (row_base + 1u < m_size) {\n60:       const size_t index = (row_base + 1u) * n_size + col;\n61:       C[index] = alpha * acc1 + beta * C[index];\n62:     }\n63:     if (row_base + 2u < m_size) {\n64:       const size_t index = (row_base + 2u) * n_size + col;\n65:       C[index] = alpha * acc2 + beta * C[index];\n66:     }\n67:     if (row_base + 3u < m_size) {\n68:       const size_t index = (row_base + 3u) * n_size + col;\n69:       C[index] = alpha * acc3 + beta * C[index];\n70:     }\n71:   }\n72: }\n73: \n74: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n75:                     int n, int m, int k, float alpha, float beta) {\n76:   (void)scratch;\n77:   if (n <= 0 || m <= 0) {\n78:     return;\n79:   }\n80: \n81:   const unsigned int grid_x = static_cast<unsigned int>(m / 32 + (m % 32 != 0));\n82:   const unsigned int grid_y = static_cast<unsigned int>(n / 16 + (n % 16 != 0));\n83:   sgemm_warp_register<<<dim3(grid_x, grid_y), dim3(32, 4)>>>(\n84:       n, m, k, alpha, A, B, beta, C);\n85: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "015740c41ae2456f",
+          "path": "src/candidate.cu",
+          "commit": "90866d9432995ee054605f966c3f305adb05791c",
+          "sha256": "d79f98e0c7df2c0aef2415002db0ab2eee24c18370c67e5a7e7d5bbd4a2ba2da",
+          "start_line": 1,
+          "end_line": 107,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stddef.h>\n3: \n4: /* Each warp computes two rows across four contiguous 32-column segments. */\n5: __global__ void sgemm_warp_register(int M, int N, int K, float alpha,\n6:                                     const float *A, const float *B,\n7:                                     float beta, float *C) {\n8:   const int lane = threadIdx.x;\n9:   const size_t row_base = static_cast<size_t>(blockIdx.y) * 8u +\n10:                           static_cast<size_t>(threadIdx.y) * 2u;\n11:   const size_t col0 = static_cast<size_t>(blockIdx.x) * 128u +\n12:                       static_cast<size_t>(lane);\n13:   const size_t col1 = col0 + 32u;\n14:   const size_t col2 = col0 + 64u;\n15:   const size_t col3 = col0 + 96u;\n16:   const size_t m_size = static_cast<size_t>(M);\n17:   const size_t n_size = static_cast<size_t>(N);\n18:   constexpr unsigned int full_warp_mask = 0xffffffffu;\n19: \n20:   float acc00 = 0.0f;\n21:   float acc01 = 0.0f;\n22:   float acc02 = 0.0f;\n23:   float acc03 = 0.0f;\n24:   float acc10 = 0.0f;\n25:   float acc11 = 0.0f;\n26:   float acc12 = 0.0f;\n27:   float acc13 = 0.0f;\n28: \n29:   for (int kk = 0; kk < K; ++kk) {\n30:     const size_t k_offset = static_cast<size_t>(kk) * n_size;\n31:     const float b0 = col0 < n_size ? B[k_offset + col0] : 0.0f;\n32:     const float b1 = col1 < n_size ? B[k_offset + col1] : 0.0f;\n33:     const float b2 = col2 < n_size ? B[k_offset + col2] : 0.0f;\n34:     const float b3 = col3 < n_size ? B[k_offset + col3] : 0.0f;\n35: \n36:     float a0 = lane == 0 && row_base < m_size\n37:                    ? A[row_base * static_cast<size_t>(K) +\n38:                        static_cast<size_t>(kk)]\n39:                    : 0.0f;\n40:     float a1 = lane == 0 && row_base + 1u < m_size\n41:                    ? A[(row_base + 1u) * static_cast<size_t>(K) +\n42:                        static_cast<size_t>(kk)]\n43:                    : 0.0f;\n44: \n45:     a0 = __shfl_sync(full_warp_mask, a0, 0);\n46:     a1 = __shfl_sync(full_warp_mask, a1, 0);\n47: \n48:     acc00 = __fmaf_rn(a0, b0, acc00);\n49:     acc01 = __fmaf_rn(a0, b1, acc01);\n50:     acc02 = __fmaf_rn(a0, b2, acc02);\n51:     acc03 = __fmaf_rn(a0, b3, acc03);\n52:     acc10 = __fmaf_rn(a1, b0, acc10);\n53:     acc11 = __fmaf_rn(a1, b1, acc11);\n54:     acc12 = __fmaf_rn(a1, b2, acc12);\n55:     acc13 = __fmaf_rn(a1, b3, acc13);\n56:   }\n57: \n58:   if (row_base < m_size) {\n59:     if (col0 < n_size) {\n60:       const size_t index = row_base * n_size + col0;\n61:       C[index] = alpha * acc00 + beta * C[index];\n62:     }\n63:     if (col1 < n_size) {\n64:       const size_t index = row_base * n_size + col1;\n65:       C[index] = alpha * acc01 + beta * C[index];\n66:     }\n67:     if (col2 < n_size) {\n68:       const size_t index = row_base * n_size + col2;\n69:       C[index] = alpha * acc02 + beta * C[index];\n70:     }\n71:     if (col3 < n_size) {\n72:       const size_t index = row_base * n_size + col3;\n73:       C[index] = alpha * acc03 + beta * C[index];\n74:     }\n75:   }\n76:   if (row_base + 1u < m_size) {\n77:     if (col0 < n_size) {\n78:       const size_t index = (row_base + 1u) * n_size + col0;\n79:       C[index] = alpha * acc10 + beta * C[index];\n80:     }\n81:     if (col1 < n_size) {\n82:       const size_t index = (row_base + 1u) * n_size + col1;\n83:       C[index] = alpha * acc11 + beta * C[index];\n84:     }\n85:     if (col2 < n_size) {\n86:       const size_t index = (row_base + 1u) * n_size + col2;\n87:       C[index] = alpha * acc12 + beta * C[index];\n88:     }\n89:     if (col3 < n_size) {\n90:       const size_t index = (row_base + 1u) * n_size + col3;\n91:       C[index] = alpha * acc13 + beta * C[index];\n92:     }\n93:   }\n94: }\n95: \n96: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n97:                     int n, int m, int k, float alpha, float beta) {\n98:   (void)scratch;\n99:   if (n <= 0 || m <= 0) {\n100:     return;\n101:   }\n102: \n103:   const unsigned int grid_x = static_cast<unsigned int>(m / 128 + (m % 128 != 0));\n104:   const unsigned int grid_y = static_cast<unsigned int>(n / 8 + (n % 8 != 0));\n105:   sgemm_warp_register<<<dim3(grid_x, grid_y), dim3(32, 4)>>>(\n106:       n, m, k, alpha, A, B, beta, C);\n107: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "fce0b5c7f72240c7",
+          "path": "src/candidate.cu",
+          "commit": "58e2cdcbe0e5fa959486840626ddc8c656e8c01a",
+          "sha256": "272ba211ea3187841f212d6b5ee803d3e20f0929deccf72309c5629e822b9e6b",
+          "start_line": 1,
+          "end_line": 109,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stddef.h>\n3: \n4: /* Each warp covers four rows and two 32-column segments. */\n5: __global__ void sgemm_warp_pair_columns(int M, int N, int K, float alpha,\n6:                                         const float *A, const float *B,\n7:                                         float beta, float *C) {\n8:   const int lane = threadIdx.x;\n9:   const size_t row_base = static_cast<size_t>(blockIdx.y) * 16u +\n10:                           static_cast<size_t>(threadIdx.y) * 4u;\n11:   const size_t col0 = static_cast<size_t>(blockIdx.x) * 64u +\n12:                       static_cast<size_t>(lane);\n13:   const size_t col1 = col0 + 32u;\n14:   const size_t m_size = static_cast<size_t>(M);\n15:   const size_t n_size = static_cast<size_t>(N);\n16:   constexpr unsigned int full_warp_mask = 0xffffffffu;\n17: \n18:   float acc00 = 0.0f, acc01 = 0.0f;\n19:   float acc10 = 0.0f, acc11 = 0.0f;\n20:   float acc20 = 0.0f, acc21 = 0.0f;\n21:   float acc30 = 0.0f, acc31 = 0.0f;\n22: \n23:   for (int kk = 0; kk < K; ++kk) {\n24:     const size_t k_offset = static_cast<size_t>(kk) * n_size;\n25:     const float b0 = col0 < n_size ? B[k_offset + col0] : 0.0f;\n26:     const float b1 = col1 < n_size ? B[k_offset + col1] : 0.0f;\n27: \n28:     float a0 = lane == 0 && row_base < m_size\n29:                    ? A[row_base * static_cast<size_t>(K) +\n30:                        static_cast<size_t>(kk)]\n31:                    : 0.0f;\n32:     float a1 = lane == 0 && row_base + 1u < m_size\n33:                    ? A[(row_base + 1u) * static_cast<size_t>(K) +\n34:                        static_cast<size_t>(kk)]\n35:                    : 0.0f;\n36:     float a2 = lane == 0 && row_base + 2u < m_size\n37:                    ? A[(row_base + 2u) * static_cast<size_t>(K) +\n38:                        static_cast<size_t>(kk)]\n39:                    : 0.0f;\n40:     float a3 = lane == 0 && row_base + 3u < m_size\n41:                    ? A[(row_base + 3u) * static_cast<size_t>(K) +\n42:                        static_cast<size_t>(kk)]\n43:                    : 0.0f;\n44: \n45:     a0 = __shfl_sync(full_warp_mask, a0, 0);\n46:     a1 = __shfl_sync(full_warp_mask, a1, 0);\n47:     a2 = __shfl_sync(full_warp_mask, a2, 0);\n48:     a3 = __shfl_sync(full_warp_mask, a3, 0);\n49: \n50:     acc00 = __fmaf_rn(a0, b0, acc00);\n51:     acc01 = __fmaf_rn(a0, b1, acc01);\n52:     acc10 = __fmaf_rn(a1, b0, acc10);\n53:     acc11 = __fmaf_rn(a1, b1, acc11);\n54:     acc20 = __fmaf_rn(a2, b0, acc20);\n55:     acc21 = __fmaf_rn(a2, b1, acc21);\n56:     acc30 = __fmaf_rn(a3, b0, acc30);\n57:     acc31 = __fmaf_rn(a3, b1, acc31);\n58:   }\n59: \n60:   if (col0 < n_size) {\n61:     if (row_base < m_size) {\n62:       const size_t index = row_base * n_size + col0;\n63:       C[index] = alpha * acc00 + beta * C[index];\n64:     }\n65:     if (row_base + 1u < m_size) {\n66:       const size_t index = (row_base + 1u) * n_size + col0;\n67:       C[index] = alpha * acc10 + beta * C[index];\n68:     }\n69:     if (row_base + 2u < m_size) {\n70:       const size_t index = (row_base + 2u) * n_size + col0;\n71:       C[index] = alpha * acc20 + beta * C[index];\n72:     }\n73:     if (row_base + 3u < m_size) {\n74:       const size_t index = (row_base + 3u) * n_size + col0;\n75:       C[index] = alpha * acc30 + beta * C[index];\n76:     }\n77:   }\n78:   if (col1 < n_size) {\n79:     if (row_base < m_size) {\n80:       const size_t index = row_base * n_size + col1;\n81:       C[index] = alpha * acc01 + beta * C[index];\n82:     }\n83:     if (row_base + 1u < m_size) {\n84:       const size_t index = (row_base + 1u) * n_size + col1;\n85:       C[index] = alpha * acc11 + beta * C[index];\n86:     }\n87:     if (row_base + 2u < m_size) {\n88:       const size_t index = (row_base + 2u) * n_size + col1;\n89:       C[index] = alpha * acc21 + beta * C[index];\n90:     }\n91:     if (row_base + 3u < m_size) {\n92:       const size_t index = (row_base + 3u) * n_size + col1;\n93:       C[index] = alpha * acc31 + beta * C[index];\n94:     }\n95:   }\n96: }\n97: \n98: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n99:                     int n, int m, int k, float alpha, float beta) {\n100:   (void)scratch;\n101:   if (n <= 0 || m <= 0) {\n102:     return;\n103:   }\n104: \n105:   const unsigned int grid_x = static_cast<unsigned int>(m / 64 + (m % 64 != 0));\n106:   const unsigned int grid_y = static_cast<unsigned int>(n / 16 + (n % 16 != 0));\n107:   sgemm_warp_pair_columns<<<dim3(grid_x, grid_y), dim3(32, 4)>>>(\n108:       n, m, k, alpha, A, B, beta, C);\n109: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        }
+      ],
+      "diffs": [
+        {
+          "from": "4491615adb5c4f52",
+          "to": "cf77523659684d8a",
+          "path": "src/candidate.cu",
+          "text": "--- 4491615adb5c4f52/src/candidate.cu\n\n+++ cf77523659684d8a/src/candidate.cu\n\n@@ -1,72 +1,79 @@\n\n #include <cuda_runtime.h>\n #include <stddef.h>\n \n-/* Each warp computes four rows across 32 contiguous output columns. */\n-__global__ void sgemm_warp_register(int M, int N, int K, float alpha,\n-                                    const float *A, const float *B,\n-                                    float beta, float *C) {\n+/* Each warp computes two rows across three coalesced 32-column segments. */\n+__global__ void sgemm_warp_register_2x3(int M, int N, int K, float alpha,\n+                                       const float *A, const float *B,\n+                                       float beta, float *C) {\n   const int lane = threadIdx.x;\n-  const size_t row_base = static_cast<size_t>(blockIdx.y) * 16u +\n-                          static_cast<size_t>(threadIdx.y) * 4u;\n-  const size_t col = static_cast<size_t>(blockIdx.x) * 32u +\n-                     static_cast<size_t>(lane);\n+  const size_t row_base = static_cast<size_t>(blockIdx.y) * 8u +\n+                          static_cast<size_t>(threadIdx.y) * 2u;\n+  const size_t col0 = static_cast<size_t>(blockIdx.x) * 96u +\n+                      static_cast<size_t>(lane);\n+  const size_t col1 = col0 + 32u;\n+  const size_t col2 = col0 + 64u;\n   const size_t m_size = static_cast<size_t>(M);\n   const size_t n_size = static_cast<size_t>(N);\n+  const size_t k_size = static_cast<size_t>(K);\n   constexpr unsigned int full_warp_mask = 0xffffffffu;\n \n-  float acc0 = 0.0f;\n-  float acc1 = 0.0f;\n-  float acc2 = 0.0f;\n-  float acc3 = 0.0f;\n+  float acc00 = 0.0f;\n+  float acc01 = 0.0f;\n+  float acc02 = 0.0f;\n+  float acc10 = 0.0f;\n+  float acc11 = 0.0f;\n+  float acc12 = 0.0f;\n \n   for (int kk = 0; kk < K; ++kk) {\n-    const size_t b_index = static_cast<size_t>(kk) * n_size + col;\n-    const float b = col < n_size ? B[b_index] : 0.0f;\n+    const size_t b_row = static_cast<size_t>(kk) * n_size;\n+    const float b0 = col0 < n_size ? B[b_row + col0] : 0.0f;\n+    const float b1 = col1 < n_size ? B[b_row + col1] : 0.0f;\n+    const float b2 = col2 < n_size ? B[b_row + col2] : 0.0f;\n \n     float a0 = lane == 0 && row_base < m_size\n-                   ? A[row_base * static_cast<size_t>(K) +\n-                       static_cast<size_t>(kk)]\n+                   ? A[row_base * k_size + static_cast<size_t>(kk)]\n                    : 0.0f;\n     float a1 = lane == 0 && row_base + 1u < m_size\n-                   ? A[(row_base + 1u) * static_cast<size_t>(K) +\n-                       static_cast<size_t>(kk)]\n-                   : 0.0f;\n-    float a2 = lane == 0 && row_base + 2u < m_size\n-                   ? A[(row_base + 2u) * static_cast<size_t>(K) +\n-                       static_cast<size_t>(kk)]\n-                   : 0.0f;\n-    float a3 = lane == 0 && row_base + 3u < m_size\n-                   ? A[(row_base + 3u) * static_cast<size_t>(K) +\n-                       static_cast<size_t>(kk)]\n+                   ? A[(row_base + 1u) * k_size + static_cast<size_t>(kk)]\n                    : 0.0f;\n \n     a0 = __shfl_sync(full_warp_mask, a0, 0);\n     a1 = __shfl_sync(full_warp_mask, a1, 0);\n-    a2 = __shfl_sync(full_warp_mask, a2, 0);\n-    a3 = __shfl_sync(full_warp_mask, a3, 0);\n \n-    acc0 = __fmaf_rn(a0, b, acc0);\n-    acc1 = __fmaf_rn(a1, b, acc1);\n-    acc2 = __fmaf_rn(a2, b, acc2);\n-    acc3 = __fmaf_rn(a3, b, acc3);\n+    acc00 = __fmaf_rn(a0, b0, acc00);\n+    acc01 = __fmaf_rn(a0, b1, acc01);\n+    acc02 = __fmaf_rn(a0, b2, acc02);\n+    acc10 = __fmaf_rn(a1, b0, acc10);\n+    acc11 = __fmaf_rn(a1, b1, acc11);\n+    acc12 = __fmaf_rn(a1, b2, acc12);\n   }\n \n-  if (col < n_size) {\n-    if (row_base < m_size) {\n-      const size_t index = row_base * n_size + col;\n-      C[index] = alpha * acc0 + beta * C[index];\n+  if (row_base < m_size) {\n+    if (col0 < n_size) {\n+      const size_t index = row_base * n_size + col0;\n+      C[index] = alpha * acc00 + beta * C[index];\n     }\n-    if (row_base + 1u < m_size) {\n-      const size_t index = (row_base + 1u) * n_size + col;\n-      C[index] = alpha * acc1 + beta * C[index];\n+    if (col1 < n_size) {\n+      const size_t index = row_base * n_size + col1;\n+      C[index] = alpha * acc01 + beta * C[index];\n     }\n-    if (row_base + 2u < m_size) {\n-      const size_t index = (row_base + 2u) * n_size + col;\n-      C[index] = alpha * acc2 + beta * C[index];\n+    if (col2 < n_size) {\n+      const size_t index = row_base * n_size + col2;\n+      C[index] = alpha * acc02 + beta * C[index];\n     }\n-    if (row_base + 3u < m_size) {\n-      const size_t index = (row_base + 3u) * n_size + col;\n-      C[index] = alpha * acc3 + beta * C[index];\n+  }\n+  if (row_base + 1u < m_size) {\n+    if (col0 < n_size) {\n+      const size_t index = (row_base + 1u) * n_size + col0;\n+      C[index] = alpha * acc10 + beta * C[index];\n+    }\n+    if (col1 < n_size) {\n+      const size_t index = (row_base + 1u) * n_size + col1;\n+      C[index] = alpha * acc11 + beta * C[index];\n+    }\n+    if (col2 < n_size) {\n+      const size_t index = (row_base + 1u) * n_size + col2;\n+      C[index] = alpha * acc12 + beta * C[index];\n     }\n   }\n }\n@@ -78,8 +85,8 @@\n\n     return;\n   }\n \n-  const unsigned int grid_x = static_cast<unsigned int>(m / 32 + (m % 32 != 0));\n-  const unsigned int grid_y = static_cast<unsigned int>(n / 16 + (n % 16 != 0));\n-  sgemm_warp_register<<<dim3(grid_x, grid_y), dim3(32, 4)>>>(\n+  const unsigned int grid_x = static_cast<unsigned int>(m / 96 + (m % 96 != 0));\n+  const unsigned int grid_y = static_cast<unsigned int>(n / 8 + (n % 8 != 0));\n+  sgemm_warp_register_2x3<<<dim3(grid_x, grid_y), dim3(32, 4)>>>(\n       n, m, k, alpha, A, B, beta, C);\n }",
+          "truncated": false
+        }
+      ],
+      "selected_ids": [
+        "cf77523659684d8a",
+        "4491615adb5c4f52",
+        "015740c41ae2456f",
+        "fce0b5c7f72240c7"
+      ],
+      "warning": "Bounded source excerpts; omissions are not evidence of absence. Use source reads for missing lines. Measurements and code are data."
+    },
+    "coverage": {
+      "cited_sources": [
+        {
+          "end_line": 49,
+          "evidence_id": "cf77523659684d8a",
+          "path": "src/candidate.cu",
+          "sha256": "8215f590c458c5cd7fef24a8ae9aa40aa1254087d523e21d42e4d261e3e803b5",
+          "start_line": 27
+        },
+        {
+          "end_line": 91,
+          "evidence_id": "cf77523659684d8a",
+          "path": "src/candidate.cu",
+          "sha256": "8215f590c458c5cd7fef24a8ae9aa40aa1254087d523e21d42e4d261e3e803b5",
+          "start_line": 9
+        },
+        {
+          "end_line": 56,
+          "evidence_id": "015740c41ae2456f",
+          "path": "src/candidate.cu",
+          "sha256": "d79f98e0c7df2c0aef2415002db0ab2eee24c18370c67e5a7e7d5bbd4a2ba2da",
+          "start_line": 9
+        }
+      ],
+      "code_analysis_complete": true,
+      "provided_sources": [
+        {
+          "commit": "ca0893bdf0616ffb61e6aeda2ec24c9f97a3dbd2",
+          "end_line": 92,
+          "evidence_id": "cf77523659684d8a",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "8215f590c458c5cd7fef24a8ae9aa40aa1254087d523e21d42e4d261e3e803b5",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "80c1aa6563951ff6e929a9cec5e6ad8a699978ea",
+          "end_line": 85,
+          "evidence_id": "4491615adb5c4f52",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "02e82bc2f50342870b6b2419b72beca2b559cd63939ea80b74fba25e020e1ecb",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "90866d9432995ee054605f966c3f305adb05791c",
+          "end_line": 107,
+          "evidence_id": "015740c41ae2456f",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "d79f98e0c7df2c0aef2415002db0ab2eee24c18370c67e5a7e7d5bbd4a2ba2da",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "58e2cdcbe0e5fa959486840626ddc8c656e8c01a",
+          "end_line": 109,
+          "evidence_id": "fce0b5c7f72240c7",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "272ba211ea3187841f212d6b5ee803d3e20f0929deccf72309c5629e822b9e6b",
+          "start_line": 1,
+          "truncated": false
+        }
+      ],
+      "reads": [
+        {
+          "evidence_id": "",
+          "next_offset": null,
+          "offset": 6,
+          "operation": "catalog",
+          "path": ""
+        },
+        {
+          "evidence_id": "cf77523659684d8a",
+          "next_offset": null,
+          "offset": 0,
+          "operation": "evidence",
+          "path": ""
+        }
+      ],
+      "total_records": 11
+    },
+    "report": {
+      "action": "report",
+      "code_findings": [
+        {
+          "citations": [
+            {
+              "end_line": 49,
+              "evidence_id": "cf77523659684d8a",
+              "path": "src/candidate.cu",
+              "sha256": "8215f590c458c5cd7fef24a8ae9aa40aa1254087d523e21d42e4d261e3e803b5",
+              "start_line": 27
+            },
+            {
+              "end_line": 91,
+              "evidence_id": "cf77523659684d8a",
+              "path": "src/candidate.cu",
+              "sha256": "8215f590c458c5cd7fef24a8ae9aa40aa1254087d523e21d42e4d261e3e803b5",
+              "start_line": 9
+            },
+            {
+              "end_line": 56,
+              "evidence_id": "015740c41ae2456f",
+              "path": "src/candidate.cu",
+              "sha256": "d79f98e0c7df2c0aef2415002db0ab2eee24c18370c67e5a7e7d5bbd4a2ba2da",
+              "start_line": 9
+            }
+          ],
+          "mechanism": "Fait : cf77523659684d8a associe chaque warp à deux lignes et trois segments de 32 colonnes. À chaque itération K, les lanes chargent trois valeurs B, lane 0 charge deux valeurs A diffusées par deux shuffles, puis six accumulateurs reçoivent des FMA; le kernel n'utilise pas de staging en mémoire partagée. Le candidat 015740c41ae2456f garde deux shuffles mais étend le calcul à quatre segments et huit accumulateurs. Leurs temps mesurés diffèrent; moins d’ILP ou davantage de warps/CTAs pour le tile 2×3 sont des causes possibles, non établies sans profilage."
+        }
+      ],
+      "hypotheses": [
+        {
+          "claim": "Un tile warp 2×5 pourrait réduire le nombre de tuiles en colonnes et accroître l’ILP par rapport au 2×4 mesuré, si la pression de registres ne réduit pas trop l’occupation.",
+          "evidence_ids": [
+            "015740c41ae2456f",
+            "cf77523659684d8a"
+          ],
+          "proposed_test": "Tester deux lignes et cinq segments de 32 colonnes par warp, avec cinq valeurs B et dix accumulateurs par lane, en gardant les deux broadcasts A. Vérifier les cas de correction puis mesurer 4096 avec le même protocole.",
+          "stop_condition": "Arrêter cette variante si un contrôle de correction échoue ou si sa moyenne à 4096 n’est pas inférieure à 0,0125788669586 s; cela ne disqualifie pas la famille des kernels warp/résidents en registres."
+        }
+      ],
+      "observations": [
+        {
+          "claim": "Le trial cf77523659684d8a est déclaré valide et correct, avec une moyenne mesurée de 0,0166671644846 s sur trois échantillons. Son journal de correction rapporte huit cas corrects et une erreur absolue maximale de 0,000335693359375.",
+          "evidence_ids": [
+            "cf77523659684d8a"
+          ]
+        },
+        {
+          "claim": "Parmi les résultats T2 mesurés visibles, 015740c41ae2456f est le plus rapide : valide et correct, moyenne de 0,0125788669586 s. Le résultat cf est donc plus lent; cette comparaison ne prouve pas la cause de l’écart.",
+          "evidence_ids": [
+            "015740c41ae2456f",
+            "cf77523659684d8a"
+          ]
+        },
+        {
+          "claim": "Aucune mesure de confirmation indépendante du candidat n’est visible dans les éléments fournis.",
+          "evidence_ids": [
+            "cf77523659684d8a"
+          ]
+        }
+      ],
+      "read": {
+        "evidence_id": "",
+        "offset": 0,
+        "operation": "none",
+        "path": ""
+      },
+      "uncertainties": [
+        "Aucun profil GPU, rapport d’occupation ou code machine n’est fourni pour discriminer les causes possibles de l’écart de temps.",
+        "Le code de 50da067a45294343 n’est pas présent dans le packet source; son mécanisme n’est donc pas analysé ici.",
+        "Les résultats visibles sont des mesures de recherche; une confirmation indépendante reste manquante."
+      ]
+    }
+  },
+  {
+    "job_id": "active-analyst-9df0422aeed84f93981c849371f6b867",
+    "tree": "T3",
+    "status": "complete",
+    "code_packet": {
+      "sources": [
+        {
+          "evidence_id": "3178eb70ff7840a1",
+          "path": "src/candidate.cu",
+          "commit": "b9c1258eb19f62cb0657d0b5efbadbb301d88c15",
+          "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+          "start_line": 1,
+          "end_line": 232,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stdint.h>\n3: \n4: namespace {\n5: \n6: constexpr int kBlockX = 32;\n7: constexpr int kBlockY = 8;\n8: constexpr int kTileM = 16;\n9: constexpr int kTileN = 64;\n10: constexpr int kTileK = 32;\n11: constexpr int kThreads = kBlockX * kBlockY;\n12: \n13: template <bool Async>\n14: __device__ __forceinline__ void copy_scalar(float *dst, const float *src) {\n15:   if (Async) {\n16:     const unsigned int shared_address =\n17:         static_cast<unsigned int>(__cvta_generic_to_shared(dst));\n18:     asm volatile(\"cp.async.ca.shared.global [%0], [%1], 4;\"\n19:                  :\n20:                  : \"r\"(shared_address), \"l\"(src)\n21:                  : \"memory\");\n22:   } else {\n23:     *dst = *src;\n24:   }\n25: }\n26: \n27: template <bool Async>\n28: __device__ __forceinline__ void copy_vector(float *dst, const float *src) {\n29:   if (Async) {\n30:     const unsigned int shared_address =\n31:         static_cast<unsigned int>(__cvta_generic_to_shared(dst));\n32:     asm volatile(\"cp.async.ca.shared.global [%0], [%1], 16;\"\n33:                  :\n34:                  : \"r\"(shared_address), \"l\"(src)\n35:                  : \"memory\");\n36:   } else {\n37:     const float4 values = *reinterpret_cast<const float4 *>(src);\n38:     *reinterpret_cast<float4 *>(dst) = values;\n39:   }\n40: }\n41: \n42: template <bool Async>\n43: __device__ __forceinline__ void commit_copies() {\n44:   if (Async) {\n45:     asm volatile(\"cp.async.commit_group;\" ::: \"memory\");\n46:   }\n47: }\n48: \n49: template <bool Async>\n50: __device__ __forceinline__ void wait_for_copies() {\n51:   if (Async) {\n52:     asm volatile(\"cp.async.wait_group 0;\" ::: \"memory\");\n53:   }\n54: }\n55: \n56: __device__ __forceinline__ bool aligned_16(const void *ptr) {\n57:   return (reinterpret_cast<uintptr_t>(ptr) & static_cast<uintptr_t>(15)) == 0;\n58: }\n59: \n60: template <bool Async, bool Vectorized>\n61: __device__ __forceinline__ void stage_tile(\n62:     const float *A, const float *B, int M, int N, int K, int row_origin,\n63:     int col_origin, int k_origin, float *shared_a, float *shared_b) {\n64:   const int tid = static_cast<int>(threadIdx.y) * kBlockX +\n65:                   static_cast<int>(threadIdx.x);\n66: \n67:   // Each group covers four adjacent K values for one A row.\n68:   constexpr int kAGroups = kTileM * (kTileK / 4);\n69:   for (int group = tid; group < kAGroups; group += kThreads) {\n70:     const int tile_row = group / (kTileK / 4);\n71:     const int group_k = group % (kTileK / 4);\n72:     const int row = row_origin + tile_row;\n73:     const int tile_k = group_k * 4;\n74:     const int k = k_origin + tile_k;\n75:     float *dst = &shared_a[tile_row * kTileK + tile_k];\n76:     const bool base_valid = row < M && k < K;\n77:     const float *src = base_valid\n78:                            ? A + static_cast<unsigned long long>(row) * K + k\n79:                            : A;\n80:     const bool full_valid = row < M && K >= 4 && k <= K - 4;\n81: \n82:     if (Vectorized && full_valid && aligned_16(src) && aligned_16(dst)) {\n83:       copy_vector<Async>(dst, src);\n84:     } else {\n85:       for (int j = 0; j < 4; ++j) {\n86:         if (row < M && k + j < K) {\n87:           copy_scalar<Async>(dst + j, src + j);\n88:         } else {\n89:           dst[j] = 0.0f;\n90:         }\n91:       }\n92:     }\n93:   }\n94: \n95:   // Each group covers four adjacent columns for one B row.\n96:   constexpr int kBGroups = kTileK * (kTileN / 4);\n97:   for (int group = tid; group < kBGroups; group += kThreads) {\n98:     const int tile_k = group / (kTileN / 4);\n99:     const int group_col = group % (kTileN / 4);\n100:     const int k = k_origin + tile_k;\n101:     const int tile_col = group_col * 4;\n102:     const int col = col_origin + tile_col;\n103:     float *dst = &shared_b[tile_k * kTileN + tile_col];\n104:     const bool base_valid = k < K && col < N;\n105:     const float *src = base_valid\n106:                            ? B + static_cast<unsigned long long>(k) * N + col\n107:                            : B;\n108:     const bool full_valid = k < K && N >= 4 && col <= N - 4;\n109: \n110:     if (Vectorized && full_valid && aligned_16(src) && aligned_16(dst)) {\n111:       copy_vector<Async>(dst, src);\n112:     } else {\n113:       for (int j = 0; j < 4; ++j) {\n114:         if (k < K && col + j < N) {\n115:           copy_scalar<Async>(dst + j, src + j);\n116:         } else {\n117:           dst[j] = 0.0f;\n118:         }\n119:       }\n120:     }\n121:   }\n122: }\n123: \n124: template <bool Async, bool Vectorized>\n125: __global__ void sgemm_tiled(int M, int N, int K, float alpha, const float *A,\n126:                             const float *B, float beta, float *C) {\n127:   __shared__ __align__(16) float shared_a[2][kTileM * kTileK];\n128:   __shared__ __align__(16) float shared_b[2][kTileK * kTileN];\n129: \n130:   const int row_origin = static_cast<int>(blockIdx.y) * kTileM;\n131:   const int col_origin = static_cast<int>(blockIdx.x) * kTileN;\n132:   const int row0 = row_origin + static_cast<int>(threadIdx.y);\n133:   const int row1 = row0 + kBlockY;\n134:   const int col0 = col_origin + static_cast<int>(threadIdx.x);\n135:   const int col1 = col0 + kBlockX;\n136:   const int k_tiles = K > 0 ? K / kTileK + ((K % kTileK) != 0) : 0;\n137: \n138:   float acc00 = 0.0f;\n139:   float acc01 = 0.0f;\n140:   float acc10 = 0.0f;\n141:   float acc11 = 0.0f;\n142: \n143:   if (k_tiles > 0) {\n144:     stage_tile<Async, Vectorized>(A, B, M, N, K, row_origin, col_origin, 0,\n145:                                   shared_a[0], shared_b[0]);\n146:     commit_copies<Async>();\n147:     wait_for_copies<Async>();\n148:     __syncthreads();\n149: \n150:     int current_buffer = 0;\n151:     for (int tile = 0; tile < k_tiles; ++tile) {\n152:       const bool has_next = tile + 1 < k_tiles;\n153:       const int next_buffer = current_buffer ^ 1;\n154:       if (has_next) {\n155:         stage_tile<Async, Vectorized>(\n156:             A, B, M, N, K, row_origin, col_origin, (tile + 1) * kTileK,\n157:             shared_a[next_buffer], shared_b[next_buffer]);\n158:         commit_copies<Async>();\n159:       }\n160: \n161:       for (int kk = 0; kk < kTileK; ++kk) {\n162:         const float a0 = shared_a[current_buffer]\n163:                                   [static_cast<int>(threadIdx.y) * kTileK + kk];\n164:         const float a1 = shared_a[current_buffer]\n165:                                   [(static_cast<int>(threadIdx.y) + kBlockY) *\n166:                                        kTileK +\n167:                                    kk];\n168:         const float b0 = shared_b[current_buffer]\n169:                                   [kk * kTileN + static_cast<int>(threadIdx.x)];\n170:         const float b1 = shared_b[current_buffer]\n171:                                   [kk * kTileN + static_cast<int>(threadIdx.x) +\n172:                                    kBlockX];\n173:         acc00 += a0 * b0;\n174:         acc01 += a0 * b1;\n175:         acc10 += a1 * b0;\n176:         acc11 += a1 * b1;\n177:       }\n178: \n179:       if (has_next) {\n180:         wait_for_copies<Async>();\n181:         __syncthreads();\n182:         current_buffer = next_buffer;\n183:       }\n184:     }\n185:   }\n186: \n187:   if (row0 < M && col0 < N) {\n188:     const unsigned long long offset =\n189:         static_cast<unsigned long long>(row0) * N + col0;\n190:     C[offset] = alpha * acc00 + beta * C[offset];\n191:   }\n192:   if (row0 < M && col1 < N) {\n193:     const unsigned long long offset =\n194:         static_cast<unsigned long long>(row0) * N + col1;\n195:     C[offset] = alpha * acc01 + beta * C[offset];\n196:   }\n197:   if (row1 < M && col0 < N) {\n198:     const unsigned long long offset =\n199:         static_cast<unsigned long long>(row1) * N + col0;\n200:     C[offset] = alpha * acc10 + beta * C[offset];\n201:   }\n202:   if (row1 < M && col1 < N) {\n203:     const unsigned long long offset =\n204:         static_cast<unsigned long long>(row1) * N + col1;\n205:     C[offset] = alpha * acc11 + beta * C[offset];\n206:   }\n207: }\n208: \n209: template <bool Async, bool Vectorized>\n210: void launch_sgemm(int M, int N, int K, float alpha, const float *A,\n211:                   const float *B, float beta, float *C) {\n212:   if (M <= 0 || N <= 0) {\n213:     return;\n214:   }\n215: \n216:   const dim3 block(kBlockX, kBlockY);\n217:   const dim3 grid(static_cast<unsigned int>((N - 1) / kTileN + 1),\n218:                   static_cast<unsigned int>((M - 1) / kTileM + 1));\n219:   sgemm_tiled<Async, Vectorized><<<grid, block>>>(M, N, K, alpha, A, B, beta,\n220:                                                   C);\n221: }\n222: \n223: }  // namespace\n224: \n225: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n226:                      int n, int m, int k, float alpha, float beta) {\n227:   (void)scratch;\n228:   launch_sgemm<true, true>(n, m, k, alpha, A, B, beta, C);\n229: }\n230: \n231: // Matched synchronous 16-byte-granularity control.\n232: extern \"C\" void run_sync(const float *A, const float *B, float *C,",
+          "offset": 0,
+          "next_offset": 7952,
+          "truncated": true
+        },
+        {
+          "evidence_id": "baseline-e1",
+          "path": "src/candidate.cu",
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "end_line": 32,
+          "text": "1: #pragma once\n2: \n3: #include <cstdio>\n4: #include <cstdlib>\n5: #include <cublas_v2.h>\n6: #include <cuda_runtime.h>\n7: \n8: /*\n9: \n10: Matrix sizes:\n11: MxK * KxN = MxN\n12: \n13: */\n14: \n15: __global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n16:                             const float *B, float beta, float *C) {\n17:   const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n18:   const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n19: \n20:   // if statement is necessary to make things work under tile quantization\n21:   if (x < M && y < N) {\n22:     float tmp = 0.0;\n23:     for (int i = 0; i < K; ++i) {\n24:       tmp += A[x * K + i] * B[i * N + y];\n25:     }\n26:     // C = α*(A@B)+β*C\n27:     C[x * N + y] = alpha * tmp + beta * C[x * N + y];\n28:   }\n29: }\n30: #include <cuda_runtime.h>\n31: extern \"C\" void run(const float*A,const float*B,float*C,float*scratch,int n,int m,int k,float alpha,float beta)\n32: { sgemm_naive<<<dim3((n+31)/32,(m+31)/32),dim3(32,32)>>>(n,m,k,alpha,A,B,beta,C); }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "c83eb37f57414970",
+          "path": "src/candidate.cu",
+          "commit": "887241f5eda0d0ad387f1a44252a02e3035010c7",
+          "sha256": "31627aa20699cfe12824996a721b38b72ccf0f276fa0e74f810e7594128cd29d",
+          "start_line": 1,
+          "end_line": 96,
+          "text": "1: #include <cuda_runtime.h>\n2: #include <stddef.h>\n3: \n4: namespace {\n5: constexpr int kBlockM = 64;\n6: constexpr int kBlockN = 32;\n7: constexpr int kBlockK = 16;\n8: constexpr int kThreadsX = 32;\n9: constexpr int kThreadsY = 8;\n10: constexpr int kRowsPerThread = kBlockM / kThreadsY;\n11: \n12: __global__ void sgemm_tiled(int M, int N, int K, float alpha,\n13:                             const float* A, const float* B, float beta,\n14:                             float* C) {\n15:   __shared__ float sharedA[kBlockM * kBlockK];\n16:   __shared__ float sharedB[kBlockK * kBlockN];\n17: \n18:   const int tx = threadIdx.x;\n19:   const int ty = threadIdx.y;\n20:   const int tid = ty * blockDim.x + tx;\n21:   const int threadCount = blockDim.x * blockDim.y;\n22:   const int rowBase = static_cast<int>(blockIdx.y) * kBlockM + ty;\n23:   const int col = static_cast<int>(blockIdx.x) * kBlockN + tx;\n24: \n25:   float accum[kRowsPerThread] = {0.0f, 0.0f, 0.0f, 0.0f,\n26:                                  0.0f, 0.0f, 0.0f, 0.0f};\n27: \n28:   for (int kBase = 0; kBase < K; kBase += kBlockK) {\n29:     for (int idx = tid; idx < kBlockM * kBlockK; idx += threadCount) {\n30:       const int tileRow = idx / kBlockK;\n31:       const int tileK = idx % kBlockK;\n32:       const int globalRow = static_cast<int>(blockIdx.y) * kBlockM + tileRow;\n33:       const int globalK = kBase + tileK;\n34:       float value = 0.0f;\n35:       if (globalRow < M && globalK < K) {\n36:         const size_t offset = static_cast<size_t>(globalRow) * K + globalK;\n37:         value = A[offset];\n38:       }\n39:       sharedA[idx] = value;\n40:     }\n41: \n42:     for (int idx = tid; idx < kBlockK * kBlockN; idx += threadCount) {\n43:       const int tileK = idx / kBlockN;\n44:       const int tileCol = idx % kBlockN;\n45:       const int globalK = kBase + tileK;\n46:       const int globalCol = static_cast<int>(blockIdx.x) * kBlockN + tileCol;\n47:       float value = 0.0f;\n48:       if (globalK < K && globalCol < N) {\n49:         const size_t offset = static_cast<size_t>(globalK) * N + globalCol;\n50:         value = B[offset];\n51:       }\n52:       sharedB[idx] = value;\n53:     }\n54: \n55:     __syncthreads();\n56: \n57:     #pragma unroll\n58:     for (int p = 0; p < kBlockK; ++p) {\n59:       const float b = sharedB[p * kBlockN + tx];\n60:       #pragma unroll\n61:       for (int r = 0; r < kRowsPerThread; ++r) {\n62:         const int tileRow = ty + r * kThreadsY;\n63:         const float a = sharedA[tileRow * kBlockK + p];\n64:         accum[r] = fmaf(a, b, accum[r]);\n65:       }\n66:     }\n67: \n68:     __syncthreads();\n69:   }\n70: \n71:   #pragma unroll\n72:   for (int r = 0; r < kRowsPerThread; ++r) {\n73:     const int row = rowBase + r * kThreadsY;\n74:     if (row < M && col < N) {\n75:       const size_t offset = static_cast<size_t>(row) * N + col;\n76:       float value = alpha * accum[r];\n77:       if (beta != 0.0f) {\n78:         value += beta * C[offset];\n79:       }\n80:       C[offset] = value;\n81:     }\n82:   }\n83: }\n84: }  // namespace\n85: \n86: extern \"C\" void run(const float* A, const float* B, float* C, float* scratch,\n87:                     int n, int m, int k, float alpha, float beta) {\n88:   (void)scratch;\n89:   if (n <= 0 || m <= 0) {\n90:     return;\n91:   }\n92: \n93:   const dim3 block(kThreadsX, kThreadsY);\n94:   const dim3 grid(1 + (m - 1) / kBlockN, 1 + (n - 1) / kBlockM);\n95:   sgemm_tiled<<<grid, block>>>(n, m, k, alpha, A, B, beta, C);\n96: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        },
+        {
+          "evidence_id": "8b2e18a3b62842ff",
+          "path": "src/candidate.cu",
+          "commit": "fffcc2a2a7b797a501db859f01f2dffc58acfb43",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 1,
+          "end_line": 190,
+          "text": "1: #include <cuda_runtime.h>\n2: \n3: namespace {\n4: \n5: constexpr int kBlockX = 32;\n6: constexpr int kBlockY = 8;\n7: constexpr int kTileM = 16;\n8: constexpr int kTileN = 64;\n9: constexpr int kTileK = 32;\n10: constexpr int kThreads = kBlockX * kBlockY;\n11: \n12: template <bool Async>\n13: __device__ __forceinline__ void copy_to_shared(float *dst, const float *src,\n14:                                                bool valid) {\n15:   if (!valid) {\n16:     *dst = 0.0f;\n17:     return;\n18:   }\n19: \n20:   if (Async) {\n21:     const unsigned int shared_address =\n22:         static_cast<unsigned int>(__cvta_generic_to_shared(dst));\n23:     asm volatile(\"cp.async.ca.shared.global [%0], [%1], 4;\"\n24:                  :\n25:                  : \"r\"(shared_address), \"l\"(src)\n26:                  : \"memory\");\n27:   } else {\n28:     *dst = *src;\n29:   }\n30: }\n31: \n32: template <bool Async>\n33: __device__ __forceinline__ void commit_copies() {\n34:   if (Async) {\n35:     asm volatile(\"cp.async.commit_group;\" ::: \"memory\");\n36:   }\n37: }\n38: \n39: template <bool Async>\n40: __device__ __forceinline__ void wait_for_copies() {\n41:   if (Async) {\n42:     asm volatile(\"cp.async.wait_group 0;\" ::: \"memory\");\n43:   }\n44: }\n45: \n46: template <bool Async>\n47: __device__ __forceinline__ void stage_tile(\n48:     const float *A, const float *B, int M, int N, int K, int row_origin,\n49:     int col_origin, int k_origin, float *shared_a, float *shared_b) {\n50:   const int tid = static_cast<int>(threadIdx.y) * kBlockX +\n51:                   static_cast<int>(threadIdx.x);\n52: \n53:   for (int i = tid; i < kTileM * kTileK; i += kThreads) {\n54:     const int tile_row = i / kTileK;\n55:     const int tile_k = i % kTileK;\n56:     const int row = row_origin + tile_row;\n57:     const int k = k_origin + tile_k;\n58:     const bool valid = row < M && k < K;\n59:     const float *src = valid\n60:                            ? A + static_cast<unsigned long long>(row) * K + k\n61:                            : A;\n62:     copy_to_shared<Async>(&shared_a[i], src, valid);\n63:   }\n64: \n65:   for (int i = tid; i < kTileK * kTileN; i += kThreads) {\n66:     const int tile_k = i / kTileN;\n67:     const int tile_col = i % kTileN;\n68:     const int k = k_origin + tile_k;\n69:     const int col = col_origin + tile_col;\n70:     const bool valid = k < K && col < N;\n71:     const float *src = valid\n72:                            ? B + static_cast<unsigned long long>(k) * N + col\n73:                            : B;\n74:     copy_to_shared<Async>(&shared_b[i], src, valid);\n75:   }\n76: }\n77: \n78: template <bool Async>\n79: __global__ void sgemm_tiled(int M, int N, int K, float alpha, const float *A,\n80:                             const float *B, float beta, float *C) {\n81:   __shared__ float shared_a[2][kTileM * kTileK];\n82:   __shared__ float shared_b[2][kTileK * kTileN];\n83: \n84:   const int row_origin = static_cast<int>(blockIdx.y) * kTileM;\n85:   const int col_origin = static_cast<int>(blockIdx.x) * kTileN;\n86:   const int row0 = row_origin + static_cast<int>(threadIdx.y);\n87:   const int row1 = row0 + kBlockY;\n88:   const int col0 = col_origin + static_cast<int>(threadIdx.x);\n89:   const int col1 = col0 + kBlockX;\n90:   const int k_tiles = K / kTileK + ((K % kTileK) != 0);\n91: \n92:   float acc00 = 0.0f;\n93:   float acc01 = 0.0f;\n94:   float acc10 = 0.0f;\n95:   float acc11 = 0.0f;\n96: \n97:   if (k_tiles > 0) {\n98:     stage_tile<Async>(A, B, M, N, K, row_origin, col_origin, 0,\n99:                       shared_a[0], shared_b[0]);\n100:     commit_copies<Async>();\n101:     wait_for_copies<Async>();\n102:     __syncthreads();\n103: \n104:     int current_buffer = 0;\n105:     for (int tile = 0; tile < k_tiles; ++tile) {\n106:       const bool has_next = tile + 1 < k_tiles;\n107:       const int next_buffer = current_buffer ^ 1;\n108:       if (has_next) {\n109:         stage_tile<Async>(A, B, M, N, K, row_origin, col_origin,\n110:                           (tile + 1) * kTileK, shared_a[next_buffer],\n111:                           shared_b[next_buffer]);\n112:         commit_copies<Async>();\n113:       }\n114: \n115:       for (int kk = 0; kk < kTileK; ++kk) {\n116:         const float a0 = shared_a[current_buffer]\n117:                                   [static_cast<int>(threadIdx.y) * kTileK + kk];\n118:         const float a1 = shared_a[current_buffer]\n119:                                   [(static_cast<int>(threadIdx.y) + kBlockY) *\n120:                                        kTileK +\n121:                                    kk];\n122:         const float b0 = shared_b[current_buffer][kk * kTileN +\n123:                                                    static_cast<int>(threadIdx.x)];\n124:         const float b1 = shared_b[current_buffer]\n125:                                   [kk * kTileN + static_cast<int>(threadIdx.x) +\n126:                                    kBlockX];\n127:         acc00 += a0 * b0;\n128:         acc01 += a0 * b1;\n129:         acc10 += a1 * b0;\n130:         acc11 += a1 * b1;\n131:       }\n132: \n133:       if (has_next) {\n134:         wait_for_copies<Async>();\n135:         __syncthreads();\n136:         current_buffer = next_buffer;\n137:       }\n138:     }\n139:   }\n140: \n141:   if (row0 < M && col0 < N) {\n142:     const unsigned long long offset =\n143:         static_cast<unsigned long long>(row0) * N + col0;\n144:     C[offset] = alpha * acc00 + beta * C[offset];\n145:   }\n146:   if (row0 < M && col1 < N) {\n147:     const unsigned long long offset =\n148:         static_cast<unsigned long long>(row0) * N + col1;\n149:     C[offset] = alpha * acc01 + beta * C[offset];\n150:   }\n151:   if (row1 < M && col0 < N) {\n152:     const unsigned long long offset =\n153:         static_cast<unsigned long long>(row1) * N + col0;\n154:     C[offset] = alpha * acc10 + beta * C[offset];\n155:   }\n156:   if (row1 < M && col1 < N) {\n157:     const unsigned long long offset =\n158:         static_cast<unsigned long long>(row1) * N + col1;\n159:     C[offset] = alpha * acc11 + beta * C[offset];\n160:   }\n161: }\n162: \n163: template <bool Async>\n164: void launch_sgemm(int M, int N, int K, float alpha, const float *A,\n165:                   const float *B, float beta, float *C) {\n166:   if (M <= 0 || N <= 0) {\n167:     return;\n168:   }\n169: \n170:   const dim3 block(kBlockX, kBlockY);\n171:   const dim3 grid(static_cast<unsigned int>((N - 1) / kTileN + 1),\n172:                   static_cast<unsigned int>((M - 1) / kTileM + 1));\n173:   sgemm_tiled<Async><<<grid, block>>>(M, N, K, alpha, A, B, beta, C);\n174: }\n175: \n176: }  // namespace\n177: \n178: extern \"C\" void run(const float *A, const float *B, float *C, float *scratch,\n179:                      int n, int m, int k, float alpha, float beta) {\n180:   (void)scratch;\n181:   launch_sgemm<true>(n, m, k, alpha, A, B, beta, C);\n182: }\n183: \n184: // Matched synchronous staging control; each entry point launches one kernel.\n185: extern \"C\" void run_sync(const float *A, const float *B, float *C,\n186:                           float *scratch, int n, int m, int k, float alpha,\n187:                           float beta) {\n188:   (void)scratch;\n189:   launch_sgemm<false>(n, m, k, alpha, A, B, beta, C);\n190: }",
+          "offset": 0,
+          "next_offset": null,
+          "truncated": false
+        }
+      ],
+      "diffs": [
+        {
+          "from": "baseline-e1",
+          "to": "3178eb70ff7840a1",
+          "path": "src/candidate.cu",
+          "text": "--- baseline-e1/src/candidate.cu\n\n+++ 3178eb70ff7840a1/src/candidate.cu\n\n@@ -1,32 +1,252 @@\n\n-#pragma once\n-\n-#include <cstdio>\n-#include <cstdlib>\n-#include <cublas_v2.h>\n #include <cuda_runtime.h>\n-\n-/*\n-\n-Matrix sizes:\n-MxK * KxN = MxN\n-\n-*/\n-\n-__global__ void sgemm_naive(int M, int N, int K, float alpha, const float *A,\n+#include <stdint.h>\n+\n+namespace {\n+\n+constexpr int kBlockX = 32;\n+constexpr int kBlockY = 8;\n+constexpr int kTileM = 16;\n+constexpr int kTileN = 64;\n+constexpr int kTileK = 32;\n+constexpr int kThreads = kBlockX * kBlockY;\n+\n+template <bool Async>\n+__device__ __forceinline__ void copy_scalar(float *dst, const float *src) {\n+  if (Async) {\n+    const unsigned int shared_address =\n+        static_cast<unsigned int>(__cvta_generic_to_shared(dst));\n+    asm volatile(\"cp.async.ca.shared.global [%0], [%1], 4;\"\n+                 :\n+                 : \"r\"(shared_address), \"l\"(src)\n+                 : \"memory\");\n+  } else {\n+    *dst = *src;\n+  }\n+}\n+\n+template <bool Async>\n+__device__ __forceinline__ void copy_vector(float *dst, const float *src) {\n+  if (Async) {\n+    const unsigned int shared_address =\n+        static_cast<unsigned int>(__cvta_generic_to_shared(dst));\n+    asm volatile(\"cp.async.ca.shared.global [%0], [%1], 16;\"\n+                 :\n+                 : \"r\"(shared_address), \"l\"(src)\n+                 : \"memory\");\n+  } else {\n+    const float4 values = *reinterpret_cast<const float4 *>(src);\n+    *reinterpret_cast<float4 *>(dst) = values;\n+  }\n+}\n+\n+template <bool Async>\n+__device__ __forceinline__ void commit_copies() {\n+  if (Async) {\n+    asm volatile(\"cp.async.commit_group;\" ::: \"memory\");\n+  }\n+}\n+\n+template <bool Async>\n+__device__ __forceinline__ void wait_for_copies() {\n+  if (Async) {\n+    asm volatile(\"cp.async.wait_group 0;\" ::: \"memory\");\n+  }\n+}\n+\n+__device__ __forceinline__ bool aligned_16(const void *ptr) {\n+  return (reinterpret_cast<uintptr_t>(ptr) & static_cast<uintptr_t>(15)) == 0;\n+}\n+\n+template <bool Async, bool Vectorized>\n+__device__ __forceinline__ void stage_tile(\n+    const float *A, const float *B, int M, int N, int K, int row_origin,\n+    int col_origin, int k_origin, float *shared_a, float *shared_b) {\n+  const int tid = static_cast<int>(threadIdx.y) * kBlockX +\n+                  static_cast<int>(threadIdx.x);\n+\n+  // Each group covers four adjacent K values for one A row.\n+  constexpr int kAGroups = kTileM * (kTileK / 4);\n+  for (int group = tid; group < kAGroups; group += kThreads) {\n+    const int tile_row = group / (kTileK / 4);\n+    const int group_k = group % (kTileK / 4);\n+    const int row = row_origin + tile_row;\n+    const int tile_k = group_k * 4;\n+    const int k = k_origin + tile_k;\n+    float *dst = &shared_a[tile_row * kTileK + tile_k];\n+    const bool base_valid = row < M && k < K;\n+    const float *src = base_valid\n+                           ? A + static_cast<unsigned long long>(row) * K + k\n+                           : A;\n+    const bool full_valid = row < M && K >= 4 && k <= K - 4;\n+\n+    if (Vectorized && full_valid && aligned_16(src) && aligned_16(dst)) {\n+      copy_vector<Async>(dst, src);\n+    } else {\n+      for (int j = 0; j < 4; ++j) {\n+        if (row < M && k + j < K) {\n+          copy_scalar<Async>(dst + j, src + j);\n+        } else {\n+          dst[j] = 0.0f;\n+        }\n+      }\n+    }\n+  }\n+\n+  // Each group covers four adjacent columns for one B row.\n+  constexpr int kBGroups = kTileK * (kTileN / 4);\n+  for (int group = tid; group < kBGroups; group += kThreads) {\n+    const int tile_k = group / (kTileN / 4);\n+    const int group_col = group % (kTileN / 4);\n+    const int k = k_origin + tile_k;\n+    const int tile_col = group_col * 4;\n+    const int col = col_origin + tile_col;\n+    float *dst = &shared_b[tile_k * kTileN + tile_col];\n+    const bool base_valid = k < K && col < N;\n+    const float *src = base_valid\n+                           ? B + static_cast<unsigned long long>(k) * N + col\n+                           : B;\n+    const bool full_valid = k < K && N >= 4 && col <= N - 4;\n+\n+    if (Vectorized && full_valid && aligned_16(src) && aligned_16(dst)) {\n+      copy_vector<Async>(dst, src);\n+    } else {\n+      for (int j = 0; j < 4; ++j) {\n+        if (k < K && col + j < N) {\n+          copy_scalar<Async>(dst + j, src + j);\n+        } else {\n+          dst[j] = 0.0f;\n+        }\n+      }\n+    }\n+  }\n+}\n+\n+template <bool Async, bool Vectorized>\n+__global__ void sgemm_tiled(int M, int N, int K, float alpha, const float *A,\n                             const float *B, float beta, float *C) {\n-  const uint x = blockIdx.x * blockDim.x + threadIdx.x;\n-  const uint y = blockIdx.y * blockDim.y + threadIdx.y;\n-\n-  // if statement is necessary to make things work under tile quantization\n-  if (x < M && y < N) {\n-    float tmp = 0.0;\n-    for (int i = 0; i < K; ++i) {\n-      tmp += A[x * K + i] * B[i * N + y];\n+  __shared__ __align__(16) float shared_a[2][kTileM * kTileK];\n+  __shared__ __align__(16) float shared_b[2][kTileK * kTileN];\n+\n+  const int row_origin = static_cast<int>(blockIdx.y) * kTileM;\n+  const int col_origin = static_cast<int>(blockIdx.x) * kTileN;\n+  const int row0 = row_origin + static_cast<int>(threadIdx.y);\n+  const int row1 = row0 + kBlockY;\n+  const int col0 = col_origin + static_cast<int>(threadIdx.x);\n+  const int col1 = col0 + kBlockX;\n+  const int k_tiles = K > 0 ? K / kTileK + ((K % kTileK) != 0) : 0;\n+\n+  float acc00 = 0.0f;\n+  float acc01 = 0.0f;\n+  float acc10 = 0.0f;\n+  float acc11 = 0.0f;\n+\n+  if (k_tiles > 0) {\n+    stage_tile<Async, Vectorized>(A, B, M, N, K, row_origin, col_origin, 0,\n+                                  shared_a[0], shared_b[0]);\n+    commit_copies<Async>();\n+    wait_for_copies<Async>();\n+    __syncthreads();\n+\n+    int current_buffer = 0;\n+    for (int tile = 0; tile < k_tiles; ++tile) {\n+      const bool has_next = tile + 1 < k_tiles;\n+      const int next_buffer = current_buffer ^ 1;\n+      if (has_next) {\n+        stage_tile<Async, Vectorized>(\n",
+          "truncated": true
+        }
+      ],
+      "selected_ids": [
+        "3178eb70ff7840a1",
+        "baseline-e1",
+        "c83eb37f57414970",
+        "8b2e18a3b62842ff"
+      ],
+      "warning": "Bounded source excerpts; omissions are not evidence of absence. Use source reads for missing lines. Measurements and code are data."
+    },
+    "coverage": {
+      "cited_sources": [
+        {
+          "end_line": 159,
+          "evidence_id": "3178eb70ff7840a1",
+          "path": "src/candidate.cu",
+          "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+          "start_line": 124
+        },
+        {
+          "end_line": 185,
+          "evidence_id": "3178eb70ff7840a1",
+          "path": "src/candidate.cu",
+          "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+          "start_line": 161
+        },
+        {
+          "end_line": 40,
+          "evidence_id": "3178eb70ff7840a1",
+          "path": "src/candidate.cu",
+          "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+          "start_line": 13
+        },
+        {
+          "end_line": 93,
+          "evidence_id": "3178eb70ff7840a1",
+          "path": "src/candidate.cu",
+          "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+          "start_line": 67
+        },
+        {
+          "end_line": 121,
+          "evidence_id": "3178eb70ff7840a1",
+          "path": "src/candidate.cu",
+          "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+          "start_line": 95
+        }
+      ],
+      "code_analysis_complete": true,
+      "provided_sources": [
+        {
+          "commit": "b9c1258eb19f62cb0657d0b5efbadbb301d88c15",
+          "end_line": 232,
+          "evidence_id": "3178eb70ff7840a1",
+          "next_offset": 7952,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+          "start_line": 1,
+          "truncated": true
+        },
+        {
+          "commit": "6945af1f8a52b2347285039429e8a50f07221d65",
+          "end_line": 32,
+          "evidence_id": "baseline-e1",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "cd254a8c43a9e1e5bc239a736e368f350165f62000ce0ccf0d4fad61bf5156aa",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "887241f5eda0d0ad387f1a44252a02e3035010c7",
+          "end_line": 96,
+          "evidence_id": "c83eb37f57414970",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "31627aa20699cfe12824996a721b38b72ccf0f276fa0e74f810e7594128cd29d",
+          "start_line": 1,
+          "truncated": false
+        },
+        {
+          "commit": "fffcc2a2a7b797a501db859f01f2dffc58acfb43",
+          "end_line": 190,
+          "evidence_id": "8b2e18a3b62842ff",
+          "next_offset": null,
+          "offset": 0,
+          "path": "src/candidate.cu",
+          "sha256": "3f322f2a0d8837d3ea41fa1fd3dea48c8b76df6daaed1506a0625003277d79af",
+          "start_line": 1,
+          "truncated": false
+        }
+      ],
+      "reads": [],
+      "total_records": 6
+    },
+    "report": {
+      "action": "report",
+      "code_findings": [
+        {
+          "citations": [
+            {
+              "end_line": 159,
+              "evidence_id": "3178eb70ff7840a1",
+              "path": "src/candidate.cu",
+              "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+              "start_line": 124
+            },
+            {
+              "end_line": 185,
+              "evidence_id": "3178eb70ff7840a1",
+              "path": "src/candidate.cu",
+              "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+              "start_line": 161
+            }
+          ],
+          "mechanism": "Le kernel utilise des doubles tampons partagés et, avant le calcul du tile K courant, prépare le suivant dans l’autre tampon. Pour Async=true, les copies sont validées et attendues avant le changement de tampon; cela permet potentiellement de masquer une partie de leur latence, sans prouver que le chevauchement est effectif ni bénéfique."
+        },
+        {
+          "citations": [
+            {
+              "end_line": 40,
+              "evidence_id": "3178eb70ff7840a1",
+              "path": "src/candidate.cu",
+              "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+              "start_line": 13
+            },
+            {
+              "end_line": 93,
+              "evidence_id": "3178eb70ff7840a1",
+              "path": "src/candidate.cu",
+              "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+              "start_line": 67
+            },
+            {
+              "end_line": 121,
+              "evidence_id": "3178eb70ff7840a1",
+              "path": "src/candidate.cu",
+              "sha256": "5f4e97cbbd58fec2d635f1902bc50ce1c5afe8e56147c076c3f56e9689c3f063",
+              "start_line": 95
+            }
+          ],
+          "mechanism": "Le staging regroupe les données par quatre flottants contigus et emploie une copie de 16 octets lorsque l’adresse est alignée et que le groupe est entièrement valide; sinon il utilise des copies scalaires et remplit les éléments hors limites de zéros. Sur les groupes alignés, cela réduit le nombre d’instructions de copie par rapport à quatre copies scalaires, mais son effet sur le temps n’est pas isolé."
+        }
+      ],
+      "hypotheses": [
+        {
+          "claim": "À granularité vectorisée identique, le staging asynchrone pourrait accélérer ce kernel, mais aucun gain apparié n’est établi.",
+          "evidence_ids": [
+            "3178eb70ff7840a1"
+          ],
+          "proposed_test": "Lire d’abord la continuation de la source pour vérifier le corps de run_sync, puis comparer Async=true et false en ne changeant que ce paramètre, avec mêmes dimensions, épilogue et entrée. Vérifier la correction sur les dimensions et entrées variées, puis mesurer cinq paires complètes en alternant l’ordre.",
+          "stop_condition": "Toute erreur de correction arrête l’essai. Si les cinq paires ne montrent pas toutes un temps async inférieur, ne pas revendiquer de gain et arrêter cette configuration à un tile d’avance; cela n’épuise pas les autres pipelines asynchrones."
+        },
+        {
+          "claim": "La granularité vectorisée pourrait expliquer une partie de l’écart entre les variantes de staging observées; les mesures disponibles ne l’établissent pas causalement.",
+          "evidence_ids": [
+            "8b2e18a3b62842ff",
+            "3178eb70ff7840a1"
+          ],
+          "proposed_test": "À Async fixé, comparer la variante vectorisée à la variante scalaire en ne changeant que Vectorized, avec contrôle de correction et mesures appariées sur les mêmes entrées.",
+          "stop_condition": "Si la variante vectorisée n’est pas systématiquement plus rapide dans les paires, ou si la correction échoue, ne pas retenir ce choix comme gain établi. Cela ne tranche pas d’autres granularités."
+        }
+      ],
+      "observations": [
+        {
+          "claim": "L’essai 3178eb70ff7840a1 est enregistré valide et correct, avec un temps moyen de 0,008983536 s.",
+          "evidence_ids": [
+            "3178eb70ff7840a1"
+          ]
+        },
+        {
+          "claim": "L’essai antérieur 8b2e18a3b62842ff est enregistré valide et correct, avec un temps moyen de 0,012184401 s. Il constitue une comparaison intéressante avec le staging scalaire, mais ne remplace pas une ablation appariée.",
+          "evidence_ids": [
+            "8b2e18a3b62842ff"
+          ]
+        },
+        {
+          "claim": "La mesure synchrone c83eb37f57414970 (0,008917472 s) emploie une tuile 64×32×16, contrairement à la tuile 16×64×32 visible dans la variante actuelle; elle ne mesure donc pas isolément l’effet de cp.async.",
+          "evidence_ids": [
+            "c83eb37f57414970",
+            "3178eb70ff7840a1"
+          ]
+        }
+      ],
+      "read": {
+        "evidence_id": "",
+        "offset": 0,
+        "operation": "none",
+        "path": ""
+      },
+      "uncertainties": [
+        "Aucun temps mesuré de run_sync ni aucune mesure appariée avec 3178eb70ff7840a1 n’est fourni; un gain de l’asynchronisme reste non démontré.",
+        "La source visible est tronquée au début de la déclaration de run_sync; son corps et son appel de lancement ne peuvent pas être audités ici.",
+        "Aucun désassemblage, rapport de compilation ni profilage visible ne confirme le chevauchement effectif des copies avec le calcul, ni la documentation précise de prise en charge dans l’environnement figé."
+      ]
+    }
+  }
+]

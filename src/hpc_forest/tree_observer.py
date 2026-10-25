@@ -86,7 +86,8 @@ def _one(root, entry, manifest, dossier):
                    "assignment": dossier["assignment"], "contract": dossier["contract"],
                    "warnings": dossier["warnings"], "history": history,
                    "call_number": index, "max_calls": maximum, "must_report": index == maximum}
-        request = request_for(manifest["session_id"], entry["tree_id"], payload)
+        request = request_for(manifest["session_id"], entry["tree_id"], payload,
+                              model=manifest["model"], effort=manifest["reasoning_effort"])
         request_hash = sha256(json_bytes(request))
         call_dir = directory / f"call-{index:02d}"
         save(call_dir / "request.json", request)

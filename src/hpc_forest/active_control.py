@@ -48,6 +48,13 @@ def create(controller, epoch, kind, role=None):
                item["id"] for tree in dossier["trees"].values() for item in tree["measured_examples"]}),
            "history": [{"view": initial}], "coverage": {"reads": [], "total_records": len(dossier["records"])},
            "maximum": settings(controller.config)["analysis_calls" if kind == "analyst" else "steering_calls"]}
+    if "code_packet" in dossier:
+        job["visible_ids"] = sorted(set(job["visible_ids"]) | set(dossier["code_packet"]["selected_ids"]))
+        job["coverage"]["provided_sources"] = [{k: v for k, v in page.items() if k != "text"}
+                                               for page in dossier["code_packet"]["sources"]]
+    archived = {entry["id"] for entry in dossier.get("diverse_measured_sources", {}).get("entries", [])}
+    available = {record["id"] for record in dossier["records"]}
+    job["visible_ids"] = sorted(set(job["visible_ids"]) | (archived & available))
     if kind == "mother" and controller.db.get(f"active_mother_rejection:{epoch}"):
         job["history"].append({"controller_rejection": controller.db.get(f"active_mother_rejection:{epoch}")})
     atomic_json(controller.root / "logs" / identity / "snapshot.json", dossier)
@@ -65,8 +72,8 @@ def create(controller, epoch, kind, role=None):
 
 
 def report_watermark(current):
-    return digest({role: item.get("report_id") for role, item in current["analysts"].items()
-                   if item.get("report_id")})
+    return digest({"reports": {role: item.get("report_id") for role, item in current["analysts"].items()
+                   if item.get("report_id")}, "review_revision": current.get("lifecycle", {}).get("review_revision", 0)})
 
 
 def begin_call(controller, job):
@@ -85,6 +92,9 @@ def begin_call(controller, job):
             and estimate["remaining_seconds"] < estimate["reserve_seconds"] + 2 * nominal)
     payload = {k: dossier[k] for k in ("snapshot_id", "plan_revision", "trees", "contract", "warnings",
                                       "reports_as_interpretations", "inflight")}
+    payload.update({k: dossier[k] for k in ("code_packet", "closure_guard", "lifecycle", "closure_hypotheses",
+                                           "diverse_measured_sources")
+                    if k in dossier})
     payload.update(mode=settings(controller.config)["mode"], budget=estimate, history=job["history"],
                    visible_evidence_ids=job["visible_ids"],
                    call_number=number, max_calls=job["maximum"], must_finish=last)
@@ -153,9 +163,14 @@ def finish_call(controller, job, response, finished):
             db.set(f"mother_conversation:{epoch}", receipt)
         dossier = snapshot(controller, job)
         try:
-            data = (validate_response(response.get("data"), set(job["visible_ids"]), final_call=call["must_finish"])
-                    if job["kind"] == "analyst" else
-                    validate_decision(response.get("data"), dossier, set(job["visible_ids"]), final_call=call["must_finish"]))
+            if job["kind"] == "analyst" and "code_packet" in dossier:
+                from .active_analysis import validate
+
+                data = validate(response.get("data"), dossier, job, final_call=call["must_finish"])
+            else:
+                data = (validate_response(response.get("data"), set(job["visible_ids"]), final_call=call["must_finish"])
+                        if job["kind"] == "analyst" else
+                        validate_decision(response.get("data"), dossier, set(job["visible_ids"]), final_call=call["must_finish"]))
         except InfrastructureError:
             rejected_data = {"rejected_response": response.get("data")}
             raise
@@ -165,6 +180,11 @@ def finish_call(controller, job, response, finished):
         call["status"] = "complete"
         if data["action"] == "read":
             page = view(dossier, data["read"])
+            if "code_packet" in dossier and data["read"]["operation"] == "source":
+                from .active_analysis import source_page
+
+                record = next(r for r in dossier["records"] if r["id"] == data["read"]["evidence_id"])
+                page["citable_source"] = source_page(record, data["read"]["path"], data["read"]["offset"], 12000)
             if data["read"]["operation"] == "catalog":
                 job["visible_ids"] = sorted(set(job["visible_ids"]) | {r["id"] for r in page["items"]})
             job["coverage"]["reads"].append({**data["read"], "next_offset": page["next_offset"]})
@@ -178,6 +198,7 @@ def finish_call(controller, job, response, finished):
                 current = state(db, epoch)
                 previous = current["analysts"][job["role"]]
                 previous.update(status="complete", report_id=job["id"], report=data,
+                                reviewed_ids=dossier["trees"][job["role"]]["completed_ids"],
                                 coverage={**job["coverage"], "visible_ids": job["visible_ids"]})
                 db.set(key(epoch), current)
     except (InfrastructureError, OSError, ValueError, TypeError, KeyError) as exc:

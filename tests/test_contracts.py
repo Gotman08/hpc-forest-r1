@@ -65,6 +65,14 @@ def test_corrupt_expected_blob_is_infrastructure_failure():
         c.unblob(value)
 
 
+def test_timed_out_sanitizer_cannot_silently_validate_a_candidate(tmp_path):
+    (tmp_path / "stdin.data").write_bytes(b"")
+    stalled = {"name": "bounded probe", "files": [], "stdin": "stdin.data",
+               "argv": ["-c", "import time; time.sleep(60)"]}
+    with pytest.raises(RuntimeError, match="correctness remains unverified"):
+        c.probe_sanitizer(sys.executable, stalled, timeout=0.02, resources=tmp_path)
+
+
 def test_text_and_numeric_binary_comparison():
     options = {"mode": "text", "abs_tol": 1e-6, "rel_tol": 0}
     assert c.compare_bytes(b"1.0000000\nlabel", b"1.0000001 label\n", options)

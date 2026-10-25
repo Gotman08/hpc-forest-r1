@@ -549,8 +549,8 @@ def probe_sanitizer(binary, case, timeout=30, resources=None):
                         "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1",
                     },
                 )
-            except subprocess.TimeoutExpired:
-                return
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError("Sanitizer probe timed out; correctness remains unverified") from exc
         stderr_text = result.stderr.decode(errors="replace")
         if (
             result.returncode

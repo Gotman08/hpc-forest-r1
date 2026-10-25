@@ -34,7 +34,7 @@ from .core import (
     protected_manifest,
     verify_protected,
 )
-from .evaluator import Evaluator, target_identity
+from .evaluator import create_evaluator, target_identity
 from .forest import (
     assignment,
     forest_plan,
@@ -237,7 +237,7 @@ class Controller:
             started = time.time()
             self.db.set("started", started)
             self.db.set("deadline", started + self.config["budget"]["wall_seconds"])
-        self.evaluator = Evaluator(
+        self.evaluator = create_evaluator(
             self.root,
             self.config,
             self.db.get("manifest"),
@@ -452,9 +452,10 @@ class Controller:
                     "decision_id": mission.control_decision_id, "source_ids": mission.sources,
                     "base_source_id": mission.base_source_id,
                     "rule": "A new program evaluated independently; no source reward is copied"}
+        from .evolution_archive import attach as attach_diversity
         from .memory_context import attach_memory
 
-        return attach_memory(self, mission, context)
+        return attach_memory(self, mission, attach_diversity(self, mission, context))
 
     def _new_mission(self, role: str, epoch: dict, reserved_slot=None) -> tuple[Mission, dict, str]:
         from .active_contract import enabled as active_enabled
@@ -463,7 +464,8 @@ class Controller:
             from .active_state import state as active_state
 
             current = active_state(self.db, epoch["id"])
-            if current["closed"] or role in current["suspended"] or self.db.get(f"active_mother_broken:{epoch['id']}"):
+            if (current["closed"] or current.get("lifecycle", {}).get("closing")
+                    or role in current["suspended"] or self.db.get(f"active_mother_broken:{epoch['id']}")):
                 raise BudgetExhausted("Active controller closed or suspended new admissions")
             if assignment(self.db, role, epoch["id"]) is None:
                 raise InfrastructureError("Only Mother-assigned active trees can start")
@@ -489,7 +491,8 @@ class Controller:
             )
         else:
             mission = self.search.ask(
-                tree_id, actions, epoch["id"], base_commit, count + 1, "", slot
+                tree_id, actions, epoch["id"], base_commit, count + 1, "", slot,
+                route_generators=(child or {}).get("kind", "research") == "research",
             )
         if active_enabled(self.config):
             from .active_state import context as active_context
@@ -619,11 +622,14 @@ class Controller:
                 self.db.settle_tokens(slot, 0 if self.config["backend"] == "recipe" else None)
             outcome = Outcome("infrastructure_error", reason=str(exc))
         self.search.finish(mission, outcome)
+        from .evolution_archive import record as record_diversity
         from .memory_store import sync_memory
 
+        record_diversity(self, mission, outcome)
         sync_memory(self.db, self.root)
         row = self.db.one("SELECT created FROM trials WHERE id=?", (mission.id,))
-        record_timing(self.db, "mission:" + mission.role, time.time() - row["created"])
+        record_timing(self.db, "mission:" + mission.role,
+                      time.time() - row["created"] + mission.selection.get("seconds", 0))
         if outcome.status == "infrastructure_error" and not bounded_generation_abort:
             fatal = "infrastructure_error"
         print(f"{mission.role} {mission.id}: {outcome.status}", flush=True)

@@ -232,6 +232,9 @@ class Mission:
     control_decision_id: str | None = None
     import_ids: list[str] = field(default_factory=list)
     advice_ids: list[str] = field(default_factory=list)
+    generator: dict[str, str] = field(default_factory=dict)
+    search_action: str = ""
+    selection: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

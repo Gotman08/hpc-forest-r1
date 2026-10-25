@@ -19,13 +19,17 @@ from .codex_mailbox import (
 from .core import CandidateRejected, InfrastructureError, atomic_json, run_process
 from .documentation_mcp import DOCUMENTATION_INSTRUCTIONS, DOCUMENTATION_TOOLS, DocumentationMCP
 from .model_mcp import DISABLED_MODEL_TOOLS, RomeoMCP
-from .model_policy import require_identity
+from .model_policy import require_identity, require_request_identity
 from .model_skills import consume_report, usage_trace, verify_binding
 from .support.budgets import FINISH_STARTED, OBSERVE_TOKENS, time_left
 
 
 def check_dependencies(receipt: Path, required_jobs: set[str]) -> dict:
     gate = bounded_json(receipt, 65536)
+    if gate.get("schema") == "forest-app-authorization-v1":
+        from .webapp.runner_support import validate_authorization
+
+        return validate_authorization(receipt, gate, required_jobs)
     if gate.get("status") == "harness_comparison_explicitly_authorized":
         if (gate.get("schema") != "hpc-forest-explicit-harness-comparison-v1"
                 or gate.get("scope_id") != "gpt61sol-max-harness-20261015-r2"
@@ -117,12 +121,12 @@ def command_for(request: dict, output: Path, executable: str = "codex", *,
     # Resume has its own schema, model and config options. Pass them directly to
     # that subcommand so the planning schema cannot survive into code assembly.
     args += ["--ignore-user-config", "--strict-config", "--skip-git-repo-check", "--json",
-             "--model", MODEL, "--output-schema", str(output / "output-schema.json"),
+             "--model", request["model"], "--output-schema", str(output / "output-schema.json"),
              "--output-last-message", str(output / "agent-result.json")]
     if not persistent:
         args.append("--ephemeral")
     overrides = {
-        "model_reasoning_effort": EFFORT,
+        "model_reasoning_effort": request["reasoning_effort"],
         "model_instructions_file": str(output / "instructions.txt"),
         "project_doc_max_bytes": 0,
         "skills.max_context_tokens": 1,
@@ -227,6 +231,11 @@ def run_codex(request: dict, request_sha: str, output: Path, dependency_receipt:
               required_jobs: set[str], executable="codex", *, romeo_mcp: RomeoMCP | None = None,
               documentation_mcp: DocumentationMCP | None = None) -> dict:
     gate = check_dependencies(dependency_receipt, required_jobs)
+    if gate.get("schema") == "forest-app-authorization-v1":
+        if request.get("session_id") != gate.get("session_id"):
+            raise InfrastructureError("Request differs from the authorized application mission")
+        require_request_identity(request, {"model": gate["next_model"],
+            "reasoning_effort": gate["reasoning_effort"], "generator_pool": gate.get("generator_pool", [])})
     if "active_control" in request:
         from .active_contract import validate_request
 
@@ -274,7 +283,7 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
         options["documentation_mcp"] = documentation_mcp
     argv = command_for(request, output, executable, **options)
     atomic_json(output / "invocation.json", {
-        "argv": argv, "model": MODEL, "reasoning_effort": EFFORT,
+        "argv": argv, "model": request["model"], "reasoning_effort": request["reasoning_effort"],
         "request_sha256": request_sha, "hosted_inference": True,
         "source_execution_allowed": romeo_mcp is not None,
         "local_source_execution_allowed": False,
@@ -295,6 +304,7 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
     usage, tools = usage_from_events(Path(result.log), observe_only=observe_only,
                                     allow_romeo_mcp=romeo_mcp is not None,
                                     allow_documentation=documentation_mcp is not None)
+    usage.update(model_requested=request["model"], reasoning_effort_requested=request["reasoning_effort"])
     error = None
     infra = False
     data = None

@@ -30,6 +30,7 @@ from .codex_process import check_dependencies, run_codex
 from .core import FileLock, InfrastructureError, atomic_json
 from .documentation_mcp import DocumentationMCP
 from .model_mcp import RomeoMCP, load_server
+from .model_policy import generator_pool, require_request_identity
 from .support.budgets import FINISH_STARTED, expired
 
 HEARTBEAT_INTERVAL_SECONDS = 10
@@ -99,7 +100,7 @@ class RomeoFiles:
     async def __aexit__(self, *args):
         return await self.stack.__aexit__(*args)
 
-    async def call(self, name, **arguments):
+    async def call(self, name, /, **arguments):
         response = await self.session.call_tool(name, arguments)
         data = response.structuredContent
         if data is None:
@@ -133,17 +134,21 @@ class RomeoFiles:
 
 def validate_remote_channel(channel: str):
     path = PurePosixPath(channel)
+    if (path.is_absolute() and ".." not in path.parts and path.name == "mailbox"
+            and path.parent.name == "campaign"
+            and re.fullmatch(r"forest-app-[0-9a-f]{32}", path.parent.parent.name)):
+        return
     if (not path.is_absolute() or ".." in path.parts or path.name != "mailbox"
             or not re.fullmatch(r"results-[0-9]+", path.parent.name)
             or not any(p.startswith("hpc-forest-gpt61sol-max-") for p in path.parts)):
         raise InfrastructureError("Expected this campaign's owned ROMEO mailbox")
 
 
-def validate_request(request: dict, session_id: str, nonce: str):
-    expected = {"protocol": PROTOCOL, "session_id": session_id, "nonce": nonce,
-                "model": MODEL, "reasoning_effort": EFFORT}
+def validate_request(request: dict, session_id: str, nonce: str, *, model=MODEL, effort=EFFORT, generators=None):
+    expected = {"protocol": PROTOCOL, "session_id": session_id, "nonce": nonce}
     if any(request.get(k) != v for k, v in expected.items()):
         raise InfrastructureError("Downloaded request belongs to another session or model")
+    require_request_identity(request, {"model": model, "reasoning_effort": effort, "generator_pool": generators or []})
     if request.get("kind") not in {"source-proposal", "transport-smoke"}:
         raise InfrastructureError("Unsupported mailbox request kind")
     if "active_control" in request:
@@ -176,7 +181,11 @@ class Worker:
     def __init__(self, transfer, channel: str, session_id: str, output: Path,
                  dependency_receipt: Path | None, required_jobs: set[str],
                  transport_smoke=False, executable="codex", *, defer_diagnostics=False,
-                 model_mcp_config: Path | None = None, documentation=False):
+                 model_mcp_config: Path | None = None, documentation=False, model=MODEL, effort=EFFORT, generators=None):
+        selected = {"model": model, "reasoning_effort": effort, "generator_pool": generators or []}
+        pool = generator_pool(selected)
+        self.generators = pool if generators else []
+        self.model, self.effort = model, effort
         validate_remote_channel(channel)
         self.transfer, self.channel, self.session_id = transfer, channel, session_id
         self.output, self.dependency_receipt, self.required_jobs = output, dependency_receipt, required_jobs
@@ -222,7 +231,7 @@ class Worker:
                 marker = bounded_json(marker_path, 65536)
                 request_file = local / "downloaded-request.json"
                 request = bounded_json(request_file, MAX_REQUEST_BYTES)
-                validate_request(request, self.session_id, local.name)
+                validate_request(request, self.session_id, local.name, model=self.model, effort=self.effort, generators=self.generators)
                 if marker.get("request_sha256") != sha256(request_file.read_bytes()):
                     raise InfrastructureError("Cached delivery request changed")
                 validate_claim(local / "generation-claimed.json", marker["request_sha256"])
@@ -295,6 +304,10 @@ class Worker:
             if self.dependency_receipt is None:
                 raise InfrastructureError("A verified DeepSeek dependency receipt is required")
             gate = check_dependencies(self.dependency_receipt, self.required_jobs)
+            if self.generators and generator_pool({"model": gate.get("next_model"),
+                    "reasoning_effort": gate.get("reasoning_effort"),
+                    "generator_pool": gate.get("generator_pool", [])}) != self.generators:
+                raise InfrastructureError("The worker pool differs from its authorization")
             self.finish_started = gate.get("completion", {}).get("policy") == FINISH_STARTED
             self.executable = shutil.which(self.executable)
             if not self.executable:
@@ -313,9 +326,11 @@ class Worker:
             self.channel + "/OWNER.json", self.output / "OWNER.json"))
         marker = bounded_json(self.output / "OWNER.json", 4096)
         expected = {"protocol": PROTOCOL, "session_id": self.session_id,
-                    "model": MODEL, "reasoning_effort": EFFORT}
+                    "model": self.model, "reasoning_effort": self.effort}
         if any(marker.get(k) != v for k, v in expected.items()):
             raise InfrastructureError("The remote channel owner does not match")
+        if generator_pool(marker) != generator_pool({**expected, "generator_pool": self.generators}):
+            raise InfrastructureError("The remote generator pool does not match")
         ready = {**expected, "mode": "transport-smoke" if self.transport_smoke else "codex",
                  "pid": os.getpid(), "started_at": time.time(), "local_python": sys.executable,
                  "model_weights_on_romeo": False, **native}
@@ -330,8 +345,10 @@ class Worker:
         async def pulse():
             while not stopping.is_set():
                 try:
-                    data = {"session_id": self.session_id, "model": MODEL,
-                            "reasoning_effort": EFFORT, "alive_at": time.time()}
+                    data = {"session_id": self.session_id, "model": self.model,
+                            "reasoning_effort": self.effort, "alive_at": time.time()}
+                    if self.generators:
+                        data["generator_pool"] = self.generators
                     # SCP can retain a Windows read handle after an RPC timeout.
                     # Never rewrite or replace the file being transferred.
                     path = self.output / "heartbeat-snapshots" / f"{time.time_ns()}.json"
@@ -382,7 +399,7 @@ class Worker:
             self.channel + "/requests/" + filename, request_file))
         atomic_json(local / "download-receipt.json", receipt)
         request = bounded_json(request_file, MAX_REQUEST_BYTES)
-        validate_request(request, self.session_id, nonce)
+        validate_request(request, self.session_id, nonce, model=self.model, effort=self.effort, generators=self.generators)
         request_sha = sha256(request_file.read_bytes())
         response_file = local / "response.json"
         claim = local / "generation-claimed.json"

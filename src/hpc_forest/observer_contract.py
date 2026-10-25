@@ -65,10 +65,10 @@ def schema_for(final_call=False):
     return schema
 
 
-def request_for(session_id, tree_id, payload):
+def request_for(session_id, tree_id, payload, *, model=MODEL, effort=EFFORT):
     return {"protocol": PROTOCOL, "kind": VERSION, "session_id": session_id,
-            "nonce": uuid.uuid4().hex, "tree_id": tree_id, "model": MODEL,
-            "reasoning_effort": EFFORT, "budget_phase": "observation",
+            "nonce": uuid.uuid4().hex, "tree_id": tree_id, "model": model,
+            "reasoning_effort": effort, "budget_phase": "observation",
             "token_policy": "observe-only", "deadline_policy": "finish-started",
             "schema": schema_for(payload.get("must_report") is True), "messages": [
                 {"role": "system", "content": SYSTEM},

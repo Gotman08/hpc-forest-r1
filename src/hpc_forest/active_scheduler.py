@@ -8,6 +8,7 @@ from pathlib import Path
 from queue import SimpleQueue
 
 from . import active_control as controls
+from . import active_lifecycle as lifecycle
 from .active_contract import enabled, settings
 from .active_snapshot import watermark
 from .active_state import children, state
@@ -19,6 +20,8 @@ from .forest_scheduler import _generate
 
 
 def due(db, epoch, role, cfg):
+    if lifecycle.analysis_needed(db, epoch, role):
+        return "progress_or_closure_review"
     previous = state(db, epoch)["analysts"].get(role, {}).get("watermark", [])
     done = watermark(db, epoch, role)
     fresh = set(done) - set(previous)
@@ -79,6 +82,8 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                 limits[role] = counts[role] + max_rounds
 
     def publish():
+        db.set(f"active_unavailable:{epoch_id}", {role: "exhausted" if role in exhausted else "checkpoint_limit"
+            for role in counts if role in exhausted or role in limits and counts[role] >= limits[role]})
         entries = []
         for future, item in pending.items():
             entry = {"role": item["role"], "started_at": item["started"], "phase": "generation",
@@ -105,7 +110,10 @@ def run_research(controller, epoch, baseline, max_rounds=None):
     def dispatch_controls(pool):
         nonlocal waiting
         current = state(db, epoch_id)
-        if current["closed"] or db.get(f"active_mother_broken:{epoch_id}") or fatal:
+        checkpoint = max_rounds is not None and all(
+            r in exhausted or r in limits and counts[r] >= limits[r]
+            for r in counts if not r.startswith("Gm"))
+        if current["closed"] or db.get(f"active_mother_broken:{epoch_id}") or fatal or checkpoint:
             for job in waiting:
                 controls.stop_unadmitted(controller, job)
             waiting = []
@@ -114,7 +122,9 @@ def run_research(controller, epoch, baseline, max_rounds=None):
         capacity = cfg["control_workers"] - len(active)
         busy = [*active, *waiting]
         if (enabled(controller.config, "steering") and not any(j["kind"] == "mother" for j in busy)
-                and any(a.get("report_id") for a in current["analysts"].values())
+                and (any(a.get("report_id") for a in current["analysts"].values())
+                     or current.get("lifecycle", {}).get("closing"))
+                and lifecycle.ready_for_mother(db, epoch_id)
                 and current["mother_watermark"] != controls.report_watermark(current)):
             try:
                 admit(db, ["@mother"])
@@ -155,6 +165,8 @@ def run_research(controller, epoch, baseline, max_rounds=None):
         current = state(db, epoch_id)
         if current["closed"] or fatal or db.get(f"active_mother_broken:{epoch_id}"):
             return
+        if lifecycle.guarded(db) and current.get("lifecycle", {}).get("closing"):
+            return  # Finish admitted work before reviewing closure.
         running = {item["role"] for item in pending.values() if item["kind"] == "research"}
         # Newly created experiments receive a fair admission; established trees
         # retain independent AB-MCTS state rather than a shared node selector.
@@ -163,6 +175,9 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                 break
             if (role in running or role in exhausted or role in current["suspended"]
                     or role in limits and counts[role] >= limits[role]):
+                continue
+            if lifecycle.waiting_for_analysis(db, epoch_id, role):
+                # If no analyst fits, keep the final reserve; idle review records why.
                 continue
             slot = None
             try:
@@ -173,6 +188,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                 if slot:
                     db.settle_tokens(slot, 0)
                 exhausted.add(role)
+                publish()
                 continue
             except BudgetExhausted:
                 if slot:
@@ -195,11 +211,16 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                 counts[role] += 1
                 exhausted.add(role)
                 continue
+            lifecycle.admitted(db, epoch_id, role, mission.id)
             submit_node(pool, mission, context, slot)
             running.add(role)
 
     refresh()
+    publish()
     db.set(f"research_scheduler:{epoch_id}", runtime)
+    lifecycle.initialize(db, epoch_id)
+    for identity in watermark(db, epoch_id):
+        lifecycle.observe(db, epoch_id, identity)
     try:
         with ThreadPoolExecutor(max_workers=width + cfg["control_workers"], thread_name_prefix="forest-active") as pool:
             if not any(counts.values()) and (max_rounds is None or max_rounds > 0):
@@ -226,7 +247,16 @@ def run_research(controller, epoch, baseline, max_rounds=None):
             else:
                 dispatch_controls(pool)
                 refill(pool)
-            while pending:
+            while True:
+                if not pending:
+                    checkpoint = max_rounds is not None and all(
+                        r in exhausted or r in limits and counts[r] >= limits[r]
+                        for r in counts if not r.startswith("Gm"))
+                    if not fatal and not checkpoint and lifecycle.idle_review(db, epoch_id):
+                        dispatch_controls(pool)
+                        refill(pool)
+                    if not pending:
+                        break
                 future = completed.get()
                 item = pending[future]
                 if item["kind"] == "control":
@@ -242,6 +272,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                     fatal = fatal or node_fatal
                     db.event("research_node_settled", {"experiment_id": item["mission"].id,
                         "role": item["role"], "settled_at": time.time()})
+                    lifecycle.observe(db, epoch_id, item["mission"].id)
                 pending.pop(future)
                 publish()
                 controller._notify_progress()
@@ -260,6 +291,16 @@ def run_research(controller, epoch, baseline, max_rounds=None):
             status = "checkpointed"
         else:
             status = "budget_exhausted"
+            if lifecycle.guarded(db):
+                from .independent_budget import forecast_independent
+
+                if any(forecast_independent(db, [r])["can_admit"] for r in research):
+                    status = "search_complete"
+                    runtime["stop_reason"] = "no_admissible_work_after_idle_review"
+                else:
+                    runtime["stop_reason"] = "final_reserve_or_deadline"
+        if current["closed"]:
+            runtime["stop_reason"] = "reviewed_closure" if lifecycle.guarded(db) else "mother_closure"
         runtime.update(status=status, settled_nodes_by_tree=counts)
         db.set(f"research_scheduler:{epoch_id}", runtime)
         db.set("status", status)

@@ -10,7 +10,7 @@ flowchart TD
     M --> T[N arbres AB-MCTS indépendants]
     T --> E[Évaluateur : compiler, vérifier, mesurer]
     E --> F[Mémoire des faits et sources exactes]
-    F --> A[Un analyste logique par arbre : preuves figées et avis]
+    F --> A[Un analyste par arbre : sources, diff, preuves et hypothèses]
     A --> L[Avis local pour les prochains essais]
     L --> T
     A --> J[Mother : même conversation, décision au jalon]
@@ -19,8 +19,11 @@ flowchart TD
     R --> T
     J --> I[Combinaison intermédiaire Gm : nouveau programme]
     I --> E
-    J --> X[Fermeture définitive et fin des travaux admis]
-    X --> G[Mother : assemblage final G]
+    J --> X[Demande de clôture : finir les travaux admis]
+    X --> A
+    J --> Q[Revue fraîche : hypothèses et progrès encore admissibles]
+    Q -->|Essais protégés ou reprise| T
+    Q -->|Clôture confirmée| G[Mother : assemblage final G]
     G --> V[Confirmation indépendante des finalistes et de G]
     V --> D[Livraison et rapport]
 ```
@@ -57,6 +60,25 @@ après un premier bilan. Un état inchangé n'est pas réanalysé.
 Quand plusieurs arbres attendent, les arbres jamais analysés puis ceux dont le
 dernier bilan est le plus ancien passent en premier.
 
+Les corrections ajoutent `code_analysis=true` et `closure_guards=true` par défaut
+quand la boucle active est utilisée. On peut désactiver séparément ces deux
+options pour les ablations. Elles ne changent pas le mode `off`.
+
+`progress_trials=2` borne le nombre de suites protégées d'un progrès ;
+`progress_budget_fraction=0.15` borne leur coût estimé cumulé à 15 % du temps de
+recherche disponible lors de l'initialisation. L'enveloppe et les consommations
+survivent aux reprises. Elle ne s'ajoute pas au budget total et ne peut entamer
+la réserve de confirmation. Les durées sont des prévisions, pas des délais
+d'interruption d'appels déjà admis. `progress_gain=0.02` demande une baisse
+supérieure à 2 % et à deux fois la plus grande dispersion des mesures comparées
+si des répétitions sont disponibles. Le premier programme correct déclenche
+aussi une revue. Ce seuil déclenche une exploration ; il ne prouve pas un gain
+statistiquement significatif.
+Un essai ordinaire suivant ce progrès réduit lui aussi la fenêtre de suivi,
+même si l'enveloppe protégée est épuisée. Seuls les essais effectivement protégés
+débitent cette enveloppe. Cela empêche un compteur de suivi bloqué de provoquer
+des analyses systématiques au lieu de revenir à la cadence configurée.
+
 ## Rôles et droits
 
 L'analyste reçoit un instantané de son arbre, du naïf et des seules preuves
@@ -65,6 +87,16 @@ consultables par pages. Le dernier appel autorisé doit produire un bilan, avec
 preuves citées, hypothèses, prochain test et condition d'arrêt. Les appels sont
 éphémères ; le contrôleur reconstruit le contexte explicite. Le dernier bilan
 est fourni comme interprétation et les bilans antérieurs restent archivés.
+
+Le JEV reçoit dès son premier appel un dossier borné du dernier programme de
+son arbre, de son parent, du meilleur comparateur autorisé et d'une alternative,
+avec extraits numérotés et différences. Un résultat importé ne remplace pas le
+dernier programme propre à l'arbre. Il doit décrire un mécanisme de code et citer
+le fichier, son SHA-256 et les lignes réellement fournies. Les pages permettent
+de compléter les extraits ; les troncatures sont explicites. Une référence
+inventée ou située hors des lignes fournies est rejetée. Les citations valides
+attestent la provenance, pas la justesse de l'interprétation. Une absence de
+sources doit figurer dans les incertitudes.
 
 Mother conserve sa conversation native depuis la planification jusqu'à
 l'assemblage final. Une phase `steering` permet plusieurs décisions pendant la
@@ -112,6 +144,20 @@ nouvelle Mother en prétendant poursuivre la conversation précédente.
 Les décisions portent l'identité de l'instantané et la révision du plan. Une
 révision périmée est rejetée. Des résultats arrivés depuis l'instantané sont
 conservés et signalés dans le reçu ; ils ne réécrivent pas les preuves consultées.
+Avec les protections actives, de nouveaux résultats invalident une suspension
+concernant cet arbre ou une fermeture globale. Un progrès arrivé après une
+suspension réactive l'arbre et demande une analyse à jour avant sa suite protégée.
+
+Une fermeture comporte deux décisions : demande, puis confirmation après la fin
+des essais admis et la mise à jour des JEV. La confirmation peut céder la place à
+des essais protégés encore admissibles. Mother doit examiner chaque hypothèse
+du dernier bilan : testée avec une mesure citée, rejetée avec une raison, ou hors
+budget selon le contrôleur. Le lien sémantique entre test et hypothèse reste une
+interprétation du modèle, conservée pour audit. Une analyse indisponible est
+signalée ; elle ne devient jamais une preuve d'épuisement d'une famille.
+Lorsque tous les arbres deviennent inactifs, une revue bornée est tentée pour
+cet état des preuves. Une absence de travail après cette revue est distinguée
+de l'épuisement du budget dans `research_scheduler.stop_reason`.
 Les droits d'import sont figés pour chaque mission au moment de son admission.
 Le schéma transmis au modèle distingue chaque type d'action et borne les
 références aux identifiants visibles. Les conseils utilisent `rationale` et
@@ -148,3 +194,12 @@ caches physiques d'un nœud partagé. Les comparaisons doivent remesurer les sou
 anciennes et nouvelles dans une même allocation, avec les mêmes entrées et
 compilateurs. Un seul tirage de recherche par programme ne démontre pas une
 supériorité statistique de l'architecture.
+
+La [campagne des corrections](../experiments/architecture-corrections-20261024/RAPPORT.md)
+documente aussi des limites concrètes de cette implémentation : certains essais
+cités dans les bilans et hypothèses restent absents de la liste stricte des
+références admises par Mother, ce qui peut invalider la revue de fermeture.
+Les actions `continue` et `resume` autorisent des générations de programmes ;
+elles ne constituent pas une API de diagnostic ou de remesure ciblée.
+Une exécution complète avec confirmation du gagnant ne certifie donc ni la
+réussite de toutes les revues de contrôle, ni la justesse des analyses du modèle.

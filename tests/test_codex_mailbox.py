@@ -93,7 +93,7 @@ def test_every_native_invocation_pins_model_max_and_disables_external_tools(setu
     assert (tmp_path / "generation/instructions.txt").read_text(encoding="utf8") == request["messages"][0]["content"]
 
 
-@pytest.mark.parametrize("field,value", [("model", "another-model"), ("reasoning_effort", "xhigh")])
+@pytest.mark.parametrize("field,value", [("model", "another-model"), ("reasoning_effort", "ultra")])
 def test_never_substitute_model_or_effort(setup, tmp_path, field, value):
     mission, context, config, _ = setup
     request = make_request(mission, context, config)
@@ -118,6 +118,32 @@ def test_no_model_without_received_deepseek_archive_receipts(tmp_path):
     (tmp_path / "1.tar.gz").write_bytes(b"changed")
     with pytest.raises(InfrastructureError):
         check_dependencies(gate, {"1", "2"})
+
+
+@pytest.mark.parametrize("recovers", [False, True])
+def test_bounded_json_retries_transient_reader_lock_without_hiding_denial(tmp_path, monkeypatch, recovers):
+    from hpc_forest import codex_mailbox
+
+    path = tmp_path / "ready.json"
+    path.write_text('{"ready": true}', encoding="utf-8")
+    original = type(path).open
+    attempts = []
+
+    def open_file(self, *args, **kwargs):
+        if self == path:
+            attempts.append(self)
+            if not recovers or len(attempts) < 3:
+                raise PermissionError("Atomic publication temporarily holds the file")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(path), "open", open_file)
+    monkeypatch.setattr(codex_mailbox, "_FILE_READ_RETRY_DELAYS", (0, 0))
+    if recovers:
+        assert bounded_json(path) == {"ready": True}
+    else:
+        with pytest.raises(PermissionError):
+            bounded_json(path)
+    assert len(attempts) == 3
 
 
 def test_mailbox_applies_only_verified_full_response_and_keeps_usage(setup, tmp_path):

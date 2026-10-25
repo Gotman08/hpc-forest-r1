@@ -16,6 +16,8 @@ from .memory_store import memory_summary
 from .model_skills import campaign_traces
 from .registry import Registry
 from .search import Search
+from .search_diagnostics import diagnostics
+from .search_policy import label as search_label
 from .submission import delivery_manifest
 from .support.budgets import mandatory_final_g
 
@@ -35,6 +37,12 @@ def report(root: Path, output: Path | None = None) -> Path:
                     "id": row["id"],
                     "epoch": row["epoch"],
                     "role": row["role"],
+                    "generator_model": (mission.get("generator") or db.get("config").get("codex", {})).get("model")
+                        if db.get("config").get("backend") == "codex" else None,
+                    "generator_effort": (mission.get("generator") or db.get("config").get("codex", {})).get("reasoning_effort")
+                        if db.get("config").get("backend") == "codex" else None,
+                    "search_action": mission.get("search_action", row["role"]),
+                    "selection": mission.get("selection", {}),
                     "research_assignment": assignment(db, row["role"], row["epoch"]),
                     "kind": mission.get("kind", "research"),
                     "base_source_id": mission.get("base_source_id"),
@@ -108,11 +116,23 @@ def report(root: Path, output: Path | None = None) -> Path:
             "events": db.rows("SELECT * FROM events ORDER BY id"),
             "epochs": db.rows("SELECT * FROM epochs ORDER BY id"),
             "search_topology": Search(db).snapshot(),
+            "search_diagnostics": diagnostics(config, db.rows("SELECT * FROM trials ORDER BY created,id")),
         }
         from .active_reporting import export as export_active
+        from .evolution_archive import view as diversity_view
 
         payload["active_architecture"] = export_active(db, output)
+        payload["diversity_archive"] = diversity_view(db, db.get("current_epoch", 1))
+        if payload["diversity_archive"] is not None:
+            atomic_json(output / "diversity-archive.json", payload["diversity_archive"])
         atomic_json(output / "experiments.json", payload)
+        atomic_json(output / "search-diagnostics.json", payload["search_diagnostics"])
+        model_rows = payload["search_diagnostics"]["models"]
+        if model_rows:
+            with (output / "search-generators.csv").open("w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=list(model_rows[0]))
+                writer.writeheader()
+                writer.writerows(model_rows)
         fields = [
             "id",
             "epoch",
@@ -131,13 +151,14 @@ def report(root: Path, output: Path | None = None) -> Path:
             "score",
             "reason",
             "kind", "base_source_id", "control_decision_id", "advice_ids", "authorized_import_ids",
+            "generator_model", "generator_effort", "search_action", "selection",
         ]
         with (output / "experiments.csv").open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=fields, extrasaction="ignore")
             writer.writeheader()
             for row in rows:
                 writer.writerow({**row, **{k: json.dumps(row[k]) for k in
-                    ("sources", "advice_ids", "authorized_import_ids")}})
+                    ("sources", "advice_ids", "authorized_import_ids", "selection")}})
         best = db.get("best_confirmed")
         lines = [
             "# Rapport de campagne HPC Forest",
@@ -146,6 +167,10 @@ def report(root: Path, output: Path | None = None) -> Path:
             "",
             f"Méthode : `{payload['config']['method']}` ; génération : `{payload['config']['backend']}`.",
             f"Protocole : `{payload['protocol_id']}`.",
+            f"Recherche : `{search_label(config)}`. Générateurs autorisés : `{json.dumps(config.get('codex', {}).get('generator_pool', []))}` "
+            "(liste vide : modèle principal uniquement).",
+            "Les fichiers search-diagnostics.json et search-generators.csv décrivent les essais ; "
+            "ils ne constituent pas un classement contrôlé des modèles.",
             "",
             "Ces mesures concernent uniquement cette machine et ce protocole. "
             "Une démonstration avec recettes C ne mesure pas la qualité d'un LLM ni la supériorité de H sur U.",
@@ -187,9 +212,16 @@ def report(root: Path, output: Path | None = None) -> Path:
             lines.append(
                 f"| {row['id']} | {row['role']} | {row['budget_phase']} | {row['state']} | {seconds} | {(row['commit'] or '')[:12]} |"
             )
+        confirmation_description = (
+            "Les confirmations réexécutent la commande de test fournie, avec FOREST_PHASE=confirmation. "
+            "L'application ne crée pas de cas de correction supplémentaires. Les tours de mesure sont "
+            "entrelacés ; le temps porte sur la commande complète, lancement du programme compris. "
+            if config.get("app_protocol") else
+            "Les confirmations utilisent d'autres cas de correction et des tours de mesure entrelacés. "
+        )
         lines += [
             "",
-            "Les confirmations utilisent d'autres cas de correction et des tours de mesure entrelacés. "
+            confirmation_description +
             "Les doublons n'ajoutent aucune observation à TreeQuest. Les erreurs d'infrastructure "
             "gardent un score absent. Voir experiments.json pour les temps bruts, les sources et les journaux.",
             "",
@@ -239,7 +271,8 @@ def package(root: Path, destination: Path) -> Path:
                 **best,
                 "target": db.get("identity"),
                 "protocol": db.get("config")["protocol"],
-                "search_policy": "binary-greedy" if Search(db).binary else "ab-mcts-a",
+                "search_policy": search_label(db.get("config")),
+                "generator_pool": db.get("config").get("codex", {}).get("generator_pool", []),
                 "confirmation": outcome,
                 "delivery": delivery,
                 "final_g_confirmation": final,

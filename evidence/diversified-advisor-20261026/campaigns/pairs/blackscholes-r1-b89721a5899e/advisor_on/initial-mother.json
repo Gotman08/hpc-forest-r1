@@ -1,0 +1,25 @@
+{
+  "phase": "preparation",
+  "status": "complete",
+  "error": null,
+  "model_calls": 1,
+  "structured_plan": {
+    "G": "Pending. Assemble G from measured, correct candidates after research, then independently confirm the integrated program; no optimized result is confirmed yet.",
+    "analysis": "Choose N=3: the supplied kernel is an independent per-element loop, currently serial despite a thread budget, and spends substantial work in scalar transcendental functions and CND evaluation. These are complementary opportunities: thread-level parallelism, SIMD for the non-CND math, and a separate lower-cost CND implementation. The valid baseline reports three times of 0.0024843–0.0024913 s (mean 0.0024874 s, score 0.5); there is no optimized candidate or independent confirmation yet. The observation does not break timings down by size or thread budget, so candidates should be compared on both official sizes and budgets. Preserve the FP32 behavior within the stated tolerance, handle varied and constant inputs, and do not assume test-specific values.",
+    "children": [
+      {
+        "objective": "Explore OpenMP data-parallel execution over disjoint output indices, using the caller's threads value as an upper bound and avoiding parallel-region overhead for a one-thread call. Keep the supplied per-element arithmetic and CND unchanged. Write every output on every call, preserve correctness for all valid sizes and inputs, and compare timings at both official thread budgets; record any case where parallel overhead outweighs the benefit.",
+        "subject": "Thread-budgeted parallel loop"
+      },
+      {
+        "objective": "Explore SIMD execution across contiguous elements for the non-CND terms, especially logf(S/X), sqrtf(T), and expf(-r*T), using available intrinsics or compiler-supported vectorization without changing build settings. Keep the supplied CND implementation and coefficients unchanged to isolate this opportunity. Any approximation must satisfy the fixed tolerance beyond sampled inputs; handle tails and stay within the caller's thread budget. Validate and measure at both sizes and thread budgets.",
+        "subject": "SIMD for non-CND math"
+      },
+      {
+        "objective": "Explore reducing the work in the scalar CND evaluator alone, for example through Horner evaluation or a lower-cost piecewise/rational approximation with robust symmetry and tail behavior. Keep the outer Black-Scholes calculation and loop organization unchanged to isolate this opportunity. Preserve the required tolerance for all valid inputs, including varied and constant inputs, and measure at both sizes and thread budgets.",
+        "subject": "Lower-cost CND evaluation"
+      }
+    ]
+  },
+  "scope": "Initial Mother output and validation status; native transcripts and receipts omitted"
+}

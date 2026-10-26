@@ -1,0 +1,25 @@
+{
+  "phase": "preparation",
+  "status": "complete",
+  "error": null,
+  "model_calls": 1,
+  "structured_plan": {
+    "G": "Keep the supplied candidate.cpp unchanged as the initial G. After research, compare only correct measured candidates, test combinations rather than assuming additive gains, and independently confirm the selected final program.",
+    "analysis": "Choose N=3 for complementary single-core approaches: SIMD acceleration of ASCII runs, full SIMD validation of mixed-width UTF-8 structure, and a scalar table-driven DFA. The supplied baseline is reported correct; its three search measurements average 51.46 µs for n=65536. Treat that as a search baseline, not an independent confirmation. Preserve exact UTF-8 scalar-value rules, bounds safety for every input, the run signature, full uint32 output writes, and the threads budget. Performance judgment should use comparable measurements on valid mixed-width text while retaining malformed and ASCII correctness checks.",
+    "children": [
+      {
+        "objective": "Explore block-level ASCII detection (for example, safe word- or vector-sized high-bit tests) to skip ASCII runs, falling back to the supplied scalar validation logic for non-ASCII bytes. Optimize mixed input without assuming its ASCII fraction or reading beyond n. Keep this focused on ASCII-run skipping rather than implementing a full SIMD UTF-8 validator; measure speed and preserve correctness on all malformed and valid inputs.",
+        "subject": "Fast ASCII-run scanning"
+      },
+      {
+        "objective": "Explore a one-pass SIMD validator that checks byte classes and neighboring-byte continuation relationships across blocks, including overlong encodings, surrogates, values above U+10FFFF, and truncated sequences. Handle block boundaries and tails safely for arbitrary n; do not rely on benchmark contents. Measure valid mixed-width performance and verify all correctness cases.",
+        "subject": "Full SIMD UTF-8 validation"
+      },
+      {
+        "objective": "Explore a scalar table-driven finite-state validator or equivalent branch-reduced scalar state machine, without SIMD. Encode all UTF-8 lead, continuation, and special-range constraints and handle end-of-input in every state. Keep the work distinct from ASCII block scanning and vectorized validation; measure valid mixed-width performance and verify all correctness cases.",
+        "subject": "Scalar table-driven DFA"
+      }
+    ]
+  },
+  "scope": "Initial Mother output and validation status; native transcripts and receipts omitted"
+}

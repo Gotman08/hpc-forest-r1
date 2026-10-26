@@ -1,5 +1,10 @@
 # Validation diversifiée du conseiller — lot préenregistré
 
+**Lot terminé : [rapport final](RAPPORT.md) et [CSV de synthèse](results/comparison-summary.csv).**
+Onze livraisons sur douze, toutes vérifiées sur les entrées réservées. Le plan
+initial de Mother a échoué pour Popcount avec conseiller avant tout appel TabPFN.
+Le texte ci-dessous conserve le protocole enregistré avant les recherches.
+
 Demandé pendant les essais de régression UTF-8/Mandelbrot : **six problèmes
 supplémentaires, avec et sans TabPFN, mêmes budgets**. Ce lot contient douze
 exécutions neuves, une paire par problème. Le moteur reste exactement celui

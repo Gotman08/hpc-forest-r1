@@ -1,0 +1,21 @@
+{
+  "phase": "preparation",
+  "status": "complete",
+  "error": null,
+  "model_calls": 1,
+  "structured_plan": {
+    "G": "Preparation only: retain the supplied baseline as the comparator; no measured candidate is available to integrate yet. After research, select only a fully correct candidate and require independent confirmation against the official metric.",
+    "analysis": "Choose N=2: the measured baseline is correct but takes a mean 8.9247 µs across three samples, and the timed budgets allow only one CPU thread. The source is a serial argmin scan, so multithreading is not a useful independent track. Explore two distinct ways to reduce single-thread scan cost: portable independent scalar reductions and an explicit SIMD reduction. Do not assume a gain; compare measured candidates on both timed sizes and preserve first-minimum semantics for every valid input, including ties and integer extremes.",
+    "children": [
+      {
+        "objective": "Explore compiler-friendly C++17 scalar scans using multiple independent local minimum/index accumulators and a final tie-aware merge. Investigate loop unrolling and branchless or conditional updates only as measured alternatives. Keep the scan single-threaded, support every valid n without input-size specialization, and preserve the smallest index on ties. Record failed attempts; compare correctness and native wall time for both timed sizes.",
+        "subject": "Independent scalar reductions"
+      },
+      {
+        "objective": "Explore single-thread SIMD argmin methods for contiguous int32 input, such as vector value-minimum reduction followed by locating the earliest matching index, or another tie-correct vector strategy. Use only instructions supported by the target build, handle arbitrary lengths and tails, and preserve correctness for ties and extreme values. Do not use OpenMP or specialize to test values. Measure both timed sizes and record failed attempts.",
+        "subject": "SIMD argmin reduction"
+      }
+    ]
+  },
+  "scope": "Initial Mother output and validation status; native transcripts and receipts omitted"
+}

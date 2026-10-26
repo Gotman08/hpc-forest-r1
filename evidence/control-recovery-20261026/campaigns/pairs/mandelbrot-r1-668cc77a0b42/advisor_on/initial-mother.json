@@ -1,0 +1,25 @@
+{
+  "phase": "preparation",
+  "status": "complete",
+  "error": null,
+  "model_calls": 1,
+  "structured_plan": {
+    "G": "Keep the supplied baseline as the only known-correct candidate for now. After research, validate and measure each candidate, integrate only combinations that are themselves correct and measured, and independently confirm the final G. Do not assume isolated gains are additive; retain the baseline unless a confirmed candidate improves the official criterion.",
+    "analysis": "Choose N=3 for the distinct opportunities visible in the supplied source: the pixel loop is serial and ignores threads, adjacent pixels offer potential SIMD throughput, and certified interior-point shortcuts may avoid iterations. At n=1024 the image has 1,572,864 pixels; the supplied baseline mean is 0.562852556 seconds, with no candidate comparison or independent confirmation yet. These three concurrent trees cover different mechanisms without spending a tree on a minor loop cleanup. All must preserve exact counts for shifted bounds and compare performance at one and four CPU cores.",
+    "children": [
+      {
+        "objective": "Explore OpenMP work distribution over rows or pixel tiles, honoring the threads budget without changing per-pixel arithmetic or output coverage. Tune scheduling for uneven escape-time work. Validate exact counts on all checks, including shifted bounds, and measure at one and four cores; record unsuccessful schedules as well as gains.",
+        "subject": "Thread-budget-aware OpenMP parallelization"
+      },
+      {
+        "objective": "Explore SIMD evaluation across adjacent x coordinates with per-lane escape state and scalar handling for any tail. Preserve the baseline's coordinate generation, float operation order, escape-test timing, and exact integer counts; do not use approximate math. Respect the threads budget, validate all checks, and measure at one and four cores. Keep this tree focused on lane vectorization rather than analytic shortcuts or schedule tuning.",
+        "subject": "Exact SIMD for divergent pixel iterations"
+      },
+      {
+        "objective": "Explore conservative analytic certificates for points whose baseline float recurrence is guaranteed not to escape through the requested positive parameter; return the corresponding maximum count only when equivalence is guaranteed, otherwise use the baseline recurrence. Do not approximate boundary membership, assume standard image bounds, or alter behavior for other parameter values. Validate exact counts on all checks, including shifted bounds, and measure at one and four cores; discard the shortcut if its safety cannot be established.",
+        "subject": "Certified interior-point iteration skipping"
+      }
+    ]
+  },
+  "scope": "Initial Mother output and validation status; native transcripts and receipts omitted"
+}

@@ -1,0 +1,25 @@
+{
+  "phase": "preparation",
+  "status": "complete",
+  "error": null,
+  "model_calls": 1,
+  "structured_plan": {
+    "G": "Preparation only; no integrated candidate exists yet. Anchor integration on baseline commit f4bc9d0d8873c452a64a90e6930c9ce63711b3ef. After research, combine only individually correct, measured changes, then measure the combinations rather than assuming gains add. Preserve the best valid candidate if integration regresses; select the final candidate by the official metric and require independent confirmation.",
+    "analysis": "Choose N=3: the supplied baseline is serial, does not use the threads argument, and takes about 0.5630 s on the reported n=1024 run (three valid samples). Its nested pixel loops and iterative recurrence expose distinct opportunities: inter-pixel CPU parallelism, intra-pixel-group SIMD, and exact elimination of redundant recurrence work. The recurrence is a plausible cost, but no profile establishes its share. These trees isolate complementary mechanisms; no speedup is assumed. Preserve the baseline float recurrence and output for every valid input, including shifted bounds, and benchmark with one and four threads. Supplied target metadata identifies x86_64 and the task states AMD EPYC 9654/GCC 14.2; ISA/compiler flags beyond that are not established here.",
+    "children": [
+      {
+        "objective": "Explore OpenMP parallelization and load balancing of the scalar pixel loop, including row or tile decomposition and schedules suited to uneven escape counts. Respect threads as the CPU budget, avoid nested parallelism, and compare one-thread overhead and four-thread wall time. Preserve baseline per-pixel arithmetic and output exactly; validate small cases, shifted bounds, and n=1024.",
+        "subject": "Thread-level parallelism and load balancing"
+      },
+      {
+        "objective": "Explore SIMD evaluation across neighboring pixels, using compatible compiler vectorization or x86 intrinsics. Preserve each pixel's coordinate calculation, recurrence order, escape test, and exact integer count; do not use approximate membership or arithmetic transformations that alter results. Primarily measure one CPU thread to isolate SIMD gains, and report correctness on small and shifted-bound inputs as well as n=1024.",
+        "subject": "Exact SIMD across pixels"
+      },
+      {
+        "objective": "Test low-overhead exact repeated-state detection in the float recurrence. A repeated state for the same coordinate under the same deterministic recurrence can certify that subsequent iterations repeat; use it only when equality establishes this, with a baseline fallback otherwise. Preserve counts for all valid inputs and measure whether detection overhead is offset by saved iterations at one and four threads; record unsuccessful variants.",
+        "subject": "Exact repeated-orbit early completion"
+      }
+    ]
+  },
+  "scope": "Initial Mother output and validation status; native transcripts and receipts omitted"
+}

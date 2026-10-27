@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="0.592" timestamp="2026-10-27T17:04:24.327522+01:00" hostname="WIN-I1GIK06SG9H"><testcase classname="tests.test_citation_schema_identity" name="test_native_schema_citations_are_accepted_by_the_source_validator[analyst]" time="0.003"><failure message="AssertionError: {'evidence_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'path': 'aaaaaaaaaaaaaaaaaaaaaaaaa...aaaaaaaaaaaaaaaaa', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'start_line': 2, ...}&#10;assert False&#10; +  where False = citation_exposed({'evidence_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'path': 'aaaaaaaaaaaaaaaaaaaaaaaaa...aaaaaaaaaaaaaaaaa', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'start_line': 2, ...}, [{'evidence_id': 'trial-a', 'path': 'src/a.cpp', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...th': 'src/b.cpp', 'sha256': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'start_line': 20, ...}])">pages = [{'evidence_id': 'trial-a', 'path': 'src/a.cpp', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...th': 'src/b.cpp', 'sha256': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'start_line': 20, ...}]
+role = 'analyst'
+
+    @pytest.mark.parametrize("role", ["analyst", "mother"])
+    def test_native_schema_citations_are_accepted_by_the_source_validator(pages, role):
+        payload = {"code_packet": {"sources": pages}, "closure_code_packet": {"sources": pages},
+                   "trees": {"T1": {}}, "snapshot_id": "snapshot", "plan_revision": 0, "closure_guard": True,
+                   "visible_evidence_ids": [p["evidence_id"] for p in pages]}
+        if role == "analyst":
+            native = wire_schema(schema(True, payload))
+            references = native["properties"]["code_findings"]["items"]["properties"]["citations"]["items"]
+        else:
+            native = wire_schema(decision_schema(True, payload))
+            closing = next(v for v in native["properties"]["decisions"]["items"]["anyOf"]
+                           if v["properties"]["kind"]["enum"] == ["close"])
+            references = closing["properties"]["hypothesis_review"]["items"]["properties"]["source_citations"]["items"]
+        for branch in references["anyOf"]:
+            fields = branch["properties"]
+            # A constrained model can only return these identities. The runtime must
+            # accept that citation for the exact supplied page and reject substitutions.
+            ref = {k: fields[k]["enum"][0] for k in ("evidence_id", "path", "sha256")}
+            ref.update(start_line=fields["start_line"]["minimum"], end_line=fields["end_line"]["maximum"])
+&gt;           assert citation_exposed(ref, pages), ref
+E           AssertionError: {'evidence_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'path': 'aaaaaaaaaaaaaaaaaaaaaaaaa...aaaaaaaaaaaaaaaaa', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'start_line': 2, ...}
+E           assert False
+E            +  where False = citation_exposed({'evidence_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'path': 'aaaaaaaaaaaaaaaaaaaaaaaaa...aaaaaaaaaaaaaaaaa', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'start_line': 2, ...}, [{'evidence_id': 'trial-a', 'path': 'src/a.cpp', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...th': 'src/b.cpp', 'sha256': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'start_line': 20, ...}])
+
+tests\test_citation_schema_identity.py:38: AssertionError</failure></testcase><testcase classname="tests.test_citation_schema_identity" name="test_native_schema_citations_are_accepted_by_the_source_validator[mother]" time="0.004"><failure message="AssertionError: {'evidence_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'path': 'aaaaaaaaaaaaaaaaaaaaaaaaa...aaaaaaaaaaaaaaaaa', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'start_line': 2, ...}&#10;assert False&#10; +  where False = citation_exposed({'evidence_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'path': 'aaaaaaaaaaaaaaaaaaaaaaaaa...aaaaaaaaaaaaaaaaa', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'start_line': 2, ...}, [{'evidence_id': 'trial-a', 'path': 'src/a.cpp', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...th': 'src/b.cpp', 'sha256': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'start_line': 20, ...}])">pages = [{'evidence_id': 'trial-a', 'path': 'src/a.cpp', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...th': 'src/b.cpp', 'sha256': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'start_line': 20, ...}]
+role = 'mother'
+
+    @pytest.mark.parametrize("role", ["analyst", "mother"])
+    def test_native_schema_citations_are_accepted_by_the_source_validator(pages, role):
+        payload = {"code_packet": {"sources": pages}, "closure_code_packet": {"sources": pages},
+                   "trees": {"T1": {}}, "snapshot_id": "snapshot", "plan_revision": 0, "closure_guard": True,
+                   "visible_evidence_ids": [p["evidence_id"] for p in pages]}
+        if role == "analyst":
+            native = wire_schema(schema(True, payload))
+            references = native["properties"]["code_findings"]["items"]["properties"]["citations"]["items"]
+        else:
+            native = wire_schema(decision_schema(True, payload))
+            closing = next(v for v in native["properties"]["decisions"]["items"]["anyOf"]
+                           if v["properties"]["kind"]["enum"] == ["close"])
+            references = closing["properties"]["hypothesis_review"]["items"]["properties"]["source_citations"]["items"]
+        for branch in references["anyOf"]:
+            fields = branch["properties"]
+            # A constrained model can only return these identities. The runtime must
+            # accept that citation for the exact supplied page and reject substitutions.
+            ref = {k: fields[k]["enum"][0] for k in ("evidence_id", "path", "sha256")}
+            ref.update(start_line=fields["start_line"]["minimum"], end_line=fields["end_line"]["maximum"])
+&gt;           assert citation_exposed(ref, pages), ref
+E           AssertionError: {'evidence_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'path': 'aaaaaaaaaaaaaaaaaaaaaaaaa...aaaaaaaaaaaaaaaaa', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'start_line': 2, ...}
+E           assert False
+E            +  where False = citation_exposed({'evidence_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'path': 'aaaaaaaaaaaaaaaaaaaaaaaaa...aaaaaaaaaaaaaaaaa', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'start_line': 2, ...}, [{'evidence_id': 'trial-a', 'path': 'src/a.cpp', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...th': 'src/b.cpp', 'sha256': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'start_line': 20, ...}])
+
+tests\test_citation_schema_identity.py:38: AssertionError</failure></testcase><testcase classname="tests.test_citation_schema_identity" name="test_schema_generation_cannot_cross_contaminate_fields_pages_or_later_requests" time="0.003"><failure message="AssertionError: assert ['aaaaaaaaaaa...aaaaaaaaaaaa'] == ['trial-a']&#10;  &#10;  At index 0 diff: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' != 'trial-a'&#10;  Use -v to get more diff">pages = [{'evidence_id': 'trial-a', 'path': 'src/a.cpp', 'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...th': 'src/b.cpp', 'sha256': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'start_line': 20, ...}]
+
+    def test_schema_generation_cannot_cross_contaminate_fields_pages_or_later_requests(pages):
+        first = citation_schema(pages)
+        saved = copy.deepcopy(first)
+        later = citation_schema([{**pages[0], "evidence_id": "new-trial", "path": "src/new.cpp"}])
+        assert first == saved
+        for page, branch in zip(pages, first["anyOf"], strict=True):
+            for field in ("evidence_id", "path", "sha256"):
+&gt;               assert branch["properties"][field]["enum"] == [page[field]]
+E               AssertionError: assert ['aaaaaaaaaaa...aaaaaaaaaaaa'] == ['trial-a']
+E                 
+E                 At index 0 diff: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' != 'trial-a'
+E                 Use -v to get more diff
+
+tests\test_citation_schema_identity.py:49: AssertionError</failure></testcase></testsuite></testsuites>

@@ -91,6 +91,10 @@ def create_workspace(
         raise ForestError(f"Refusing to overwrite an existing directory: {destination}")
     config = json.loads(json.dumps(config or load_config()))
     validate(config)
+    from .advisor import settings as advisor_settings
+    from .control_versions import contracts
+
+    config["advisor"] = advisor_settings(config)  # Persist defaults, not a moving interpretation.
     if config["backend"] == "ollama":
         config["ollama"] = resolve_model(config["ollama"])
     config["target_id"] = config.get("target_id", local_target_id())
@@ -153,6 +157,7 @@ def create_workspace(
             "status": "ready",
             "started": None,
             "deadline": None,
+            "control_contracts": contracts(config),
         }.items():
             db.set(key, value)
         with db.connection:
@@ -222,6 +227,9 @@ class Controller:
                 self.db.event("progress_write_failed", {"reason": str(exc)})
 
     def _start(self) -> None:
+        from .control_versions import verify as verify_control_contracts
+
+        verify_control_contracts(self.db, self.config)
         if self.config["backend"] == "codex":
             from .model_policy import require_identity
 
@@ -459,6 +467,8 @@ class Controller:
 
     def _new_mission(self, role: str, epoch: dict, reserved_slot=None) -> tuple[Mission, dict, str]:
         from .active_contract import enabled as active_enabled
+        from .advisor import account_context, capture, choose
+        from .advisor import settings as advisor_settings
 
         if active_enabled(self.config):
             from .active_state import state as active_state
@@ -493,6 +503,7 @@ class Controller:
             mission = self.search.ask(
                 tree_id, actions, epoch["id"], base_commit, count + 1, "", slot,
                 route_generators=(child or {}).get("kind", "research") == "research",
+                advisor=(lambda proposals: choose(self, proposals)) if advisor_settings(self.config)["enabled"] else None,
             )
         if active_enabled(self.config):
             from .active_state import context as active_context
@@ -527,6 +538,11 @@ class Controller:
         branch = "integration" if mission.role == "G" else "exp"
         branch += f"/{self.config['problem']}/{mission.role}/{mission.id}"
         make_worktree(self.root / "repo", Path(mission.worktree), branch, mission.base_commit)
+        try:
+            with account_context(self):
+                capture(self, mission)
+        except (ForestError, OSError, ValueError) as exc:
+            self.db.event("advisor_features_unavailable", {"id": mission.id, "error": type(exc).__name__})
         return mission, self._context(mission, sources), slot
 
     def _evaluate_mission(self, mission: Mission, baseline: dict) -> Outcome:
@@ -622,10 +638,17 @@ class Controller:
                 self.db.settle_tokens(slot, 0 if self.config["backend"] == "recipe" else None)
             outcome = Outcome("infrastructure_error", reason=str(exc))
         self.search.finish(mission, outcome)
+        from .advisor import account_context
+        from .advisor import observe as observe_advisor
         from .evolution_archive import record as record_diversity
         from .memory_store import sync_memory
 
         record_diversity(self, mission, outcome)
+        try:
+            with account_context(self):
+                observe_advisor(self, mission, outcome)
+        except (ForestError, OSError, ValueError) as exc:
+            self.db.event("advisor_sample_unavailable", {"id": mission.id, "error": type(exc).__name__})
         sync_memory(self.db, self.root)
         row = self.db.one("SELECT created FROM trials WHERE id=?", (mission.id,))
         record_timing(self.db, "mission:" + mission.role,
@@ -941,10 +964,12 @@ class Controller:
 
     def status(self) -> dict:
         from .active_reporting import summary as active_summary
+        from .advisor import summary as advisor_summary
 
         return {
             "status": self.db.get("status"),
             "active_architecture": active_summary(self.db),
+            "advisor": advisor_summary(self.db),
             "epoch": self.db.get("current_epoch"),
             "costs": self.db.costs(),
             "deadline": self.db.get("deadline"),

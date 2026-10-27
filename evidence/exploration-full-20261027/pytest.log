@@ -1,0 +1,204 @@
+........................................................................ [  6%]
+........................................................................ [ 12%]
+...............F........................................................ [ 18%]
+........................................................................ [ 24%]
+........................................................................ [ 30%]
+..........s.s........................................................... [ 37%]
+........................................................................ [ 43%]
+........................................................................ [ 49%]
+........................................................................ [ 55%]
+........................................................................ [ 61%]
+........................................................................ [ 67%]
+........................................................................ [ 74%]
+........................................................................ [ 80%]
+................................................................s....... [ 86%]
+........................................................................ [ 92%]
+........................................................................ [ 98%]
+..............                                                           [100%]
+================================== FAILURES ===================================
+___ test_advisor_warmup_preserves_active_analysts_closure_and_confirmation ____
+
+tmp_path = WindowsPath('C:/Users/nicol/AppData/Local/Temp/pytest-of-nicol/pytest-255/test_advisor_warmup_preserves_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000023F68D5F000>
+need_compiler = None
+
+    def test_advisor_warmup_preserves_active_analysts_closure_and_confirmation(tmp_path, monkeypatch, need_compiler):
+        config = _settings(tmp_path)
+        config["advisor"] = {"enabled": True}
+        monkeypatch.setattr("test_active_pipeline.persistent_settings", lambda _: copy.deepcopy(config))
+        # No runtime is supplied: reaching eight examples must also fail back to FIFO.
+        monkeypatch.setattr("hpc_forest.advisor.run_process",
+                            lambda *a, **k: (_ for _ in ()).throw(AssertionError("No unprovisioned model call")))
+>       _run_live(tmp_path, monkeypatch, need_compiler, False, True)
+
+tests\test_advisor_pipeline.py:27: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+tmp_path = WindowsPath('C:/Users/nicol/AppData/Local/Temp/pytest-of-nicol/pytest-255/test_advisor_warmup_preserves_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000023F68D5F000>
+need_compiler = None, failed_integration = False, corrected = True
+control_fault = None
+
+    @pytest.mark.parametrize("failed_integration", [False, True])
+    @pytest.mark.parametrize("corrected", [False, True])
+    def test_live_loop_branches_integrates_closes_and_confirms(tmp_path, monkeypatch, need_compiler, failed_integration, corrected,
+                                                             control_fault=None):
+        cfg = persistent_settings(tmp_path)
+        cfg["budget"]["wall_seconds"] = 3600
+        cfg["forest"]["active"] = {"mode": "full", "analysis_every": 1, "analysis_calls": 1, "steering_calls": 1,
+                                   "code_analysis": corrected, "closure_guards": corrected}
+        if corrected:
+            # This pipeline exercises closure when protected work no longer fits;
+            # the complementary two-experiment continuation is covered directly.
+            cfg["forest"]["active"]["progress_budget_fraction"] = 0.001
+        if control_fault:
+            cfg["forest"]["active"]["steering_calls"] = 2
+        cfg["memory"] = {"mode": "active", "context_characters": 64000}
+        cfg["harness"].update(enabled=True, max_attempts=1)
+        monkeypatch.setattr("test_mother_conversation.persistent_settings", lambda _: copy.deepcopy(cfg))
+        root, controller, fixture = native_campaign(tmp_path, monkeypatch, 2)
+        initial = threading.Barrier(2, timeout=20)
+        calls, steering = [], []
+        injected = []
+    
+        def process(argv, output, log, timeout, **kwargs):
+            request = json.loads((output / "request.json").read_text(encoding="utf8"))
+            schema = request["schema"]["properties"]
+            calls.append(request)
+            turn = request.get("conversation")
+            thread = (turn or {}).get("thread_id") or str(uuid.uuid4())
+            if "children" in schema:
+                value = decomposition(2)
+            elif request.get("active_control"):
+                payload = json.loads(request["messages"][1]["content"])
+                catalog = payload["history"][0]["view"]["items"]
+                sources = [v["id"] for v in catalog if v["kind"] == "trial" and v["measured_outcome"]["correct"]]
+                if request["active_control"]["kind"] == "analyst":
+                    value = report_data(sources[0] if sources else "baseline-e1")
+                    if corrected:
+                        page = payload["code_packet"]["sources"][0]
+                        value["code_findings"] = [{"mechanism": "Fixture examines the versioned tile parameter",
+                            "citations": [{k: page[k] for k in ("evidence_id", "path", "sha256", "start_line", "end_line")}]}]
+                    assert "--ephemeral" in argv
+                else:
+                    assert "resume" in argv and turn["phase"] == "steering"
+                    if control_fault == "output_limit" and not injected:
+                        injected.append(True)
+                        log.write_text("\n".join(json.dumps(v) for v in [
+                            {"type": "thread.started", "thread_id": thread},
+                            {"type": "turn.failed", "error": {
+                                "message": "Incomplete response returned, reason: max_output_tokens"}},
+                        ]), encoding="utf8")
+                        return SimpleNamespace(returncode=1, timed_out=False, log=str(log))
+                    trees = payload["trees"]
+                    if "Gm1" not in trees and len(sources) >= 2:
+                        actions = [action("branch", sources=[sources[0]]),
+                                   action("integrate", sources=sources[:2]),
+                                   action("share", "T1", sources=sources[:1]), action("suspend", "T2")]
+                    elif "Gm1" in trees and trees["Gm1"]["completed_ids"]:
+                        actions = [action("close")]
+                        if corrected:
+                            reviews = []
+                            for h in payload["closure_hypotheses"]:
+                                ref = dict(payload["reports_as_interpretations"][h["tree"]]["report"]["code_findings"][0]["citations"][0])
+                                ref["end_line"] = min(ref["end_line"], ref["start_line"] + 5)
+                                reviews.append({"report_id": h["report_id"], "index": h["index"],
+                                    "disposition": "rejected", "evidence_ids": [ref["evidence_id"]],
+                                    "basis": "source_or_contract", "source_citations": [ref],
+                                    "reason": "The cited fixture source fixes the limited experiment domain"})
+                            actions[0]["hypothesis_review"] = reviews
+                        if control_fault == "idle_review" and any(
+                                not tree["suspended"] for role, tree in trees.items() if role.startswith("T")):
+                            # Drain with ordinary validated actions so this fault
+                            # injection is independent of control/generation races.
+                            # A guarded close is necessarily a separate decision.
+                            actions = [action("suspend", role) for role in trees if role.startswith("T")]
+                    else:
+                        actions = [action("continue", "T1")]
+                    if (control_fault == "idle_review" and payload.get("lifecycle", {}).get("closing")
+                            and not payload["lifecycle"].get("idle_recoveries")):
+                        actions = [action("suspend", role) for role in trees if role.startswith("T")]
+                        injected.append(True)
+                    value = decision(payload, *actions)
+                    steering.append(value)
+            else:
+                payload, sources = kwargs["stdin"].split("\n\nCURRENT SOURCE AS DATA:\n", 1)
+                payload = json.loads(payload)
+                role = payload["role"]
+                if role in {"T1", "T2"} and payload["ordinal"] == 1:
+                    initial.wait()
+                content = sources.split("--- BEGIN FILE src/params.h ---\n", 1)[1].split("\n--- END FILE src/params.h ---", 1)[0]
+                tile = {"T1": 8, "T2": 24, "T3": 40, "Gm1": 64, "G": 80}[role] + payload["ordinal"]
+                content = re.sub(r"#define TILE \d+", f"#define TILE {tile}", content).replace("#define LAYOUT 0", "#define LAYOUT 1")
+                if role in {"Gm1", "G"}:
+                    content = content.replace("#define SIMD 0", "#define SIMD 1")
+                if role == "Gm1" and failed_integration:
+                    content += "\nint fixture_invalid_code = ;\n"
+                value = {"hypothesis": "Offline fixture", "transformations": ["Fixture"],
+                         "sources_kept": payload["integration_source_ids"],
+                         "files": [{"path": "src/params.h", "content": content}], "notes": "Offline fixture",
+                         "memory_read": empty_read(), "memory_lessons": []}
+                if role == "Gm1":
+                    assert turn is None  # Intermediate G is not final Mother assembly.
+                    assert payload["context_as_data"]["intermediate_integration"]["decision_id"]
+            (output / "agent-result.json").write_text(json.dumps(value), encoding="utf8")
+            events = [
+                {"type": "thread.started", "thread_id": thread},
+                {"type": "turn.completed", "usage": {"input_tokens": 2 * ((turn or {}).get("turn", 0) + 1),
+                                                    "output_tokens": (turn or {}).get("turn", 0) + 1}}]
+            if control_fault == "empty_wait" and request.get("active_control", {}).get("kind") == "mother":
+                events.insert(1, {"type": "item.completed", "item": {"id": "noop", "type": "collab_tool_call",
+                    "tool": "wait", "receiver_thread_ids": [], "prompt": None, "agents_states": {},
+                    "status": "completed"}})
+                injected.append(True)
+            log.write_text("\n".join(json.dumps(v) for v in events), encoding="utf8")
+            return SimpleNamespace(returncode=0, timed_out=False, log=str(log))
+    
+        monkeypatch.setattr(codex_process, "run_process", process)
+        with controller:
+            # Reopening deliberately adds work beyond the ordinary checkpoint. Keep
+            # a finite ceiling, but let this scenario reach a reviewed closure.
+            result = controller.run(max_batches=12 if control_fault == "idle_review" else 4)
+            if result["status"] == "checkpointed":
+                result = controller.run(max_batches=2)
+            controller.confirm()
+            result = controller.status()
+            assert result["status"] == "confirmed"
+            runtime = state(controller.db, 1)
+>           assert runtime["closed"]
+E           assert False
+
+tests\test_active_pipeline.py:146: AssertionError
+---------------------------- Captured stdout call -----------------------------
+T2 f7b327a2143b481a: valid
+T1 92a14cb081c7497e: valid
+T2 b4de8239205f46f2: valid
+T1 c8a26e3856944de6: valid
+T2 c16d0c81acca4b02: valid
+T3 4dd5d22e4f984ed0: valid
+Gm1 8f2990a52b124e5f: valid
+T3 e89b2f8ea6c74f60: valid
+T1 f1f979cc9ece43a5: valid
+T3 e49e4bc79ad948c0: valid
+T1 946ca83de72a43db: valid
+T2 5f85a1ee803540a0: valid
+T3 171fe95b85ea4494: valid
+T1 efdca6370df1484f: valid
+T2 a4bf669469a34d1c: valid
+T3 0bad131da9f645e9: valid
+T1 1b891fd027a64b7e: valid
+T2 8fb420db3d174e33: valid
+T3 530c6f305bd04d7e: valid
+G d547db05940d42da: valid
+============================== warnings summary ===============================
+tests/test_webapp.py::test_api_end_to_end_with_uploaded_folder
+  C:\Users\nicol\Documents\Codex\2026-10-20\new-chat\work\hpc-forest-mcp-venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_controlled_storage.py:42: ROMEO relocation uses POSIX directory symlinks
+SKIPPED [1] tests\test_controlled_storage.py:73: ROMEO preservation uses POSIX directory symlinks
+SKIPPED [1] tests\test_sakana_search.py:181: Optional sakana-m environment required
+FAILED tests/test_advisor_pipeline.py::test_advisor_warmup_preserves_active_analysts_closure_and_confirmation
+1 failed, 1162 passed, 3 skipped, 1 warning in 1361.79s (0:22:41)

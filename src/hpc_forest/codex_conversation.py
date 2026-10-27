@@ -9,6 +9,23 @@ from pathlib import Path
 from .core import FileLock, InfrastructureError, atomic_json
 from .native_usage import conversation_usage
 
+OUTPUT_LIMIT = "Incomplete response returned, reason: max_output_tokens"
+
+
+def recoverable_output_limit(request, response, events):
+    """Only a terminal, side-effect-free steering failure may advance the chain."""
+    terminal = [e for e in events if e.get("type") in {"turn.failed", "turn.completed"}]
+    usage = response.get("usage") or {}
+    return (request.get("active_control", {}).get("kind") == "mother"
+            and request["conversation"]["phase"] == "steering"
+            and response.get("error") is not None and not response.get("infrastructure_error")
+            and response.get("data") is None
+            and usage.get("turn_failure_messages") == [OUTPUT_LIMIT]
+            and not usage.get("forbidden_tool_events") and not usage.get("tool_runtime_errors")
+            and len(terminal) == 1 and terminal[0].get("type") == "turn.failed"
+            and isinstance(terminal[0].get("error"), dict)
+            and terminal[0]["error"].get("message") == OUTPUT_LIMIT)
+
 
 def _thread_id(value) -> bool:
     try:
@@ -97,15 +114,18 @@ def run_turn(request: dict, request_sha: str, output: Path, invoke) -> dict:
         try:
             response = invoke()
             state["usage_cumulative"] = conversation_usage(response, previous, turn["turn"])
-            if not response.get("error") and not response.get("infrastructure_error"):
-                threads = set()
-                for line in (output / "codex.jsonl").read_text(encoding="utf-8").splitlines():
-                    try:
-                        event = json.loads(line)
-                    except ValueError:
-                        continue
-                    if event.get("type") == "thread.started":
-                        threads.add(event.get("thread_id"))
+            events = []
+            log = output / "codex.jsonl"
+            for line in log.read_text(encoding="utf-8").splitlines() if log.is_file() else []:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(event, dict):
+                    events.append(event)
+            recoverable = recoverable_output_limit(request, response, events)
+            if (not response.get("error") and not response.get("infrastructure_error")) or recoverable:
+                threads = {e.get("thread_id") for e in events if e.get("type") == "thread.started"}
                 try:
                     if len(threads) != 1 or not _thread_id(next(iter(threads))):
                         raise InfrastructureError("Native Mother did not identify one persisted conversation")
@@ -114,6 +134,12 @@ def run_turn(request: dict, request_sha: str, output: Path, invoke) -> dict:
                     response["conversation"] = receipt
                     verify_receipt(request, request_sha, response)
                     state.update(receipt, status="complete")
+                    if recoverable:
+                        # A completed native turn is not an accepted proposal.
+                        # The next call uses a new nonce in this same thread.
+                        state["last_outcome"] = "incomplete_output"
+                        response["recovery"] = {"reason": "model_output_limit",
+                                                "continuation": "same_native_thread"}
                 except InfrastructureError as exc:
                     # Generation already finished: retain its measured token usage.
                     response.pop("conversation", None)

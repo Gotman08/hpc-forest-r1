@@ -37,6 +37,17 @@ def proposal_messages(worktree: Path, mission: Mission, context: dict, *, skills
         "or correctness diagnostic still describes that program."
     )
     schema = json.loads(json.dumps(SOURCE_SCHEMA))
+    if context.get("exploration_context"):
+        system += (
+            " Inspect exploration_context and its measured, scoped source excerpts. "
+            "For explore_from_assigned_base, choose a materially different code mechanism "
+            "from recent attempts when justified; state the difference and falsifiable test. "
+            "For refine_selected_parent, retain the actual selected parent and test a specific "
+            "remaining bottleneck or uncertainty. Do not merely rename an old hypothesis or "
+            "copy an archived program. Small edits are allowed when they test a distinct "
+            "mechanism. Slower correct alternatives can provide ideas, not promised speedups. "
+            "Choose the transformation yourself; neither diversity nor advice grants a reward."
+        )
     protected = context.get("active_advice_as_interpretation", {}).get("protected_progress")
     if protected and protected.get("remaining", 0) > 0:
         system += (

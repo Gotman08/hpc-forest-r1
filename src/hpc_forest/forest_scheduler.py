@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import SimpleQueue
 
 from .adaptive_budget import admit, record_timing
+from .advisor import next_completed
 from .backends import Generated
 from .binary_search import SearchExhausted
 from .core import BudgetExhausted, ForestError, Mission
@@ -45,6 +46,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
     if first_receipt and not db.get(f"research_initial_dispatch:{epoch_id}"):
         raise ForestError("An interrupted initial research wave cannot replay its model invocations")
     completed = SimpleQueue()
+    ready = []
     pending, exhausted = {}, set()
     fatal = None
     runtime = {"policy": "independent-v1", "parallelism": len(roles),
@@ -146,7 +148,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                 refill(pool)
 
             while pending:
-                future = completed.get()
+                future = next_completed(controller, completed, pending, ready)
                 mission, slot, _ = pending[future]
                 generated, started, finished = future.result()
                 record_timing(db, "generation:" + mission.role, finished - started)

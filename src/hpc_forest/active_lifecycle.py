@@ -103,8 +103,21 @@ def analysis_current(db, epoch, role, *, attempted=False):
 def analysis_needed(db, epoch, role):
     if not guarded(db) or analysis_current(db, epoch, role, attempted=True):
         return False
-    life = lifecycle(state(db, epoch))
-    return bool(life["closing"] or life["protections"].get(role, {}).get("remaining"))
+    current = state(db, epoch)
+    life = lifecycle(current)
+    if life["closing"]:
+        return True  # Closure still reviews every settled descendant.
+    protection = life["protections"].get(role, {})
+    if not protection.get("remaining"):
+        return False
+    analyst = current["analysts"].get(role, {})
+    reviewed = analyst.get("reviewed_ids", [])
+    if analyst.get("status") == "unavailable":
+        reviewed = [*reviewed, *analyst.get("watermark", [])]
+    # One progress report unlocks the bounded follow-ups. A slower descendant
+    # does not invalidate its parent's review or force another blocking call.
+    # A new improvement changes source_id and earns its own source review.
+    return protection.get("source_id") not in reviewed
 
 
 def protection_admissible(db, epoch, role):
@@ -122,7 +135,7 @@ def protection_admissible(db, epoch, role):
 
 def waiting_for_analysis(db, epoch, role):
     return (guarded(db) and protection_admissible(db, epoch, role)
-            and not analysis_current(db, epoch, role, attempted=True))
+            and analysis_needed(db, epoch, role))
 
 
 def admitted(db, epoch, role, identity):
@@ -211,12 +224,10 @@ def request_close(db, epoch, current, action, snapshot, decision_id):
     supplied = {(h["report_id"], h["index"]): h for h in reviews}
     if set(supplied) != set(expected) or len(supplied) != len(reviews):
         raise InfrastructureError("Closure must account for every latest analyst hypothesis")
-    measured = {r["id"]: r for r in completed(db, epoch) if json.loads(r["result"] or "{}").get("score") is not None}
+    from .active_closure_evidence import validate_review
+
     for identity, review in supplied.items():
-        if review["disposition"] == "tested" and not any(
-                ref in measured and measured[ref]["role"] == expected[identity]["tree"]
-                for ref in review["evidence_ids"]):
-            raise InfrastructureError("A tested hypothesis requires a measured trial in its tree")
+        validate_review(expected[identity], review, snapshot)
         if review["disposition"] == "budget" and forecast_independent(db, [expected[identity]["tree"]])["can_admit"]:
             raise InfrastructureError("The requested hypothesis still has admission budget")
     current["closed"] = True
@@ -242,4 +253,43 @@ def idle_review(db, epoch):
     life["review_revision"] += 1
     db.set(key(epoch), current)
     db.event("active_idle_review", {"evidence_ids": ids(db, epoch), "suspended": current["suspended"]})
+    return True
+
+
+def resume_after_idle_review(db, epoch, roles):
+    """A missing/invalid closure decision is not convergence.
+
+    After the bounded review has no further admitted control call, reopen
+    eligible existing trees. New measurements, not an operator-supplied idea,
+    drive the next review. No budget, objective or TreeQuest reward is changed.
+    """
+    if not guarded(db):
+        return False
+    current = state(db, epoch)
+    life = lifecycle(current)
+    if current["closed"] or not life["closing"] or db.get(f"active_mother_broken:{epoch}"):
+        return False
+    eligible = [role for role in roles
+                if role not in db.get(f"active_unavailable:{epoch}", {})
+                and forecast_independent(db, [role])["can_admit"]]
+    if not eligible:
+        return False
+    # Do not bypass a pending source analysis; the scheduler dispatches it first.
+    if any(waiting_for_analysis(db, epoch, role) for role in eligible):
+        return False
+    marker = digest({"ids": ids(db, epoch), "roles": eligible})
+    if marker in life.get("idle_recoveries", []):
+        return False
+    life.setdefault("idle_recoveries", []).append(marker)
+    request = life["closing"]
+    life["closing"] = None
+    life["review_revision"] += 1
+    current["suspended"] = [r for r in current["suspended"] if r not in eligible]
+    current["revision"] += 1
+    detail = {"closure_deferred": "idle_review_without_valid_closure",
+              "resumed_roles": eligible, "closing_request": request["id"],
+              "evidence_ids": ids(db, epoch)}
+    life["closure_history"].append(detail)
+    db.set(key(epoch), current)
+    db.event("active_idle_recovery", detail)
     return True

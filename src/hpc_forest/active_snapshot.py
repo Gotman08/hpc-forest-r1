@@ -8,6 +8,7 @@ from .active_state import children, imports, state
 from .core import digest
 from .independent_budget import forecast_independent
 from .observer_snapshot import _development, _record
+from .performance_evidence import compared
 
 
 def watermark(db, epoch, role=None):
@@ -42,7 +43,12 @@ def freeze(controller, epoch, role=None):
         records.extend(r for r in development if own or r["id"] in allowed)
         if own:
             warnings.extend(missing)
+    baseline_profile = records[0]["performance_by_configuration"]
+    for record in records:
+        record["performance_by_configuration"] = compared(record["performance_by_configuration"], baseline_profile)
+    unavailable = db.get(f"active_unavailable:{epoch}", {})
     trees = {r: {**child, "suspended": r in current["suspended"],
+                 "unavailable_reason": unavailable.get(r),
                  "completed_ids": watermark(db, epoch, r)} for r, child in assignments.items()}
     for tree_role, tree in trees.items():
         own = [record for record in records if record["kind"] == "trial"
@@ -53,7 +59,8 @@ def freeze(controller, epoch, role=None):
         tree["measured_examples"] = list({record["id"]: {
             "id": record["id"], "measured_outcome": {k: record["outcome"].get(k)
                 for k in ("status", "correct", "mean_seconds", "score", "commit")},
-            "source_paths": list(record["source_files"])} for record in examples}.values())
+            "source_paths": list(record["source_files"]),
+            "performance_by_configuration": record["performance_by_configuration"]} for record in examples}.values())
     reports = current["analysts"] if role is None else {role: current["analysts"].get(role, {})}
     dossier = {"version": VERSION, "epoch": epoch, "role": role,
                "plan_revision": current["revision"], "trees": trees if role is None else {role: trees[role]},
@@ -65,6 +72,11 @@ def freeze(controller, epoch, role=None):
                    "model": controller.config["codex"]["model"], "reasoning_effort": controller.config["codex"]["reasoning_effort"]},
                "budget": forecast_independent(db), "inflight": db.get(f"research_pending:{epoch}", [])}
     from .evolution_archive import view as diversity_view
+    from .exploration_context import summarize
+
+    for tree_role, tree in dossier["trees"].items():
+        tree["exploration"] = summarize([r for r in records
+            if (r.get("mission") or {}).get("role") == tree_role])
 
     archive = diversity_view(db, epoch, role=role, authorized_ids=allowed or ())
     if archive is not None:
@@ -78,5 +90,9 @@ def freeze(controller, epoch, role=None):
     if guarded(db):
         dossier.update(closure_guard=True, lifecycle=lifecycle(current),
                        closure_hypotheses=hypotheses(current) if role is None else [])
+        if role is None:
+            from .active_closure_evidence import packet as closure_packet
+
+            dossier["closure_code_packet"] = closure_packet(dossier)
     dossier["snapshot_id"] = digest(dossier)
     return dossier

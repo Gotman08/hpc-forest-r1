@@ -13,6 +13,7 @@ from .active_contract import enabled, settings
 from .active_snapshot import watermark
 from .active_state import children, state
 from .adaptive_budget import admit, record_timing
+from .advisor import next_completed
 from .backends import Generated
 from .binary_search import SearchExhausted
 from .core import BudgetExhausted, ForestError, InfrastructureError, Mission
@@ -56,12 +57,33 @@ def analyst_order(db, epoch):
         current["analysts"].get(child["role"], {}).get("last_job"), -1))
 
 
+def mother_due(db, epoch, cfg):
+    """Batch ordinary reports; never delay a drained closure or idle recovery."""
+    current = state(db, epoch)
+    if current["mother_watermark"] == controls.report_watermark(current):
+        return False
+    if current.get("lifecycle", {}).get("closing"):
+        return True
+    seen = current.get("mother_reports", {})
+    fresh = [role for role, item in current["analysts"].items()
+             if item.get("report_id") and item["report_id"] != seen.get(role)]
+    if not fresh:
+        return False
+    unavailable = db.get(f"active_unavailable:{epoch}", {})
+    available = [c for c in children(db, epoch) if c.get("kind") != "intermediate_integration"
+                 and c["role"] not in current["suspended"] and c["role"] not in unavailable]
+    batch_size = min(cfg.get("mother_every_reports", 2), max(1, len(available)))
+    new_trials = set(watermark(db, epoch)) - set(current.get("mother_evidence_ids", []))
+    return len(fresh) >= batch_size or len(new_trials) >= cfg["analysis_every"]
+
+
 def run_research(controller, epoch, baseline, max_rounds=None):
     db, epoch_id = controller.db, epoch["id"]
     cfg = settings(controller.config)
     initial_children = db.get(f"forest_plan:{epoch_id}")["children"]
     width = len(initial_children)
     completed, pending, exhausted = SimpleQueue(), {}, set()
+    ready = []
     pending_key = f"research_pending:{epoch_id}"
     counts, limits, waiting = {}, {}, controls.recover(controller, epoch_id)
     fatal = None
@@ -125,7 +147,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                 and (any(a.get("report_id") for a in current["analysts"].values())
                      or current.get("lifecycle", {}).get("closing"))
                 and lifecycle.ready_for_mother(db, epoch_id)
-                and current["mother_watermark"] != controls.report_watermark(current)):
+                and mother_due(db, epoch_id, cfg)):
             try:
                 admit(db, ["@mother"])
                 waiting.insert(0, controls.create(controller, epoch_id, "mother"))
@@ -255,9 +277,15 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                     if not fatal and not checkpoint and lifecycle.idle_review(db, epoch_id):
                         dispatch_controls(pool)
                         refill(pool)
+                    if (not pending and not fatal and not checkpoint
+                            and lifecycle.resume_after_idle_review(db, epoch_id, [
+                                r for r in counts if not r.startswith("Gm")
+                                and r not in exhausted and not (r in limits and counts[r] >= limits[r])
+                            ])):
+                        refill(pool)
                     if not pending:
                         break
-                future = completed.get()
+                future = next_completed(controller, completed, pending, ready)
                 item = pending[future]
                 if item["kind"] == "control":
                     response, finished = future.result()
@@ -294,9 +322,15 @@ def run_research(controller, epoch, baseline, max_rounds=None):
             if lifecycle.guarded(db):
                 from .independent_budget import forecast_independent
 
-                if any(forecast_independent(db, [r])["can_admit"] for r in research):
+                if all(r in exhausted for r in research):
                     status = "search_complete"
-                    runtime["stop_reason"] = "no_admissible_work_after_idle_review"
+                    runtime["stop_reason"] = "all_trees_exhausted"
+                elif any(forecast_independent(db, [r])["can_admit"] for r in research if r not in exhausted):
+                    runtime.update(status="infrastructure_error", stop_reason="unresolved_control_stall")
+                    db.set(f"research_scheduler:{epoch_id}", runtime)
+                    db.set("status", "infrastructure_error")
+                    raise InfrastructureError("Active control stalled with admissible research; "
+                                              "no reviewed closure may be inferred")
                 else:
                     runtime["stop_reason"] = "final_reserve_or_deadline"
         if current["closed"]:

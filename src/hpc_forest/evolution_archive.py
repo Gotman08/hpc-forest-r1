@@ -14,6 +14,7 @@ import re
 from .core import ForestError, digest
 from .support.sources import committed_source_snapshot
 
+VERSION = "forest-diversity-archive-v2-source-context"
 
 def settings(config):
     value = config.get("evolution", {})
@@ -93,7 +94,7 @@ def view(db, epoch, *, role=None, authorized_ids=(), maximum=None):
     for index, item in enumerate(public):
         item["selection_reason"] = "fastest_measured" if index == 0 else "lexical_diversity"
         item["distance_from_champion"] = distance(chosen[index], chosen[0])
-    return {"schema": "forest-diversity-archive-v1", "eligible_count": len(eligible), "entries": public,
+    return {"schema": VERSION, "eligible_count": len(eligible), "entries": public,
             "scope": {"epoch": epoch, "role": role, "authorized_import_ids": sorted(allowed)},
             "rule": "Lexical diversity is a source-reading hint, not semantic novelty or speedup. "
                 "Small edits may be valuable. Never reject or score code from similarity. "
@@ -108,5 +109,11 @@ def attach(controller, mission, context):
     archive = view(controller.db, mission.epoch, role=mission.role,
                    authorized_ids=mission.import_ids + mission.sources, maximum=cfg["inspirations"])
     if archive["entries"]:
-        return {**context, "diverse_measured_sources": archive}
+        result = {**context, "diverse_measured_sources": archive}
+        if (getattr(mission, "budget_phase", "search") == "search"
+                and getattr(mission, "kind", "research") == "research" and mission.role != "G"):
+            from .exploration_context import source_context
+
+            result["exploration_context"] = source_context(controller, mission, archive)
+        return result
     return context

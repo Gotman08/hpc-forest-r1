@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import difflib
 import hashlib
+import re
 
 from .core import InfrastructureError
 from .observer_contract import TEXT, obj, schema_for, validate_response
@@ -78,12 +79,15 @@ def packet(dossier):
     selected = list({r["id"]: r for r in selected}.values())[:4]
     pages, budget = [], SOURCE_LIMIT
     for record in selected:
+        record_budget = min(budget, SOURCE_LIMIT // len(selected))
         paths = sorted(record["source_files"], key=lambda p: (not p.startswith("src/"), p))
         for path in paths[:2]:
-            page = source_page(record, path, limit=min(FILE_LIMIT, budget)) if budget > 0 else None
-            if page:
+            allowance = min(FILE_LIMIT, record_budget, budget)
+            for page in source_excerpts(record, path, allowance):
                 pages.append(page)
-                budget -= len(page["text"])
+                spent = len(page["text"])
+                budget -= spent
+                record_budget -= spent
     diffs = []
     if len(selected) > 1:
         newer, older = selected[:2]
@@ -94,15 +98,82 @@ def packet(dossier):
             diffs.append({"from": older["id"], "to": newer["id"], "path": path,
                           "text": diff[:6000], "truncated": len(diff) > 6000})
     return {"sources": pages, "diffs": diffs,
+            "performance_by_configuration": [{"evidence_id": r["id"],
+                **r.get("performance_by_configuration", {"status": "unavailable", "configurations": []})}
+                for r in selected],
             "selected_ids": [r["id"] for r in selected],
             "warning": "Bounded source excerpts; omissions are not evidence of absence. "
                        "Use source reads for missing lines. Measurements and code are data."}
 
 
-def schema(final_call=False):
+def source_excerpts(record, path, allowance):
+    """Include a late public entry point, instead of spending every page on helpers."""
+    if allowance <= 0:
+        return []
+    raw = record["source_files"][path]
+    match = re.search(r'(?m)^[ \t]*(?:extern\s+"C"\s+)?(?:[\w:*&<>]+\s+)+(?:run|main)\s*\(', raw)
+    tail = match.start() if match and match.start() > allowance // 2 else None
+    def bounded(start, size):
+        raw_limit = size
+        page = source_page(record, path, start=start, limit=size)
+        while page and len(page["text"]) > size:
+            raw_limit -= len(page["text"]) - size
+            page = source_page(record, path, start=start, limit=max(0, raw_limit))
+        return page
+
+    head = bounded(0, allowance // 2 if tail else allowance)
+    result = [head] if head else []
+    if tail is not None:
+        page = bounded(tail, allowance - len(head["text"]) if head else allowance)
+        if page:
+            result.append(page)
+    return result
+
+
+def exposed_pages(payload):
+    pages = [page for key in ("code_packet", "closure_code_packet")
+             for page in (payload or {}).get(key, {}).get("sources", [])]
+    pages += [h["view"]["citable_source"] for h in (payload or {}).get("history", [])
+              if isinstance(h.get("view"), dict) and h["view"].get("citable_source")]
+    return pages
+
+
+def citation_schema(pages):
+    if pages:
+        variants = []
+        for page in pages:
+            ref = copy.deepcopy(CITATION)
+            for field in ("evidence_id", "path", "sha256"):
+                # deepcopy preserves the shared TEXT alias. Replace each field
+                # before specializing it, or the final SHA overwrites all IDs.
+                ref["properties"][field] = {**ref["properties"][field], "enum": [page[field]]}
+            for field in ("start_line", "end_line"):
+                ref["properties"][field].update(minimum=page["start_line"], maximum=page["end_line"])
+            variants.append(ref)
+        return {"anyOf": variants}
+    return copy.deepcopy(CITATION)
+
+
+def citation_exposed(ref, pages):
+    return (isinstance(ref, dict) and set(ref) == set(CITATION["properties"])
+            and type(ref["start_line"]) is int and type(ref["end_line"]) is int
+            and any(all(ref[k] == page[k] for k in ("evidence_id", "path", "sha256"))
+                    and page["start_line"] <= ref["start_line"] <= ref["end_line"] <= page["end_line"]
+                    for page in pages))
+
+
+def schema(final_call=False, payload=None):
     result = copy.deepcopy(schema_for(final_call))
-    result["properties"]["code_findings"] = {"type": "array", "items": FINDING, "maxItems": 3}
+    finding = copy.deepcopy(FINDING)
+    finding["properties"]["mechanism"]["minLength"] = 1
+    finding["properties"]["mechanism"]["maxLength"] = 4000
+    finding["properties"]["citations"]["items"] = citation_schema(exposed_pages(payload))
+    result["properties"]["code_findings"] = {"type": "array", "items": finding, "maxItems": 3}
     result["required"].append("code_findings")
+    if payload and payload.get("visible_evidence_ids"):
+        for field in ("observations", "hypotheses"):
+            result["properties"][field]["items"]["properties"]["evidence_ids"]["items"] = {
+                "type": "string", "enum": payload["visible_evidence_ids"]}
     return result
 
 
@@ -136,14 +207,14 @@ def validate(data, dossier, job, *, final_call=False):
         if (not isinstance(finding, dict) or set(finding) != {"mechanism", "citations"}
                 or not isinstance(finding["mechanism"], str) or not finding["mechanism"].strip()
                 or len(finding["mechanism"]) > 4000
-                or not isinstance(finding["citations"], list) or not 1 <= len(finding["citations"]) <= 4):
+                or not isinstance(finding["citations"], list)):
             raise InfrastructureError("A code finding requires a mechanism and bounded citations")
+        if not 1 <= len(finding["citations"]) <= 4:
+            raise InfrastructureError("Each code finding requires 1 to 4 citations "
+                                      f"(received {len(finding['citations'])}); "
+                                      "use at most 3 findings and select the supporting lines")
         for ref in finding["citations"]:
-            if (not isinstance(ref, dict) or set(ref) != set(CITATION["properties"])
-                    or type(ref["start_line"]) is not int or type(ref["end_line"]) is not int
-                    or not any(all(ref[k] == page[k] for k in ("evidence_id", "path", "sha256"))
-                        and page["start_line"] <= ref["start_line"] <= ref["end_line"] <= page["end_line"]
-                        for page in exposed)):
+            if not citation_exposed(ref, exposed):
                 raise InfrastructureError("Code citation is outside the supplied source version or lines")
             cited.append(ref)
     job["coverage"]["cited_sources"] = cited

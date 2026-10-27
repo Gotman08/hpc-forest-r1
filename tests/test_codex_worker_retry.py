@@ -114,10 +114,18 @@ def test_unlimited_request_requires_explicit_policy_and_phase(fixture):
 
 def test_finish_started_relay_publishes_identity_bound_liveness_while_running(fixture):
     channel, _, _, calls, output = fixture
-    instance = worker(Transfer(channel), output)
     async def alive():
+        published = asyncio.Event()
+        class ObservedTransfer(Transfer):
+            async def upload(self, local, remote):
+                receipt = await super().upload(local, remote)
+                if remote.endswith("/worker-heartbeat.json"):
+                    published.set()
+                return receipt
+        instance = worker(ObservedTransfer(channel), output)
         async with instance.keepalive(True):
-            await asyncio.sleep(0)
+            # One event-loop tick does not guarantee retry_transfer has published.
+            await asyncio.wait_for(published.wait(), timeout=5)
             beat = json.loads((channel / "worker-heartbeat.json").read_text())
             assert beat["session_id"] == "a" * 32 and beat["model"] == MODEL
     asyncio.run(alive())

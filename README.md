@@ -23,6 +23,31 @@ Démarrage : `pip install -e ".[web]"`, puis `python -m hpc_forest.webapp`.
 Voir la configuration du connecteur et les limites CPU/GPU dans la documentation,
 et les [preuves du parcours autonome](docs/VALIDATION-APPLICATION-AUTONOME-20261025.md).
 
+Le [conseiller TabPFN](docs/TABPFN-ADVISOR.md) est intégré comme option du même
+contrôleur : il peut choisir parmi des parents proposés par AB-MCTS-A avant génération. Luna Max,
+TreeQuest, les analystes et la confirmation restent en place. Son activation exige
+des poids installés et vérifiés sur ROMEO. Le [comparatif réel](experiments/tabpfn-advisor-20261025/RAPPORT.md)
+conserve huit essais et sept livraisons confirmées ; aucun avis n'a été émis en ligne,
+donc aucun bénéfice prédictif n'est démontré. Les [preuves de validation](docs/VALIDATION-TABPFN-20261025.md)
+distinguent les tests d'intégration de la comparaison de performance avec et sans
+conseil ; aucun gain n'est présumé. La nouvelle comparaison à 90 minutes par condition
+est définie dans le [protocole d'admission](experiments/tabpfn-admission-20261025/protocol.json).
+Le [rapport final à 90 minutes](experiments/tabpfn-admission-20261025/RAPPORT.md)
+conserve dix exécutions, six livraisons et leur remesure commune sur ROMEO :
+56 lancements du conseiller et 34 changements de parent. Une paire UTF-8
+complémentaire est favorable, mais les échecs de contrôle et les arrêts précoces
+empêchent de conclure à un gain général. Les tests et les audits sont dans la
+[validation du choix de parent](docs/VALIDATION-TABPFN-ADMISSION-20261025.md).
+
+Le [diagnostic contrôlé du 27 octobre](experiments/controlled-advisor-20261026/ANALYSE-REGRESSIONS-TABPFN.md)
+sépare les effets du conseiller, des données et du pilotage. Les
+[corrections correspondantes](docs/CORRECTIONS-QUALITE-20261027.md) ajoutent une
+valeur sans saturation artificielle, une prévalidation économique, les temps par
+configuration et des preuves de code pour la clôture. Elles conservent un seul
+Forest et Luna Max ; leur effet sur les speedups reste à mesurer sur ROMEO.
+La [validation locale de ce lot](docs/VALIDATION-QUALITE-20261027.md) conserve
+1 142 tests Python réussis, trois sauts explicités, neuf tests d'interface et Ruff.
+
 ## Forest + analystes
 
 Le défaut reste **GPT-6 Luna, effort `max`** pour tous les rôles : Mother,
@@ -46,8 +71,8 @@ d'isoler ces contributions. Le défaut `off` conserve l'ordonnanceur historique.
 Les corrections de la boucle active ajoutent des extraits de code avec citations
 vérifiées pour les JEV, une exploration bornée des progrès récents et une clôture
 en deux décisions après la fin des essais admis. Un résultat nouveau invalide
-une décision d'arrêt devenue périmée. Le moteur corrigé passe **895 tests**, sans
-échec ni saut, et la vérification Ruff.
+une décision d'arrêt devenue périmée. La validation de ce lot du 24 octobre
+comptait **895 tests**, sans échec ni saut, et la vérification Ruff.
 
 La [comparaison des corrections sur ROMEO](experiments/architecture-corrections-20261024/RAPPORT.md)
 remesure SGEMM, UTF-8 et Mandelbrot avec les anciennes versions dans la même

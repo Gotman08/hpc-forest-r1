@@ -44,9 +44,15 @@ def analyze(c, role):
 def close(c, identity):
     snapshot = freeze(c, 1)
     value = action("close")
-    value["hypothesis_review"] = [{"report_id": h["report_id"], "index": h["index"],
-        "disposition": "rejected", "evidence_ids": [], "reason": "This fixture has no distinct remaining test"}
-        for h in snapshot["closure_hypotheses"]]
+    reviews = []
+    for h in snapshot["closure_hypotheses"]:
+        finding = snapshot["reports_as_interpretations"][h["tree"]]["report"]["code_findings"][0]
+        ref = finding["citations"][0]
+        reviews.append({"report_id": h["report_id"], "index": h["index"],
+            "disposition": "rejected", "evidence_ids": [ref["evidence_id"]],
+            "reason": "The cited immutable fixture source defines this constrained experiment",
+            "basis": "source_or_contract", "source_citations": [ref]})
+    value["hypothesis_review"] = reviews
     return apply(c.db, 1, identity, snapshot, decision(snapshot, value))
 
 
@@ -239,7 +245,8 @@ def test_hypothesis_budget_excuse_and_missing_typed_review_are_rejected(correcte
     hypothesis = snap["closure_hypotheses"][0]
     value = action("close")
     value["hypothesis_review"] = [{"report_id": hypothesis["report_id"], "index": hypothesis["index"],
-        "disposition": "budget", "evidence_ids": [], "reason": "No budget"}]
+        "disposition": "budget", "evidence_ids": [], "reason": "No budget",
+        "basis": "budget", "source_citations": []}]
     receipt = apply(corrected.db, 1, "false-budget", snap, decision(snap, value))
     assert receipt["actions"][0]["status"] == "rejected"
     assert "admission budget" in receipt["actions"][0]["reason"]

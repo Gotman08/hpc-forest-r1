@@ -12,6 +12,7 @@ import uuid
 import zipfile
 from pathlib import Path
 
+from ..advisor import settings as advisor_settings
 from ..core import ForestError, InfrastructureError
 from ..evolution_archive import settings as evolution_settings
 from ..model_policy import EFFORT, MODEL, generator_pool, require_identity
@@ -33,7 +34,7 @@ SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".cu", ".cuh"}
 CONTRACT_FIELDS = {
     "build_command", "test_command", "benchmark_command", "expected_result",
     "editable_paths", "target", "duration_minutes", "statement",
-    "model", "reasoning_effort", "search", "generator_pool", "evolution",
+    "model", "reasoning_effort", "search", "generator_pool", "evolution", "advisor",
 }
 
 
@@ -120,18 +121,20 @@ def infer_contract(files: list[tuple[str, bytes]]) -> dict:
         "model": MODEL, "reasoning_effort": EFFORT,
         "search": search_settings({}), "generator_pool": [],
         "evolution": evolution_settings({"evolution": {"enabled": True}}),
+        "advisor": advisor_settings({}),
     }
 
 
 def validate_contract(value: dict) -> dict:
     if isinstance(value, dict):
-        value = {"model": MODEL, "reasoning_effort": EFFORT, "search": {}, "generator_pool": [], "evolution": {}, **value}
+        value = {"model": MODEL, "reasoning_effort": EFFORT, "search": {}, "generator_pool": [], "evolution": {}, "advisor": {}, **value}
     if not isinstance(value, dict) or set(value) != CONTRACT_FIELDS:
         raise AppError("Le contrat contient des champs manquants ou non reconnus.")
     try:
         require_identity(value)
         pool = generator_pool(value)
         value = {**value, "search": search_settings(value),
+                 "advisor": advisor_settings(value),
                  "evolution": evolution_settings(value),
                  "generator_pool": pool if value["generator_pool"] else []}
     except InfrastructureError as exc:

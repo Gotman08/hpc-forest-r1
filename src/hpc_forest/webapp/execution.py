@@ -12,6 +12,8 @@ import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
 
+from ..advisor import runtime as advisor_runtime
+from ..advisor import settings as advisor_settings
 from ..codex_worker import RomeoFiles
 from ..core import atomic_json, file_digest
 from ..evolution_archive import settings as evolution_settings
@@ -63,6 +65,10 @@ def freeze_bundle(store: Store, mission: dict, settings: dict) -> tuple[Path, di
     if profile is None:
         raise AppError("Le profil " + prepared["target"] + " n'est pas encore installé sur ROMEO.")
     search = search_settings(selected["contract"])
+    advisor = advisor_settings(selected["contract"])
+    provisioned = advisor_runtime({"advisor_runtime": profile.get("advisor_runtime", {})})
+    if advisor["enabled"] and not provisioned:
+        raise AppError("TabPFN doit être installé et ses poids vérifiés sur ROMEO avant activation.")
     pool = generator_pool(selected["contract"]) if selected["contract"].get("generator_pool") else []
     if search["algorithm"] == "ab-mcts-m" and "ab-mcts-m" not in profile.get("search_algorithms", []):
         raise AppError("AB-MCTS-M exige le profil optionnel sakana-m installé et déclaré sur ROMEO.")
@@ -72,6 +78,7 @@ def freeze_bundle(store: Store, mission: dict, settings: dict) -> tuple[Path, di
         "schema": "forest-app-launch-v1", "id": mission["id"], "session_id": mission["session_id"],
         "model": selected["model"], "effort": selected["reasoning_effort"],
         "search": search, "generator_pool": pool, "evolution": evolution_settings(selected["contract"]),
+        "advisor": advisor, "advisor_runtime": provisioned if advisor["enabled"] else {},
         "target": prepared["target"], "input_sha256": file_digest(source),
         "architecture": profile["architecture"], "codex": profile["codex"],
         "duration_minutes": selected["contract"]["duration_minutes"],
@@ -147,6 +154,7 @@ class Missions:
         try:
             value = self.settings()
             return {"configured": bool(value), "targets": list(value["profiles"]) if value else [],
+                    "advisor_targets": [k for k, p in value["profiles"].items() if p.get("advisor_runtime")] if value else [],
                     "search_algorithms": {k: p.get("search_algorithms", []) for k, p in value["profiles"].items()}
                         if value else {},
                     "message": "Connecteur configuré ; OAuth est vérifié sur le nœud au lancement."

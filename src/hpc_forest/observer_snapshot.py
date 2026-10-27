@@ -35,8 +35,11 @@ def _diagnostics(root, outcome):
 
 
 def _record(root, key, kind, outcome, *, mission=None, evaluations=None, files=None):
+    from .performance_evidence import profile
+
     record = {"id": key, "kind": kind, "outcome": outcome, "mission": mission,
               "evaluations": evaluations or [], "diagnostics": _diagnostics(root, outcome)}
+    record["performance_by_configuration"] = profile(record["diagnostics"])
     if files is None and outcome.get("commit"):
         try:
             files = committed_source_snapshot(root / "repo", outcome["commit"])

@@ -42,7 +42,7 @@ def _read(root: Path) -> dict:
     try:
         connection.execute("BEGIN")
         base = ["current_epoch", "config", "identity", "best_confirmed", "status",
-                "protocol_id", "started", "deadline"]
+                "protocol_id", "started", "deadline", "advisor_totals"]
         placeholders = ",".join("?" for _ in base)
         metadata = {r["key"]: decoded(r["value"]) for r in connection.execute(
             f"SELECT key,value FROM metadata WHERE key IN ({placeholders})", base)}
@@ -183,6 +183,8 @@ class Campaigns:
             "effort": (config.get("codex") or {}).get("reasoning_effort"),
             "backend": config.get("backend"), "problem": config.get("problem"),
             "search_diagnostics": diagnostics(config, data["trials"]),
+            "advisor": {"enabled": config.get("advisor", {}).get("enabled", False),
+                        "model": "TabPFN-3.5", **m.get("advisor_totals", {})},
             "target": identity.get("target", config.get("target_id", "")),
             "host": identity.get("hostname", ""), "machine": identity.get("machine", ""),
             "compiler": (identity.get("compiler") or {}).get("flavor", ""),

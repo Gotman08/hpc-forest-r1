@@ -4,14 +4,15 @@ from __future__ import annotations
 import copy
 import json
 
+from .active_analysis import CITATION, citation_exposed, citation_schema, exposed_pages
 from .core import ForestError, InfrastructureError
 from .observer_contract import READ, REFS, TEXT, empty_read, obj, schema_for
 from .support.validation import require_integer
 
-VERSION = "hpc-forest-active-v1"
+VERSION = "hpc-forest-active-v5-batched-exploration"
 MODES = ("off", "local", "steering", "sharing", "full")
 DEFAULT = {"mode": "off", "analysis_every": 3, "analysis_calls": 3,
-           "steering_calls": 3, "control_workers": 1, "surprise_gain": 0.25,
+           "steering_calls": 3, "control_workers": 1, "mother_every_reports": 2, "surprise_gain": 0.25,
            "code_analysis": True, "closure_guards": True, "progress_trials": 2,
            "progress_gain": 0.02, "progress_budget_fraction": 0.15}
 ANALYST_SYSTEM = """You are the analyst of ONE active HPC Forest research tree.
@@ -28,6 +29,9 @@ Use action=read for catalog/evidence/source pages. Reads have empty report lists
 Use action=report with the empty read object for your final report. The last
 allowed call must report. Your previous reports are labelled interpretations.
 Return concise French analysis in the required JSON schema.
+Use only the supplied read/report protocol; no external tools or delegation.
+Analyze the changed mechanism and decisive evidence, without repeating the full
+history. A bounded report may leave explicit uncertainties for the next trial.
 """
 CODE_ANALYST_SYSTEM = """
 The code_packet supplies versioned source lines and diffs before your first call.
@@ -38,6 +42,16 @@ experiments, each with a falsifiable hypothesis and a stop condition. An unsucce
 variant does not exhaust its algorithmic family. Do not claim to have read omitted
 lines. Request source pages when needed. A read has code_findings=[]. If sources
 are unavailable, report that limitation; never fabricate a citation.
+Use at most 3 code_findings, with 1 to 4 citations in each finding. Select the
+supporting lines; do not concatenate every citation into a single finding.
+Use performance_by_configuration to compare every measured input size and thread
+count, especially weak configurations hidden by the aggregate. Trace the public
+entry point to the executed kernel: serial/parallel dispatch, tails and fallback
+conditions can bypass an optimization. Static vector markers do not prove the
+costly operations are vectorized. A fallback's frequency is unknown without a
+measurement; do not invent a profile. Explain a code mechanism, its measured
+configuration evidence, and one discriminating next test. Read missing callees
+instead of inferring their implementation from a name. Preserve uncertainty.
 """
 MOTHER_SYSTEM = """You are the SAME Mother steering your active HPC Forest.
 Use this immutable snapshot, measured results and explicitly labelled analyst
@@ -52,6 +66,9 @@ measured source. share authorizes exact evidence for one receiver. integrate
 requests a new measured program combining two to four correct sources, starting
 from the fastest selected input. It does not close research. close asks the
 controller to end research and proceed to final G and independent confirmation.
+Respect each tree's unavailable_reason: continue/resume cannot reopen an
+exhausted tree or bypass an intermediate integration's one-trial limit.
+continue only supplies advice; use resume to reactivate a suspended available tree.
 Choose ideas yourself; do not rewrite an existing tree's subject or objective.
 Keep a useful slower source only with a specific hypothesis and stop condition.
 Never change tests, target, compiler, permissions, budget, rewards or source code
@@ -66,6 +83,16 @@ For branch/integrate/close, do not provide tree; the controller assigns new IDs.
 share requires source_ids naming the exact evidence to import. Evidence references
 must come from visible_evidence_ids, never from a report's invented label.
 Do not provide inapplicable fields. Return concise French JSON.
+Return the decision directly: no waiting, delegation or native tool calls.
+Keep each rationale and hypothesis review brief; do not repeat the dossier.
+Compare per-configuration measurements in each tree's measured_examples before
+assuming that an aggregate improvement covers all inputs or thread counts.
+Before branching, explain why the new objective needs another tree instead of
+one discriminating experiment in an existing tree. More trees are not evidence
+of progress; a new tree needs time for both measurement and analyst review.
+Use the exploration counts and archived sources to identify repeated approaches.
+branch needs a concrete, distinct code hypothesis; a request to drain, wait,
+review evidence or prepare closure is not a new research objective.
 """
 GUARDED_MOTHER_SYSTEM = """
 With closure_guard enabled, close first REQUESTS closure: admissions drain, then
@@ -79,6 +106,18 @@ listed in closure_hypotheses: hypothesis_review records its report_id, index,
 disposition (tested/rejected/budget), evidence_ids and reason. 'tested' needs a
 measured trial; 'budget' is checked by the controller. 'rejected' must explain why
 the proposed experiment is not useful, not merely that its source was slower.
+Each review includes basis and source_citations. A measured_comparison names both
+the hypothesis's source and its directly measured changed child in the same tree,
+with exact source SHA-256 and at most 40 lines per citation for both programs.
+An arbitrary older trial does not test a new hypothesis. source_or_contract is
+only for rejected hypotheses: cite the precise source facts conflicting with the
+contract or making this test inapplicable. A slower source or uncertainty is not
+such a contradiction. If no proof exists and a test fits, continue exploration.
+Use basis=budget and source_citations=[] for disposition=budget. A new experiment
+is not automatically proof of its claimed mechanism; explain the actual change.
+closure_code_packet re-exposes verified analyst citations with measured outcomes.
+Only its supplied lines or your explicit source reads can support a source citation.
+If a report refers to other lines, read them before claiming their contents.
 Use resume/continue/branch/integrate to return to exploration. A new candidate or
 an analyst's opinion never replaces independent correctness and confirmation.
 """
@@ -90,7 +129,9 @@ ACTION = obj({
 })
 HYPOTHESIS_REVIEW = obj({"report_id": TEXT, "index": {"type": "integer", "minimum": 0},
     "disposition": {"type": "string", "enum": ["tested", "rejected", "budget"]},
-    "evidence_ids": REFS, "reason": TEXT})
+    "evidence_ids": REFS, "reason": TEXT,
+    "basis": {"type": "string", "enum": ["measured_comparison", "source_or_contract", "budget"]},
+    "source_citations": {"type": "array", "items": CITATION, "maxItems": 4}})
 DECISION_SCHEMA = obj({
     "action": {"type": "string", "enum": ["read", "decide"]},
     "snapshot_id": TEXT, "plan_revision": {"type": "integer", "minimum": 0},
@@ -113,7 +154,7 @@ def validate_settings(config):
     cfg = settings(config)
     if cfg["mode"] not in MODES:
         raise ForestError("forest.active.mode must be off/local/steering/sharing/full")
-    for key, maximum in (("analysis_every", 1000), ("analysis_calls", 16),
+    for key, maximum in (("analysis_every", 1000), ("analysis_calls", 16), ("mother_every_reports", 16),
                          ("steering_calls", 16), ("control_workers", 4), ("progress_trials", 4)):
         require_integer(cfg[key], "forest.active." + key, minimum=1, maximum=maximum)
     if type(cfg["surprise_gain"]) not in (int, float) or not 0 < cfg["surprise_gain"] <= 1:
@@ -153,7 +194,15 @@ def decision_schema(final_call=False, payload=None):
         else:
             fields.pop("source_ids")
         if kind == "close" and payload is not None and payload.get("closure_guard"):
-            fields["hypothesis_review"] = {"type": "array", "items": HYPOTHESIS_REVIEW}
+            review = copy.deepcopy(HYPOTHESIS_REVIEW)
+            pages = exposed_pages(payload)
+            review["properties"]["source_citations"]["items"] = citation_schema(pages)
+            if not pages:
+                review["properties"]["source_citations"]["maxItems"] = 0
+            if payload["visible_evidence_ids"]:
+                review["properties"]["evidence_ids"]["items"] = {
+                    "type": "string", "enum": payload["visible_evidence_ids"]}
+            fields["hypothesis_review"] = {"type": "array", "items": review}
         fields["evidence_ids"] = {**fields["evidence_ids"], "maxItems": 24}
         if payload is not None and payload["visible_evidence_ids"]:
             for field in ("source_ids", "evidence_ids"):
@@ -177,7 +226,7 @@ def rendered(kind, payload):
     from . import active_analysis
 
     code = kind == "analyst" and "code_packet" in payload
-    schema = ((active_analysis.schema(payload["must_finish"]) if code else schema_for(payload["must_finish"]))
+    schema = ((active_analysis.schema(payload["must_finish"], payload) if code else schema_for(payload["must_finish"]))
               if kind == "analyst" else decision_schema(payload["must_finish"], payload))
     system = ANALYST_SYSTEM if kind == "analyst" else MOTHER_SYSTEM
     if code:
@@ -212,7 +261,7 @@ def validate_request(request):
         raise InfrastructureError("Invalid active control call allowance")
 
 
-def validate_decision(data, snapshot, visible_ids, *, final_call=False):
+def validate_decision(data, snapshot, visible_ids, *, final_call=False, history=()):
     from .observer_contract import validate_response
 
     if (not isinstance(data, dict) or set(data) != set(DECISION_SCHEMA["properties"])
@@ -251,10 +300,19 @@ def validate_decision(data, snapshot, visible_ids, *, final_call=False):
                         or not isinstance(item["report_id"], str) or type(item["index"]) is not int
                         or item["index"] < 0 or not isinstance(item["disposition"], str)
                         or item["disposition"] not in {"tested", "rejected", "budget"}
+                        or not isinstance(item["basis"], str)
+                        or item["basis"] not in {"measured_comparison", "source_or_contract", "budget"}
+                        or not isinstance(item["source_citations"], list) or len(item["source_citations"]) > 4
                         or not isinstance(item["reason"], str) or not item["reason"].strip()
-                        or len(item["reason"]) > 4000 or not isinstance(item["evidence_ids"], list)
-                        or any(not isinstance(ref, str) or ref not in visible_ids for ref in item["evidence_ids"])):
+                        or len(item["reason"]) > 4000 or not isinstance(item["evidence_ids"], list)):
                     raise InfrastructureError("Invalid hypothesis review")
+                for ref in item["source_citations"]:
+                    if (not citation_exposed(ref, exposed_pages({**snapshot, "history": history}))
+                            or ref["evidence_id"] not in visible_ids or ref["end_line"] - ref["start_line"] >= 40):
+                        raise InfrastructureError("Closure source citation is outside the supplied version or lines")
+                if any(not isinstance(ref, str) or ref not in visible_ids for ref in item["evidence_ids"]):
+                    raise InfrastructureError("Hypothesis review cites unavailable evidence; "
+                                              "read its evidence page first or cite only visible_evidence_ids")
         defaults = {"subject": "", "objective": ""} if kind not in {"branch", "integrate"} else {}
         if kind in {"branch", "integrate", "close"}:
             defaults["tree"] = ""

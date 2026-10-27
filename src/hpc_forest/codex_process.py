@@ -168,10 +168,12 @@ def authorized_discovery(item: dict, *, romeo: bool, documentation: bool) -> boo
 
 
 def usage_from_events(path: Path, *, observe_only: bool = False,
-                      allow_romeo_mcp: bool = False, allow_documentation: bool = False) -> tuple[dict, bool]:
+                      allow_romeo_mcp: bool = False, allow_documentation: bool = False,
+                      allow_empty_agent_wait: bool = False) -> tuple[dict, bool]:
     usage_events, tool_events = [], []
     mcp_calls, forbidden_tools, runtime_errors = {}, [], []
     turn_failures = []
+    native_noops = {}
     for line in path.read_text(encoding="utf8", errors="replace").splitlines():
         try:
             event = json.loads(line)
@@ -191,7 +193,21 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
                     runtime_errors.append(message)
             if item.get("type") not in {"agent_message", "reasoning", "error", None}:
                 tool_events.append(item.get("type"))
-                allowed = (item.get("type") == "mcp_tool_call" and isinstance(item.get("tool"), str)
+                # Some CLI versions emit a wait with no recipients even when
+                # multi-agent tools are disabled. Recognize only that exact
+                # no-op; delegation, a missing recipient list and other tools
+                # remain forbidden.
+                empty_wait = (allow_empty_agent_wait and item.get("type") == "collab_tool_call"
+                    and item.get("tool") == "wait" and item.get("receiver_thread_ids") == []
+                    and item.get("agents_states") == {}
+                    and item.get("prompt") is None
+                    and item.get("status") in {"in_progress", "completed"}
+                    and not set(item) - {"id", "type", "tool", "status", "sender_thread_id",
+                                         "receiver_thread_ids", "agents_states", "prompt"})
+                if empty_wait:
+                    native_noops[item.get("id") or f"event-{len(tool_events)}"] = {
+                        "type": "empty_agent_wait", "status": item["status"]}
+                allowed = empty_wait or (item.get("type") == "mcp_tool_call" and isinstance(item.get("tool"), str)
                            and bool(item["tool"]) and (
                                (allow_romeo_mcp and item.get("server") == "romeo"
                                 and item["tool"] not in DISABLED_MODEL_TOOLS)
@@ -223,6 +239,7 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
         "mcp_tool_calls": list(mcp_calls.values()), "forbidden_tool_events": forbidden_tools,
         "tool_runtime_errors": list(dict.fromkeys(runtime_errors)),
         "turn_failure_messages": list(dict.fromkeys(turn_failures)),
+        "native_noops": list(native_noops.values()),
         "codex_jsonl_sha256": sha256(path.read_bytes()),
     }, bool(forbidden_tools)
 
@@ -303,7 +320,8 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
                          stdin=request["messages"][1]["content"])
     usage, tools = usage_from_events(Path(result.log), observe_only=observe_only,
                                     allow_romeo_mcp=romeo_mcp is not None,
-                                    allow_documentation=documentation_mcp is not None)
+                                    allow_documentation=documentation_mcp is not None,
+                                    allow_empty_agent_wait=request.get("active_control", {}).get("kind") == "mother")
     usage.update(model_requested=request["model"], reasoning_effort_requested=request["reasoning_effort"])
     error = None
     infra = False

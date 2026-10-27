@@ -103,6 +103,8 @@ def load_config(path: Path | None = None) -> dict:
 
 
 def validate(c: dict) -> None:
+    from .advisor import runtime as advisor_runtime
+    from .advisor import settings as advisor_settings
     from .model_policy import generator_pool
     from .search_policy import settings as search_settings
 
@@ -110,6 +112,11 @@ def validate(c: dict) -> None:
     from .evolution_archive import settings as evolution_settings
 
     evolution_settings(c)
+    advisor = advisor_settings(c)
+    if advisor["enabled"] and (search_settings(c)["algorithm"] != "ab-mcts-a"
+            or c.get("binary_tree", {}).get("enabled") or c.get("method") == "U"):
+        raise ForestError("TabPFN parent advice requires independent AB-MCTS-A research trees")
+    advisor_runtime(c)
     codex = c.get("codex", {})
     if not isinstance(codex, dict):
         raise ForestError("codex must be an object")

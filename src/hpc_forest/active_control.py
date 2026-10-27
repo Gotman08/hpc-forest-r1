@@ -48,10 +48,11 @@ def create(controller, epoch, kind, role=None):
                item["id"] for tree in dossier["trees"].values() for item in tree["measured_examples"]}),
            "history": [{"view": initial}], "coverage": {"reads": [], "total_records": len(dossier["records"])},
            "maximum": settings(controller.config)["analysis_calls" if kind == "analyst" else "steering_calls"]}
-    if "code_packet" in dossier:
-        job["visible_ids"] = sorted(set(job["visible_ids"]) | set(dossier["code_packet"]["selected_ids"]))
-        job["coverage"]["provided_sources"] = [{k: v for k, v in page.items() if k != "text"}
-                                               for page in dossier["code_packet"]["sources"]]
+    for packet_name in ("code_packet", "closure_code_packet"):
+        if packet_name in dossier:
+            job["visible_ids"] = sorted(set(job["visible_ids"]) | set(dossier[packet_name]["selected_ids"]))
+            job["coverage"].setdefault("provided_sources", []).extend(
+                {k: v for k, v in page.items() if k != "text"} for page in dossier[packet_name]["sources"])
     archived = {entry["id"] for entry in dossier.get("diverse_measured_sources", {}).get("entries", [])}
     available = {record["id"] for record in dossier["records"]}
     job["visible_ids"] = sorted(set(job["visible_ids"]) | (archived & available))
@@ -66,14 +67,20 @@ def create(controller, epoch, kind, role=None):
                                     "last_job": identity, "status": "running"}
     else:
         current["mother_watermark"] = report_watermark(current)
+        current["mother_reports"] = {role: item.get("report_id")
+            for role, item in current["analysts"].items() if item.get("report_id")}
+        current["mother_evidence_ids"] = watermark(controller.db, epoch)
     save(controller, job)
     controller.db.set(key(epoch), current)
     return job
 
 
 def report_watermark(current):
+    life = current.get("lifecycle", {})
     return digest({"reports": {role: item.get("report_id") for role, item in current["analysts"].items()
-                   if item.get("report_id")}, "review_revision": current.get("lifecycle", {}).get("review_revision", 0)})
+                   if item.get("report_id")},
+                   "closure": {"request": life["closing"], "revision": life.get("review_revision", 0)}
+                   if life.get("closing") else None})
 
 
 def begin_call(controller, job):
@@ -92,7 +99,7 @@ def begin_call(controller, job):
             and estimate["remaining_seconds"] < estimate["reserve_seconds"] + 2 * nominal)
     payload = {k: dossier[k] for k in ("snapshot_id", "plan_revision", "trees", "contract", "warnings",
                                       "reports_as_interpretations", "inflight")}
-    payload.update({k: dossier[k] for k in ("code_packet", "closure_guard", "lifecycle", "closure_hypotheses",
+    payload.update({k: dossier[k] for k in ("code_packet", "closure_code_packet", "closure_guard", "lifecycle", "closure_hypotheses",
                                            "diverse_measured_sources")
                     if k in dossier})
     payload.update(mode=settings(controller.config)["mode"], budget=estimate, history=job["history"],
@@ -156,11 +163,20 @@ def finish_call(controller, job, response, finished):
             raise InfrastructureError(str(response))
         if not bound:
             raise InfrastructureError("Active response is unrelated to its claimed request")
-        if response.get("error") or response.get("infrastructure_error"):
-            raise InfrastructureError(response.get("error") or "Active model infrastructure failure")
         if job["kind"] == "mother":
             receipt = verify_receipt(request, sha, response)
             db.set(f"mother_conversation:{epoch}", receipt)
+        if response.get("error") or response.get("infrastructure_error"):
+            if (job["kind"] == "mother" and not response.get("infrastructure_error")
+                    and response.get("data") is None
+                    and response.get("recovery") == {"reason": "model_output_limit",
+                                                    "continuation": "same_native_thread"}):
+                call["recovery"] = response["recovery"]
+                rejected_data = {"terminal_failure": "model_output_limit",
+                    "recovery_instruction": "The previous turn ended without a complete proposal. "
+                        "Return a compact schema-valid decision in this same conversation. "
+                        "Use only visible evidence; no tools, waiting or delegation. No action was applied."}
+            raise InfrastructureError(response.get("error") or "Active model infrastructure failure")
         dossier = snapshot(controller, job)
         try:
             if job["kind"] == "analyst" and "code_packet" in dossier:
@@ -170,7 +186,8 @@ def finish_call(controller, job, response, finished):
             else:
                 data = (validate_response(response.get("data"), set(job["visible_ids"]), final_call=call["must_finish"])
                         if job["kind"] == "analyst" else
-                        validate_decision(response.get("data"), dossier, set(job["visible_ids"]), final_call=call["must_finish"]))
+                        validate_decision(response.get("data"), dossier, set(job["visible_ids"]),
+                                          final_call=call["must_finish"], history=job["history"]))
         except InfrastructureError:
             rejected_data = {"rejected_response": response.get("data")}
             raise
@@ -180,7 +197,7 @@ def finish_call(controller, job, response, finished):
         call["status"] = "complete"
         if data["action"] == "read":
             page = view(dossier, data["read"])
-            if "code_packet" in dossier and data["read"]["operation"] == "source":
+            if ("code_packet" in dossier or "closure_code_packet" in dossier) and data["read"]["operation"] == "source":
                 from .active_analysis import source_page
 
                 record = next(r for r in dossier["records"] if r["id"] == data["read"]["evidence_id"])

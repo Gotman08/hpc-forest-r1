@@ -122,6 +122,9 @@ def report(root: Path, output: Path | None = None) -> Path:
         from .evolution_archive import view as diversity_view
 
         payload["active_architecture"] = export_active(db, output)
+        from .advisor import export as export_advisor
+
+        payload["advisor"] = export_advisor(db, output)
         payload["diversity_archive"] = diversity_view(db, db.get("current_epoch", 1))
         if payload["diversity_archive"] is not None:
             atomic_json(output / "diversity-archive.json", payload["diversity_archive"])

@@ -11,6 +11,7 @@ from test_mother_forest import decomposition
 from hpc_forest import active_control as controls
 from hpc_forest import codex_mailbox as mailbox
 from hpc_forest.active_contract import (
+    VERSION,
     decision_schema,
     enabled,
     validate_decision,
@@ -381,6 +382,6 @@ def test_worker_capacity_is_explicit_and_does_not_expand_with_dynamic_trees(camp
     plan = copy.deepcopy(campaign.db.get("forest_plan:1"))
     plan["session_id"] = "a" * 32
     assert forest_width(plan, "a" * 32) == 2
-    plan["active_control"] = {"version": "hpc-forest-active-v1", "control_workers": 1}
+    plan["active_control"] = {"version": VERSION, "control_workers": 1}
     assert forest_width(plan, "a" * 32) == 3
     assert len(children(campaign.db, 1)) == 2

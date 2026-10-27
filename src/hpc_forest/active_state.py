@@ -60,7 +60,14 @@ def _action(db, epoch, current, action, decision_id, snapshot):
         raise InfrastructureError("Intermediate integration is disabled in this ablation")
     if current["closed"]:
         raise InfrastructureError("Research admissions are permanently closed")
-    if guarded(db) and kind in {"resume", "continue", "branch", "integrate"}:
+    if kind in {"resume", "continue"}:
+        unavailable = db.get(f"active_unavailable:{epoch}", {}).get(role)
+        if unavailable:
+            raise InfrastructureError(f"Tree {role} cannot admit work ({unavailable}); "
+                                      "continue/resume cannot bypass its limit")
+    returns_to_work = kind in {"resume", "branch", "integrate"} or (
+        kind == "continue" and role not in current["suspended"])
+    if guarded(db) and returns_to_work:
         lifecycle(current)["closing"] = None
     if kind in {"branch", "integrate"}:
         selected = [measured_source(db, epoch, identity) for identity in action["source_ids"]]
@@ -79,13 +86,25 @@ def _action(db, epoch, current, action, decision_id, snapshot):
         index = max([int(r[len(prefix):]) for r in roles if r.startswith(prefix)
                      and r[len(prefix):].isdigit()] or [0]) + 1
         role = prefix + str(index)
-        if not forecast_independent(db, [role])["can_admit"]:
+        estimate = forecast_independent(db, [role])
+        if not estimate["can_admit"]:
             raise InfrastructureError("No budget for this new experiment before confirmation")
+        review_cost = 0.0
+        if guarded(db):
+            controls = (["@analyst:" + role] if kind == "branch" else []) + ["@mother"]
+            review_cost = forecast_independent(db, controls)["candidate_work_seconds"]
+            unstarted = sum(c.get("experiment_budget_seconds", 0) for c in current["children"]
+                            if not db.one("SELECT id FROM trials WHERE epoch=? AND role=? LIMIT 1", (epoch, c["role"])))
+            required = max(estimate["next_work_seconds"], estimate["candidate_work_seconds"] + review_cost) + unstarted
+            if (estimate["remaining_seconds"] is not None
+                    and estimate["remaining_seconds"] < estimate["reserve_seconds"] + required):
+                raise InfrastructureError("No budget for the new experiment and its analyst/Mother review before confirmation")
         base = min(selected, key=lambda item: item["mean_seconds"])
         child = {"role": role, "subject": action["subject"], "objective": action["objective"],
                  "stop_condition": action["stop_condition"], "base_commit": base["commit"],
                  "base_source_id": base["id"], "source_ids": action["source_ids"],
                  "kind": category,
+                 "experiment_budget_seconds": estimate["candidate_work_seconds"] + review_cost,
                  "control_decision_id": decision_id}
         current["children"].append(child)
         current["imports"][role] = action["source_ids"][:]

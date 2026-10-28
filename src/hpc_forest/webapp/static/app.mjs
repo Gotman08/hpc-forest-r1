@@ -1,15 +1,25 @@
 import {api, escapeHTML as e} from "./helpers.mjs";
+import {icon} from "./icons.mjs";
 import {searchFormValues, syncGeneratorControls} from "./search.mjs";
 import {shell, empty, projectView, prepareView, preparedView, missionView, trialPane,
-  resultsView, historyView, settingsView, eventsView, remoteMissionView, modelLabel} from "./views.mjs";
+  resultsView, historyView, settingsView, eventsView, remoteMissionView} from "./views.mjs";
 
 const app = document.querySelector("#app");
 const state = {info:null, projects:[], campaigns:[], project:null, campaign:null, prepared:null,
-  uploads:[], uploadName:"", trial:null, source:null, tab:"tests", zoom:1, history:[],
+  uploads:[], uploadName:"", trial:null, source:null, tab:"tests", zoom:1, history:[], historyPage:1, historyPageSize:10,
   filter:"", query:"", attachmentRole:"statement", busy:false, dirty:false, drafts:new Map(),context:null, mission:null};
 let navigation = 0, selection = 0, notificationTimer;
 const remembered = key => { try { return localStorage.getItem(key); } catch { return null; } };
 const remember = (key,value) => { try { localStorage.setItem(key,value); } catch { /* Optional. */ } };
+function syncTheme() {
+  const dark=document.documentElement.dataset.theme!=="light";
+  document.querySelector('meta[name="theme-color"]').content=getComputedStyle(document.documentElement).getPropertyValue("--page").trim();
+  const toggle=document.querySelector('[data-action="toggle-theme"]');
+  if(!toggle) return;
+  const label=dark?"Passer au thème clair":"Passer au thème sombre";
+  toggle.setAttribute("aria-label",label); toggle.title=label;
+  toggle.innerHTML=icon(dark?"sun":"moon")+'<span>'+(dark?"Mode clair":"Mode sombre")+'</span>';
+}
 try {
   const saved=JSON.parse(remembered("forest.context"));
   if(saved&&["new","project","prepared","campaign","mission"].includes(saved.kind)&&typeof saved.id==="string") state.context=saved;
@@ -22,6 +32,7 @@ const notify = (message,error=false) => {
 };
 const go = hash => { if(location.hash===hash) render(); else location.hash=hash; };
 const main = () => document.querySelector("#main");
+const historyMarkup = () => historyView(state.history,state.filter,state.query,state.historyPage,state.historyPageSize);
 const projectId = () => state.project?.id || remembered("forest.project");
 const campaignId = () => state.context?.kind==="campaign"?state.context.id:
   state.context?null:remembered("forest.campaign")||state.campaigns[0]?.id;
@@ -43,6 +54,7 @@ async function render() {
   let [,page="project",kind,id]=(location.hash||"#/project").split("/");
   if(!["project","prepare","mission","results","history","settings"].includes(page)) page="project";
   app.innerHTML=shell(page);
+  syncTheme();
   main().innerHTML='<div class="loading-state"><span class="spinner"></span>Chargement de votre espace…</div>';
   try {
     await catalog();
@@ -104,11 +116,11 @@ async function render() {
       } else html=empty("Aucun résultat pour ce projet","Aucune campagne n’a été confirmée pour le projet sélectionné. Les campagnes existantes restent dans l’historique.",
         '<a class="button secondary" href="#/history">Voir l’historique</a>');
     } else if(page==="history") {
-      state.history=await api("/history"); html=historyView(state.history,state.filter,state.query);
+      state.history=await api("/history"); html=historyMarkup();
     } else html=settingsView(state.info,state.campaigns.length);
     if(token!==navigation) return;
-    const selected=state.context?.kind==="mission"?state.mission:state.context?.kind==="campaign"?state.campaign:state.context?.kind==="prepared"?{model:state.prepared?.contract.model,effort:state.prepared?.contract.reasoning_effort}:state.project;
-    app.innerHTML=shell(page,name,modelLabel(selected?.model,selected?.effort)); main().innerHTML=html;
+    app.innerHTML=shell(page,name); main().innerHTML=html;
+    syncTheme();
     const draft=page==="prepare"&&state.drafts.get(state.project?.id);
     if(draft) {
       const form=document.querySelector("#contract-form");
@@ -224,6 +236,16 @@ app.addEventListener("click",event=>{
   if(!action||action.disabled) return;
   event.preventDefault();
   const name=action.dataset.action;
+  if(name==="toggle-theme") {
+    const theme=document.documentElement.dataset.theme==="light"?"dark":"light";
+    document.documentElement.dataset.theme=theme; remember("forest.theme",theme); syncTheme(); return;
+  }
+  if(name==="history-page") {
+    state.historyPage=Number(action.dataset.page);
+    main().innerHTML=historyMarkup();
+    document.querySelector('.history-pagination [aria-current="page"]')?.focus({preventScroll:true});
+    return;
+  }
   if(name==="choose-files"||name==="choose-folder") {
     document.querySelector(name==="choose-files"?"#files-input":"#folder-input").click(); return;
   }
@@ -291,9 +313,9 @@ app.addEventListener("input",event=>{
   }
   if(event.target.id==="project-name") state.uploadName=event.target.value;
   if(event.target.id==="history-search") {
-    state.query=event.target.value;
+    state.query=event.target.value; state.historyPage=1;
     const start=event.target.selectionStart;
-    main().innerHTML=historyView(state.history,state.filter,state.query);
+    main().innerHTML=historyMarkup();
     const search=document.querySelector("#history-search"); search.focus(); search.setSelectionRange(start,start);
   }
 });
@@ -303,7 +325,12 @@ app.addEventListener("change",event=>operation(async()=>{
     if(el.files.length) acceptFiles([...el.files]);
   } else if(el.id==="project-picker") go(el.value?"#/project/"+el.value:"#/project/new");
   else if(el.id==="source-file") await showTrialTab(state.tab,el.value);
-  else if(el.id==="history-filter") { state.filter=el.value; main().innerHTML=historyView(state.history,state.filter,state.query); }
+  else if(el.id==="history-filter"||el.id==="history-page-size") {
+    if(el.id==="history-filter") state.filter=el.value;
+    else state.historyPageSize=Number(el.value);
+    state.historyPage=1; main().innerHTML=historyMarkup();
+    document.getElementById(el.id)?.focus({preventScroll:true});
+  }
   else if(el.id==="attachment-input"&&el.files.length) {
     const form=new FormData(); form.append("file",el.files[0]); form.append("role",state.attachmentRole);
     selectProject(await api("/projects/"+state.project.id+"/attachments",{method:"POST",body:form}));
@@ -328,6 +355,11 @@ app.addEventListener("drop",event=>{
   operation(async()=>acceptFiles(await files));
 });
 window.addEventListener("hashchange",render);
+window.addEventListener("storage",event=>{
+  if(event.key!==null&&event.key!=="forest.theme") return;
+  document.documentElement.dataset.theme=event.newValue==="light"?"light":"dark";
+  syncTheme();
+});
 document.querySelector(".skip-link").addEventListener("click",event=>{ event.preventDefault(); main()?.focus(); });
 window.addEventListener("beforeunload",event=>{ if(state.drafts.size) { event.preventDefault(); event.returnValue=""; } });
 render();

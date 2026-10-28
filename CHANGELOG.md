@@ -1,5 +1,18 @@
 # Changements
 
+## À venir
+
+- Checkout public limité au produit, à ses exemples et à sa documentation ;
+  campagnes, résultats et journaux conservés localement et ignorés par Git.
+- Démarrage sans données préchargées vérifié et clonage léger documenté.
+- Démonstration GIF du produit et guides de contribution et de distribution.
+- Thème sombre par défaut, bouton clair/sombre disponible sur tous les écrans
+  et choix mémorisé dans le navigateur sans interrompre les saisies.
+- Palette sombre anthracite et textes blanc cassé ; contraste renforcé des
+  durées des arbres sur des étiquettes noires dans les deux thèmes.
+- En-tête allégé, durées lisibles dans les arbres denses, graphiques de résultat,
+  pagination de l’historique et séparation des modèles et efforts dans les paramètres.
+
 ## 0.2.0 — 28 octobre 2026
 
 - Conseiller TabPFN retiré du paquet, des admissions, de l'instrumentation et des

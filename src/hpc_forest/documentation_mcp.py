@@ -58,6 +58,8 @@ class DocumentationMCP:
             "args": ["-m", "hpc_forest.documentation_mcp", "--cache", str(self.root),
                      "--session-id", self.session_id, "--request-id", request_id,
                      "--catalogue-sha256", CATALOGUE_SHA256],
+            "env.PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+            "env.PYTHONDONTWRITEBYTECODE": "1",
             "enabled": True, "required": True, "default_tools_approval_mode": "approve",
             "enabled_tools": list(DOCUMENTATION_TOOLS), "startup_timeout_sec": 30,
             "tool_timeout_sec": 180,

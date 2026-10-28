@@ -74,7 +74,7 @@ def freeze_bundle(store: Store, mission: dict, settings: dict) -> tuple[Path, di
         raise AppError("AB-MCTS-M exige le profil optionnel sakana-m installé et déclaré sur ROMEO.")
     package = Path(__file__).resolve().parents[1]
     paths = [p for p in package.rglob("*") if p.is_file() and not p.is_symlink()
-             and "__pycache__" not in p.parts and (p.suffix in {".py", ".mjs", ".html", ".css", ".svg"}
+             and "__pycache__" not in p.parts and (p.suffix in {".py", ".js", ".mjs", ".html", ".css", ".svg"}
                                                    or "assets" in p.relative_to(package).parts)]
     manifest = {
         "schema": "forest-app-launch-v1", "id": mission["id"], "session_id": mission["session_id"],

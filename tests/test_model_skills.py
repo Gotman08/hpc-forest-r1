@@ -59,14 +59,15 @@ def test_each_child_and_assembly_repair_get_their_full_versioned_instructions(tm
     assert FIELD in request["schema"]["required"]
 
 
-def test_planning_uses_its_own_skills_and_preserves_base_schema():
-    rendered = render_plan("preparation", {}, "An arbitrary optimization problem.", {},
+@pytest.mark.parametrize("phase", ["preparation", "investigation"])
+def test_planning_uses_its_own_skills_and_preserves_base_schema(phase):
+    rendered = render_plan(phase, {}, "An arbitrary optimization problem.", {},
                            choose_trees=True, skills=policy())
     verify_binding(rendered)
     assert {entry["name"] for entry in rendered["model_skills"]["loaded"]} == {
         "planifier-optimisation", *SHARED}
-    assert "children" in rendered["schema"]["properties"]
-    legacy = render_plan("preparation", {}, "The same problem.", {}, choose_trees=True)
+    assert ("children" in rendered["schema"]["properties"]) is (phase == "preparation")
+    legacy = render_plan(phase, {}, "The same problem.", {}, choose_trees=True)
     assert "model_skills" not in legacy and FIELD not in legacy["schema"]["properties"]
 
 

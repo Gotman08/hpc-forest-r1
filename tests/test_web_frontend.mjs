@@ -4,6 +4,8 @@ import {escapeHTML, seconds, speedup, finite, routeFor} from "../src/hpc_forest/
 import {layoutTree, forestMarkup} from "../src/hpc_forest/webapp/static/graph.mjs";
 import {missionView, resultsView, trialPane} from "../src/hpc_forest/webapp/static/views.mjs";
 import {searchControls,searchFormValues,searchSummary} from "../src/hpc_forest/webapp/static/search.mjs";
+import {historyPage} from "../src/hpc_forest/webapp/static/history.mjs";
+import {timeComparison,trialOutcomes,outcomeChart} from "../src/hpc_forest/webapp/static/result-charts.mjs";
 
 test("Source and user text cannot become executable markup",()=>{
   assert.equal(escapeHTML('<script x="a">&'),"&lt;script x=&quot;a&quot;&gt;&amp;");
@@ -38,6 +40,64 @@ test("Malformed cycles terminate, and empty trees invent no trials",()=>{
   assert(cycle.warnings.includes("cycle"));
   assert(!forestMarkup({trees:[]}).includes("data-node"));
   assert(!forestMarkup({trees:[{id:"T1",subject:"test",nodes:[],correct_count:0}]}).includes("data-node"));
+});
+
+test("Dense tree levels reserve nonoverlapping labels, including long timings",()=>{
+  const nodes=Array.from({length:30},(_,i)=>({id:"n"+i,parent:i<10?null:"n"+(i%10),
+    seconds:[.004131,.000001,1234567.891,null][i%4]}));
+  const layout=layoutTree(nodes);
+  for(const point of layout.points) {
+    assert(point.x-point.labelWidth/2>=0);
+    assert(point.x+point.labelWidth/2<=layout.width);
+    assert(point.y+41<=layout.height);
+    for(const other of layout.points) {
+      if(point.y===other.y&&point.x<other.x)
+        assert(point.x+point.labelWidth/2<other.x-other.labelWidth/2);
+    }
+  }
+  const html=forestMarkup({trees:[{id:"T",subject:"dense",nodes,correct_count:0}]});
+  assert(html.includes("min-width:"+layout.width+"px"));
+});
+
+test("History pages cover every match exactly once and clamp stale page numbers",()=>{
+  const records=Array.from({length:53},(_,i)=>({id:String(i),name:"Projet "+i,
+    state:i%2?"confirmed":"no_gain"}));
+  const pages=Array.from({length:6},(_,i)=>historyPage(records,"","",i+1).rows);
+  assert.deepEqual(pages.flat().map(r=>r.id),records.map(r=>r.id));
+  const last=historyPage(records,"","",99);
+  assert.equal(last.page,6); assert.equal(last.start,51); assert.equal(last.end,53);
+  const filtered=historyPage(records,"confirmed","  PROJET 1  ",1);
+  assert.deepEqual(filtered.rows.map(r=>r.id),["1","11","13","15","17","19"]);
+  assert.equal(filtered.total,6);
+  assert.equal(historyPage(records,"confirmed","missing",10).start,0);
+  assert.equal(historyPage(records,"","",NaN).page,1);
+  assert.equal(historyPage(records,"","",1,25).rows.length,25);
+  assert.equal(historyPage(records,"","",1,50).rows.length,50);
+});
+
+test("Comparison charts require confirmed finite measurements and expose slowdowns",()=>{
+  const confirmed={best_confirmed:{},reference_seconds:.02,seconds:.01};
+  const html=timeComparison(confirmed);
+  assert(html.includes("50 % de temps en moins"));
+  assert(html.includes('width:50%'));
+  assert(timeComparison({...confirmed,seconds:.03}).includes("50 % de temps en plus"));
+  assert(timeComparison({...confirmed,seconds:.02}).includes("Durée identique"));
+  assert(timeComparison({...confirmed,best_confirmed:{is_baseline:true}}).includes("Code initial conservé"));
+  for(const invalid of [{...confirmed,best_confirmed:null},{...confirmed,seconds:Infinity},
+    {...confirmed,reference_seconds:0},{...confirmed,seconds:null}]) {
+    assert(!timeComparison(invalid).includes('class="comparison-bar '));
+  }
+});
+
+test("Trial charts keep absent verdicts separate and disclose truncated evidence",()=>{
+  const campaign={trial_count:7,trees:[{nodes:[
+    {id:"a",correct:true},{id:"b",correct:false},{id:"c",correct:null},
+    {id:"d",state:"infrastructure_error"}]}],integrations:[{id:"a",correct:true}]};
+  const {counts,total,recorded}=trialOutcomes(campaign);
+  assert.deepEqual(counts.map(c=>c.count),[1,1,2]);
+  assert.equal(total,4); assert.equal(recorded,7);
+  assert(outcomeChart(campaign).includes("Aperçu : 4 essais sur 7"));
+  assert(!outcomeChart({trees:[]}).includes("<circle"));
 });
 
 test("Campaign view distinguishes no analyst evidence and no final gain",()=>{

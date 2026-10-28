@@ -4,6 +4,15 @@ Le parcours **dépôt → lancement ROMEO → confirmation → téléchargement*
 L'interface classique à cinq écrans conserve les arbres à la craie. Le produit
 et son moteur portent le nom Forest.
 
+Le thème sombre est activé par défaut. Le bouton **Mode clair / Mode sombre**
+en haut à droite change l’apparence sans interrompre une saisie. Le choix est
+mémorisé dans le navigateur et conservé lors des prochaines ouvertures.
+La palette sombre utilise des fonds anthracite, des textes blanc cassé et des
+accents bleus et verts. Les arbres conservent leur tableau noir dans les deux
+thèmes, avec des durées claires sur des étiquettes noires.
+L’en-tête garde uniquement ce bouton ; le modèle et la cible restent visibles
+dans le contrat et les détails de mission.
+
 Le contrôleur et le client Codex authentifié par OAuth tournent dans l'allocation
 SLURM. L'inférence reste hébergée par OpenAI : les poids ne sont pas installés sur
 ROMEO. Après soumission, le PC affiche le suivi sans relayer les appels au modèle.
@@ -36,12 +45,16 @@ L'option répétable `--campaign C:/campagnes/existante` inscrit un dossier cont
    entrées ; **Lancer sur ROMEO** soumet le job.
 3. **Mission** : suivre job, nœud, synchronisation, arbres, variantes, sources et
    mesures. Les combinaisons sont mesurées séparément. Analystes et décisions
-   affichent uniquement les preuves reçues.
+   affichent uniquement les preuves reçues. Les durées disposent de leur propre
+   espace dans les arbres ; les graphes larges se parcourent par défilement.
 4. **Résultats** : temps confirmés, projet retenu, rapport et CSV. Le code devient
    téléchargeable après confirmation indépendante et finalisation. L'absence
-   de gain est affichée explicitement.
+   de gain est affichée explicitement. Deux graphiques comparent les temps
+   confirmés et présentent les essais corrects, incorrects et sans verdict.
+   Une comparaison non confirmée reste vide et un aperçu tronqué est signalé.
 5. **Historique** : retrouver projets, dossiers préparés, missions et campagnes
-   existantes, avec leurs états respectifs.
+   existantes, avec leurs états respectifs. La pagination propose 10, 25 ou
+   50 entrées par page ; la recherche et les filtres reviennent à la première page.
 
 ## Modèles et efforts
 
@@ -110,6 +123,22 @@ benchmark complète, shell et démarrage du programme compris, mais exclut le
 démarrage de l'adaptateur Python. Ce n'est pas automatiquement le temps d'un
 noyau CUDA seul. Référence et candidats partagent le contrat et la machine.
 
+Un projet à plusieurs modules peut conserver ses fichiers de configuration,
+ses bibliothèques intégrées et son système de compilation. Les dépendances
+externes doivent être disponibles sur la cible ou construites par la commande
+prévue ; l'application ne les installe pas automatiquement. Les fichiers
+protégés ne sont pas tous transmis au modèle : le contexte source contient
+les fichiers du périmètre modifiable. Les interfaces nécessaires à la compréhension
+doivent donc être prises en compte explicitement.
+
+Limites actuelles pour les projets complets : l'import ne conserve pas les
+droits d'exécution POSIX, les liens sont refusés et la planification de Mother
+refuse un contexte source dépassant 128 000 caractères. Un préfixe modifiable
+qui contient aussi des fichiers de build doit être remplacé par une sélection
+explicite des sources. Le dépôt accepté n'est donc pas une garantie que sa
+recherche pourra démarrer. La reconstruction d'un projet importé et son
+optimisation autonome sont des étapes distinctes.
+
 ## Conservation et reprise
 
 Stockage par défaut : `~/.hpc-forest/application/`.
@@ -160,8 +189,8 @@ des requêtes. Elle n'est pas conçue pour l'exposition publique ou plusieurs ut
 
 ## Vérifier
 
-[Bilan du raccordement autonome](VALIDATION-APPLICATION-AUTONOME-20261025.md).
-Le [bilan du premier lot](VALIDATION-APPLICATION-20261025.md) reste historique.
+Les contrôles ci-dessous utilisent les fixtures du produit. Les reçus et
+anciens calculs restent dans les archives locales de leur propriétaire.
 
 ```powershell
 python -m pip install -e ".[web,dev]" httpx

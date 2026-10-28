@@ -276,6 +276,9 @@ class CodexMailboxBackend:
         check_channel(channel, settings["session_id"], model=settings["model"], effort=settings["reasoning_effort"],
                       generators=settings.get("generator_pool"))
         request = make_request(mission, context, config)
+        from .diagnostics_contract import authorize
+
+        authorize(root, request, config=config)
         selected = mission_identity(config, mission)
         logs = root / "logs" / mission.id
         atomic_json(logs / "codex-request.json", request)

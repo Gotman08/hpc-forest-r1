@@ -120,7 +120,7 @@ def verify_binding(request: dict) -> dict | None:
             embedded = payload["required_json_schema"]
         else:
             role = "Mother"
-            phase = "planning" if payload["phase"] == "preparation" else "assembly"
+            phase = "planning" if payload["phase"] in {"preparation", "investigation"} else "assembly"
             embedded = payload["required_schema"]
         expected = _manifest(policy(), role, phase)
         if manifest != expected or embedded != request["schema"]:

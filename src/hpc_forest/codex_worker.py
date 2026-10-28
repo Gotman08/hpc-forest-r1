@@ -28,6 +28,7 @@ from .codex_mailbox import (
 )
 from .codex_process import check_dependencies, run_codex
 from .core import FileLock, InfrastructureError, atomic_json
+from .diagnostics_mcp import DiagnosticsMCP
 from .documentation_mcp import DocumentationMCP
 from .model_mcp import RomeoMCP, load_server
 from .model_policy import generator_pool, require_request_identity
@@ -181,7 +182,8 @@ class Worker:
     def __init__(self, transfer, channel: str, session_id: str, output: Path,
                  dependency_receipt: Path | None, required_jobs: set[str],
                  transport_smoke=False, executable="codex", *, defer_diagnostics=False,
-                 model_mcp_config: Path | None = None, documentation=False, model=MODEL, effort=EFFORT, generators=None):
+                 model_mcp_config: Path | None = None, documentation=False, model=MODEL, effort=EFFORT,
+                 generators=None, diagnostics_root: Path | None = None):
         selected = {"model": model, "reasoning_effort": effort, "generator_pool": generators or []}
         pool = generator_pool(selected)
         self.generators = pool if generators else []
@@ -191,6 +193,9 @@ class Worker:
         self.output, self.dependency_receipt, self.required_jobs = output, dependency_receipt, required_jobs
         self.transport_smoke, self.executable = transport_smoke, executable
         self.defer_diagnostics = defer_diagnostics
+        self.diagnostics_root = Path(diagnostics_root).resolve(strict=True) if diagnostics_root is not None else None
+        if self.diagnostics_root is not None and transport_smoke:
+            raise InfrastructureError("A transport-only smoke cannot enable diagnostic execution")
         self._io_lock = asyncio.Lock()
         self.finish_started = False
         self.output.mkdir(parents=True, exist_ok=True)
@@ -322,6 +327,8 @@ class Worker:
                       "authentication": "existing-local-ChatGPT", "weight_digest_available": False,
                       "model_mcp": self.romeo_mcp.receipt() if self.romeo_mcp is not None else None,
                       "documentation_mcp": self.documentation_mcp.receipt() if self.documentation_mcp is not None else None}
+            native["diagnostics_mcp"] = {"server": "hpc_diagnostics", "binding": "per-controller-request"} \
+                if self.diagnostics_root is not None else None
         await retry_transfer(lambda: self.transfer.download(
             self.channel + "/OWNER.json", self.output / "OWNER.json"))
         marker = bounded_json(self.output / "OWNER.json", 4096)
@@ -443,6 +450,10 @@ class Worker:
                 options = {"romeo_mcp": self.romeo_mcp} if self.romeo_mcp is not None else {}
                 if self.documentation_mcp is not None:
                     options["documentation_mcp"] = self.documentation_mcp
+                if request.get("diagnostics"):
+                    if self.diagnostics_root is None:
+                        raise InfrastructureError("Diagnostic campaign is not mounted in this native worker")
+                    options["diagnostics_mcp"] = DiagnosticsMCP.bind(self.diagnostics_root, request)
                 generate = partial(run_codex, *arguments, **options)
                 if getattr(self, "model_executor", None) is not None:
                     response = await asyncio.get_running_loop().run_in_executor(self.model_executor, generate)

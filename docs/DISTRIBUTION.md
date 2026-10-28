@@ -35,9 +35,10 @@ python tools/check.py
 python tools/build_release.py artifacts/release-NOUVEAU
 ```
 
-Ces outils s'exécutent depuis le dépôt complet, qui contient les tests et les
-analyses historiques. Le sdist est une source installable du produit ; il n'inclut
-pas toute cette infrastructure de recherche et de vérification.
+Ces outils s'exécutent depuis le checkout du produit, qui contient les tests
+et leurs fixtures. Les archives privées de calcul ne sont pas nécessaires.
+Le sdist est une source installable du produit ; il n'inclut pas les données
+personnelles ni l'infrastructure privée de recherche.
 
 Le second outil exige une destination neuve, copie les sources dans un répertoire
 de fabrication indépendant et construit sdist puis wheel. Il compare l'inventaire
@@ -57,8 +58,8 @@ environnement vérifié, pas une modification arbitraire des versions figées.
 
 La CI définit Windows/Python 3.13 et Linux/Python 3.12, GCC, Ruff, pytest, les tests
 JavaScript et la fabrication. Elle est configurée mais n'est pas réputée exécutée
-tant que son résultat n'a pas été observé. Le rapport de stabilisation distingue
-ses reçus locaux de la CI et des anciennes mesures ROMEO.
+tant que son résultat n'a pas été observé. Les reçus locaux et les résultats
+de CI doivent être distingués des anciennes mesures ROMEO conservées séparément.
 
 Une livraison autorisée doit inclure un reçu de tests, la wheel vérifiée, les
 versions figées, les notes de migration et les notices. Il reste à choisir et

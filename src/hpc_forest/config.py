@@ -131,6 +131,9 @@ def validate(c: dict) -> None:
     if c.get("backend") == "codex":
         require_identity(c.get("codex", {}))
     validate_memory(c)
+    from .diagnostics_contract import validate as validate_investigation
+
+    validate_investigation(c)
     validate_submission(c)
     validate_skills(c.get("skills"))
     if (c.get("skills") or {}).get("enabled") and (

@@ -17,6 +17,8 @@ from .codex_mailbox import (
     sha256,
 )
 from .core import CandidateRejected, InfrastructureError, atomic_json, run_process
+from .diagnostics_mcp import INSTRUCTIONS as DIAGNOSTIC_INSTRUCTIONS
+from .diagnostics_mcp import DiagnosticsMCP
 from .documentation_mcp import DOCUMENTATION_INSTRUCTIONS, DOCUMENTATION_TOOLS, DocumentationMCP
 from .model_mcp import DISABLED_MODEL_TOOLS, RomeoMCP
 from .model_policy import require_identity, require_request_identity
@@ -95,7 +97,8 @@ def wire_schema(schema: dict) -> dict:
 
 def command_for(request: dict, output: Path, executable: str = "codex", *,
                 romeo_mcp: RomeoMCP | None = None,
-                documentation_mcp: DocumentationMCP | None = None) -> list[str]:
+                documentation_mcp: DocumentationMCP | None = None,
+                diagnostics_mcp: DiagnosticsMCP | None = None) -> list[str]:
     require_identity(request)
     executable = shutil.which(executable)
     if not executable:
@@ -110,6 +113,8 @@ def command_for(request: dict, output: Path, executable: str = "codex", *,
         system = romeo_mcp.instructions(system)
     if documentation_mcp is not None:
         system += DOCUMENTATION_INSTRUCTIONS
+    if diagnostics_mcp is not None:
+        system += DIAGNOSTIC_INSTRUCTIONS
     (output / "instructions.txt").write_text(system, encoding="utf8")
     atomic_json(output / "output-schema.json", wire_schema(request["schema"]))
     persistent = request.get("conversation") is not None
@@ -134,7 +139,7 @@ def command_for(request: dict, output: Path, executable: str = "codex", *,
         "forced_login_method": "chatgpt",
         "web_search": "disabled",
         "features.skip_host_skill_discovery": True,
-        "features.code_mode_host": romeo_mcp is not None or documentation_mcp is not None,
+        "features.code_mode_host": any(m is not None for m in (romeo_mcp, documentation_mcp, diagnostics_mcp)),
         **{f"features.{name}": False for name in [
             "shell_tool", "unified_exec", "apps", "plugins", "memories", "multi_agent",
             "multi_agent_v2", "hooks", "skill_search", "browser_use", "computer_use",
@@ -148,14 +153,17 @@ def command_for(request: dict, output: Path, executable: str = "codex", *,
         overrides.update(romeo_mcp.overrides())
     if documentation_mcp is not None:
         overrides.update(documentation_mcp.overrides(request["nonce"]))
+    if diagnostics_mcp is not None:
+        overrides.update(diagnostics_mcp.overrides())
     for key, value in overrides.items():
         args.extend(["--config", f"{key}={json.dumps(value, ensure_ascii=False)}"])
     return [*args, "-"]
 
 
-def authorized_discovery(item: dict, *, romeo: bool, documentation: bool) -> bool:
+def authorized_discovery(item: dict, *, romeo: bool, documentation: bool, diagnostics: bool = False) -> bool:
     """Allow built-in metadata discovery only for explicitly bound MCP servers."""
-    servers = ({"romeo"} if romeo else set()) | ({"hpc_docs"} if documentation else set())
+    servers = (({"romeo"} if romeo else set()) | ({"hpc_docs"} if documentation else set())
+               | ({"hpc_diagnostics"} if diagnostics else set()))
     if (not servers or item.get("server") != "codex"
             or item.get("tool") not in {"list_mcp_resources", "list_mcp_resource_templates"}):
         return False
@@ -169,6 +177,7 @@ def authorized_discovery(item: dict, *, romeo: bool, documentation: bool) -> boo
 
 def usage_from_events(path: Path, *, observe_only: bool = False,
                       allow_romeo_mcp: bool = False, allow_documentation: bool = False,
+                      diagnostic_tools: tuple[str, ...] = (),
                       allow_empty_agent_wait: bool = False) -> tuple[dict, bool]:
     usage_events, tool_events = [], []
     mcp_calls, forbidden_tools, runtime_errors = {}, [], []
@@ -187,7 +196,7 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
             turn_failures.append(failure["message"])
         item = event.get("item", {})
         if event.get("type") in {"item.started", "item.completed", "item.updated"}:
-            if item.get("type") == "error" and (allow_romeo_mcp or allow_documentation):
+            if item.get("type") == "error" and (allow_romeo_mcp or allow_documentation or diagnostic_tools):
                 message = str(item.get("message", ""))
                 if "Code Mode is unavailable" in message or "code-mode host is disabled" in message:
                     runtime_errors.append(message)
@@ -213,8 +222,10 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
                                 and item["tool"] not in DISABLED_MODEL_TOOLS)
                                or (allow_documentation and item.get("server") == "hpc_docs"
                                    and item["tool"] in DOCUMENTATION_TOOLS)
+                               or (item.get("server") == "hpc_diagnostics" and item["tool"] in diagnostic_tools)
                                or authorized_discovery(item, romeo=allow_romeo_mcp,
-                                                       documentation=allow_documentation)))
+                                                       documentation=allow_documentation,
+                                                       diagnostics=bool(diagnostic_tools))))
                 if not allowed:
                     forbidden_tools.append(item.get("type"))
                 if item.get("type") == "mcp_tool_call":
@@ -246,7 +257,8 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
 
 def run_codex(request: dict, request_sha: str, output: Path, dependency_receipt: Path,
               required_jobs: set[str], executable="codex", *, romeo_mcp: RomeoMCP | None = None,
-              documentation_mcp: DocumentationMCP | None = None) -> dict:
+              documentation_mcp: DocumentationMCP | None = None,
+              diagnostics_mcp: DiagnosticsMCP | None = None) -> dict:
     gate = check_dependencies(dependency_receipt, required_jobs)
     if gate.get("schema") == "forest-app-authorization-v1":
         if request.get("session_id") != gate.get("session_id"):
@@ -257,7 +269,15 @@ def run_codex(request: dict, request_sha: str, output: Path, dependency_receipt:
         from .active_contract import validate_request
 
         validate_request(request)
-        romeo_mcp = documentation_mcp = None  # Read frozen evidence only; no model side effects.
+        romeo_mcp = documentation_mcp = None  # Only the separately scoped diagnostic service is allowed.
+    if request.get("diagnostics") is not None:
+        if diagnostics_mcp is None:
+            raise InfrastructureError("The controller requested diagnostics but the native worker did not bind them")
+        from .diagnostics_contract import load_grant
+
+        load_grant(diagnostics_mcp.root, diagnostics_mcp.binding, request)
+    elif diagnostics_mcp is not None:
+        raise InfrastructureError("Diagnostic tools require a controller request grant")
     if (gate.get("status") in {"parallel_pilot_explicitly_authorized",
                                "harness_comparison_explicitly_authorized"}
             and request.get("session_id") != gate.get("session_id")):
@@ -287,26 +307,30 @@ def run_codex(request: dict, request_sha: str, output: Path, dependency_receipt:
         )
     def invoke():
         return _invoke(request, request_sha, output, executable, timeout, observe_only,
-                       romeo_mcp, documentation_mcp)
+                       romeo_mcp, documentation_mcp, diagnostics_mcp)
     if request.get("conversation") is not None:
         return run_turn(request, request_sha, output, invoke)
     return invoke()
 
 
 def _invoke(request, request_sha, output, executable, timeout, observe_only,
-            romeo_mcp=None, documentation_mcp=None):
+            romeo_mcp=None, documentation_mcp=None, diagnostics_mcp=None):
     options = {"romeo_mcp": romeo_mcp}
     if documentation_mcp is not None:
         options["documentation_mcp"] = documentation_mcp
+    if diagnostics_mcp is not None:
+        options["diagnostics_mcp"] = diagnostics_mcp
     argv = command_for(request, output, executable, **options)
     atomic_json(output / "invocation.json", {
         "argv": argv, "model": request["model"], "reasoning_effort": request["reasoning_effort"],
         "request_sha256": request_sha, "hosted_inference": True,
-        "source_execution_allowed": romeo_mcp is not None,
+        "source_execution_allowed": romeo_mcp is not None or bool(diagnostics_mcp and diagnostics_mcp.can_collect),
         "local_source_execution_allowed": False,
+        "diagnostic_execution_allowed": bool(diagnostics_mcp and diagnostics_mcp.can_collect),
         "remote_experiments_allowed": romeo_mcp is not None,
         "model_mcp": romeo_mcp.receipt() if romeo_mcp is not None else None,
         "documentation_mcp": documentation_mcp.receipt() if documentation_mcp is not None else None,
+        "diagnostics_mcp": diagnostics_mcp.receipt() if diagnostics_mcp is not None else None,
         "model_skills": request.get("model_skills"),
         "effective_instructions_sha256": sha256((output / "instructions.txt").read_bytes()),
         "deadline_policy": request.get("deadline_policy", "hard"),
@@ -321,6 +345,7 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
     usage, tools = usage_from_events(Path(result.log), observe_only=observe_only,
                                     allow_romeo_mcp=romeo_mcp is not None,
                                     allow_documentation=documentation_mcp is not None,
+                                    diagnostic_tools=diagnostics_mcp.tools if diagnostics_mcp is not None else (),
                                     allow_empty_agent_wait=request.get("active_control", {}).get("kind") == "mother")
     usage.update(model_requested=request["model"], reasoning_effort_requested=request["reasoning_effort"])
     error = None

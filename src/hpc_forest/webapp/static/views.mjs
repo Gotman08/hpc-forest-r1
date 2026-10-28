@@ -2,6 +2,8 @@ import {escapeHTML as e, seconds, speedup, size, date, badge, short, routeFor, s
 import {icon} from "./icons.mjs";
 import {forestMarkup} from "./graph.mjs";
 import {searchControls, searchSummary} from "./search.mjs";
+import {historyPage, HISTORY_PAGE_SIZES} from "./history.mjs";
+import {resultCharts} from "./result-charts.mjs";
 
 const button=(label,action,symbol="arrow",cls="primary",extra="") =>
   '<button class="button '+cls+'" data-action="'+action+'" '+extra+'>'+icon(symbol)+e(label)+'</button>';
@@ -14,13 +16,13 @@ const stat=(label,value,symbol="clock",cls="")=>'<div class="stat-card '+cls+'">
 export const empty=(title,message,action="")=>'<div class="empty-state">'+icon("folder")+'<h2>'+title+'</h2><p>'+message+'</p>'+action+'</div>';
 
 export const modelLabel = (model="gpt-6-luna", effort="max") => ({"gpt-6-luna":"GPT-6 Luna","gpt-6.1-sol":"GPT-6.1 Sol","gpt-6-astra":"GPT-6 Astra"}[model]||model)+" · "+effort;
-export function shell(active,projectName="",identity="GPT-6 Luna · max") {
+export function shell(active,projectName="") {
   const items=[["project","Projet","folder"],["prepare","Préparation","file"],["mission","Mission","play"],
     ["results","Résultats","bars"],["history","Historique","clock"]];
   return [
     '<header class="topbar"><a class="brand" href="#/project"><span class="brand-icon">'+icon("grid")+'</span>Espace de travail</a>',
     '<div class="breadcrumb">'+(projectName?e(projectName)+'<span>/</span>':'')+e(items.find(i=>i[0]===active)?.[1]||"Paramètres")+'</div>',
-    '<div class="runtime-chips"><span class="chip">'+icon("chip")+e(identity)+'</span><span class="chip" title="Exécution distante dans une allocation ROMEO.">'+icon("server")+'ROMEO</span></div></header>',
+    '<div class="header-actions"><button class="theme-toggle" type="button" data-action="toggle-theme" aria-label="Passer au thème clair" title="Passer au thème clair">'+icon("sun")+'<span>Mode clair</span></button></div></header>',
     '<aside class="sidebar"><nav aria-label="Navigation principale">'+items.map(([id,title,symbol])=>'<a href="#/'+id+'" class="nav-link '+(active===id?'active':'')+'" '+(active===id?'aria-current="page"':'')+'>'+icon(symbol)+'<span>'+title+'</span></a>').join("")+'</nav>',
     '<div class="sidebar-bottom"><div class="engine-note"><span class="engine-glyph">F</span><div><strong>Moteur Forest</strong><small>Espace personnel · v0.2</small></div></div>',
     '<a class="nav-link '+(active==="settings"?"active":"")+'" href="#/settings">'+icon("settings")+'<span>Paramètres</span></a></div></aside>',
@@ -148,9 +150,10 @@ export function resultsView(c) {
   const confirmed=!!c.best_confirmed;
   const noGain=c.state==="no_gain";
   const baseline=!!c.best_confirmed?.is_baseline;
-  return heading("Votre résultat",e(c.name),badge(c.state))+evidenceNote(c)+
-    note(confirmed?'<strong>'+(baseline?'Le code initial reste la version retenue.':noGain?'Le résultat confirmé n’améliore pas le temps de référence.':'Gain confirmé par des mesures indépendantes.')+'</strong><p>Correction vérifiée sur les entrées du protocole enregistré.</p>':'<strong>Aucun résultat final confirmé.</strong><p>Les essais restent consultables. Aucun gain ni code optimisé n’est annoncé.</p>',confirmed&&!noGain?"green":"amber")+
+  return heading("Votre résultat",e(c.name),badge(c.state))+
+    (confirmed?"":note('<strong>Aucun résultat final confirmé.</strong><p>Les essais restent consultables. Aucun gain ni code optimisé n’est annoncé.</p>',"amber"))+
     '<div class="stat-grid">'+stat("Temps de référence",seconds(c.reference_seconds))+stat("Version retenue",seconds(c.seconds),"clock",confirmed?"gain":"")+stat("Accélération",speedup(c.speedup),"bars",confirmed&&!noGain?"gain":"")+'</div>'+
+    resultCharts(c)+
     '<div class="columns"><section class="card">'+cardTitle("Conditions de comparaison")+'<dl class="key-values"><div><dt>'+icon("server")+'Machine</dt><dd>'+e(c.host||"—")+'</dd></div><div><dt>'+icon("chip")+'Architecture</dt><dd>'+e(c.machine||"—")+'</dd></div><div><dt>'+icon("code")+'Compilateur</dt><dd>'+e(c.compiler||"—")+'</dd></div><div><dt>'+icon("bars")+'Confirmation</dt><dd>'+e(c.confirmation_repetitions||"—")+' répétitions prévues</dd></div></dl><details><summary>Identité du protocole</summary><code class="break">'+e(c.protocol_id||"—")+'</code></details><p class="muted tiny">Les temps sont comparables pour la même cible, les mêmes entrées et le même protocole.</p></section>'+
     '<section class="card">'+cardTitle("Livrables")+'<div class="download-list">'+
     (c.downloads.code?'<a href="/api/campaigns/'+c.id+'/download/code">'+icon("folder")+'<span><strong>'+(baseline?"Projet initial confirmé":"Projet confirmé")+'</strong><small>Archive du projet retenu</small></span>'+icon("download")+'</a>':'<div class="delivery-disabled">'+icon("lock")+'Aucun projet confirmé disponible</div>')+
@@ -160,15 +163,28 @@ export function resultsView(c) {
     link("Examiner les variantes","#/mission/campaign/"+c.id,"code","secondary")+link("Nouvelle mission","#/project/new","plus","ghost")+'</div>';
 }
 
-export function historyView(records,filter="",query="") {
-  const rows=records.filter(r=>(!filter||r.state===filter)&&r.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+function historyPagination(page) {
+  const pageButton=(number,label,extra="")=>'<button class="button ghost small-button" type="button" data-action="history-page" data-page="'+number+'" '+extra+'>'+label+'</button>';
+  const numbers=page.numbers.map((number,index)=>
+    (index&&number>page.numbers[index-1]+1?'<span class="page-gap" aria-hidden="true">…</span>':"")+
+    pageButton(number,String(number),'aria-label="Page '+number+'"'+(number===page.page?' aria-current="page"':""))).join("");
+  return '<footer class="history-pagination"><p id="history-range" role="status">'+page.start+'–'+page.end+' sur '+page.total+
+    ' résultat'+(page.total>1?'s':'')+'</p><label class="page-size">Par page <select id="history-page-size">'+
+    HISTORY_PAGE_SIZES.map(size=>'<option value="'+size+'"'+(size===page.pageSize?' selected':"")+'>'+size+'</option>').join("")+
+    '</select></label><nav aria-label="Pages de l’historique">'+
+    pageButton(page.page-1,icon("chevron"), 'aria-label="Page précédente"'+(page.page===1?' disabled':""))+
+    numbers+pageButton(page.page+1,icon("chevron"),'aria-label="Page suivante"'+(page.page===page.pages?' disabled':""))+'</nav></footer>';
+}
+
+export function historyView(records,filter="",query="",currentPage=1,pageSize=10) {
+  const page=historyPage(records,filter,query,currentPage,pageSize), rows=page.rows;
   const filters=[["completed","Terminée"],["queued","En file ROMEO"],["running","Recherche en cours"],
     ["collecting","Récupération des résultats"],["failed","Interrompue"],["confirmed","Gain confirmé"],
     ["no_gain","Aucun gain confirmé"],["prepared","Prête à transférer"],["needs_input","À compléter"],
     ["ready","Contrat prêt"],["unconfirmed","Non confirmé"]];
   return heading("Historique des missions","Vos projets, leurs résultats et les preuves conservées.",link("Nouveau projet","#/project/new","plus","primary"))+
     '<div class="history-toolbar"><label class="search-field">'+icon("search")+'<input id="history-search" placeholder="Rechercher un projet" value="'+e(query)+'"></label><label class="sr-only" for="history-filter">Filtrer par état</label><select id="history-filter"><option value="">Tous les états</option>'+filters.map(([v,l])=>'<option value="'+v+'" '+(filter===v?'selected':'')+'>'+l+'</option>').join("")+'</select></div>'+
-    (rows.length?'<section class="card table-card"><div class="table-scroll"><table><thead><tr><th>Projet</th><th>État</th><th>Origine</th><th>Résultat</th><th></th></tr></thead><tbody>'+rows.map(r=>'<tr><td><div class="project-cell">'+icon(r.kind==="project"?"folder":"file")+'<div><strong>'+e(r.name)+'</strong><small>'+date(r.started||r.created)+'</small></div></div></td><td>'+badge(r.state)+'</td><td><span class="muted small">'+(r.kind==="campaign"?e(r.host||"Campagne importée"):r.kind==="prepared"?"Dossier local · non soumis":r.kind==="mission"?"ROMEO · "+e(r.job_id||"soumission"):"Projet local")+'</span></td><td class="table-speed">'+speedup(r.speedup)+'</td><td><a class="button ghost small-button" href="'+routeFor(r)+'">'+(r.kind==="project"?"Compléter":"Ouvrir")+icon("chevron")+'</a></td></tr>').join("")+'</tbody></table></div></section>':
+    (rows.length?'<section class="card table-card"><div class="table-scroll"><table><thead><tr><th>Projet</th><th>État</th><th>Origine</th><th>Résultat</th><th></th></tr></thead><tbody>'+rows.map(r=>'<tr><td><div class="project-cell">'+icon(r.kind==="project"?"folder":"file")+'<div><strong>'+e(r.name)+'</strong><small>'+date(r.started||r.created)+'</small></div></div></td><td>'+badge(r.state)+'</td><td><span class="muted small">'+(r.kind==="campaign"?e(r.host||"Campagne importée"):r.kind==="prepared"?"Dossier local · non soumis":r.kind==="mission"?"ROMEO · "+e(r.job_id||"soumission"):"Projet local")+'</span></td><td class="table-speed">'+speedup(r.speedup)+'</td><td><a class="button ghost small-button" href="'+routeFor(r)+'">'+(r.kind==="project"?"Compléter":"Ouvrir")+icon("chevron")+'</a></td></tr>').join("")+'</tbody></table></div>'+historyPagination(page)+'</section>':
       empty("Aucune mission trouvée",records.length?"Essayez un autre filtre.":"Importez votre premier projet pour préparer une mission.",link("Déposer un projet","#/project/new","plus","primary")))+
     '<p class="bottom-note">'+icon("refresh")+'Chaque nouvelle mission possède son propre dossier et sa mémoire. Les campagnes existantes sont consultées en lecture seule.</p>';
 }
@@ -176,7 +192,7 @@ export function historyView(records,filter="",query="") {
 export function settingsView(info,campaignCount) {
   return heading("Paramètres","Modèle choisi par mission et connexion distante.")+
     '<div class="columns"><section class="card">'+cardTitle("Modèles disponibles")+
-    '<ul class="check-list">'+(info.models||[]).map(m=>'<li>'+icon("chip")+'<div><strong>'+e(m.label)+'</strong><small>'+e(m.efforts.join(" · "))+'</small></div></li>').join("")+'</ul><p>Le choix et l’effort s’appliquent à tous les rôles de la mission.</p></section>'+
+    '<ul class="model-list">'+(info.models||[]).map(m=>'<li>'+icon("chip")+'<div class="model-details"><strong>'+e(m.label)+'</strong><div class="model-efforts" aria-label="Efforts disponibles">'+m.efforts.map(effort=>'<span>'+e(effort)+'</span>').join("")+'</div></div></li>').join("")+'</ul><p class="muted small">Le choix et l’effort s’appliquent à tous les rôles de la mission.</p></section>'+
     '<section class="card">'+cardTitle("Exécution sur ROMEO")+'<dl class="key-values"><div><dt>Connexion</dt><dd>'+badge(info.submission_enabled?"ready":"needs_input",info.submission_enabled?"Configurée":"À configurer")+'</dd></div><div><dt>Campagnes consultables</dt><dd>'+campaignCount+'</dd></div><div><dt>Cibles configurées</dt><dd>'+e((info.connection?.targets||[]).join(", ")||"Aucune")+'</dd></div></dl><p>'+e(info.submission_message)+'</p></section></div>'+
     note('<strong>Exécution indépendante du PC</strong><p>Après soumission, le contrôleur et les appels au modèle tournent dans le job ROMEO. Au retour dans l’application, le suivi reprend et récupère les résultats. Les identifiants OAuth restent dans le profil privé distant.</p>');
 }

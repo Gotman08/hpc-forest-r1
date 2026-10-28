@@ -116,6 +116,9 @@ def begin_call(controller, job):
                "meta_role": "active-" + job["kind"], **rendered(job["kind"], payload)}
     if job["kind"] == "mother":
         request["conversation"] = next_turn(db.get(f"mother_conversation:{job['epoch']}"), phase="steering")
+    from .diagnostics_contract import authorize
+
+    authorize(controller.root, request, source_ids=job["visible_ids"], config=controller.config)
     directory = controller.root / "logs" / job["id"] / f"call-{number:02d}"
     atomic_json(directory / "request.json", request)
     sha = mailbox.sha256(mailbox.json_bytes(request))

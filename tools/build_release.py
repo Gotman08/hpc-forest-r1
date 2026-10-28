@@ -21,7 +21,7 @@ def main():
     output.mkdir(parents=True, exist_ok=False)
     staging = output / "source"
     staging.mkdir()
-    for name in ("pyproject.toml", "MANIFEST.in", "README.md", "AGENTS.md", "CHANGELOG.md"):
+    for name in ("pyproject.toml", "MANIFEST.in", "README.md", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md"):
         shutil.copy2(root / name, staging / name)
     for path in root.glob("requirements-*.lock"):
         shutil.copy2(path, staging / path.name)

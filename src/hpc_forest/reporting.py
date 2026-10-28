@@ -87,6 +87,9 @@ def report(root: Path, output: Path | None = None) -> Path:
             "postprocess": postprocess,
             "final_g_confirmation": db.get(f"final_g_confirmation:{db.get('current_epoch')}"),
             "forest_plan": forest_plan(db),
+            "investigation": db.get(f"investigation:{db.get('current_epoch')}"),
+            "diagnostic_collections": [json.loads(p.read_text(encoding="utf8"))
+                for p in sorted((root / "diagnostics/collections").glob("*/summary.json"))],
             "mother_plan_review": db.get(f"mother_plan_review:{db.get('current_epoch')}"),
             "mother_conversation": db.get(f"mother_conversation:{db.get('current_epoch')}"),
             "model_skills": campaign_traces(db),

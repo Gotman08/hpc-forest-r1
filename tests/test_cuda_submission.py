@@ -20,7 +20,7 @@ from hpc_forest.submission import delivery_manifest, validate_submission
 def cuda_source(tmp_path):
     source = tmp_path / "source"
     (source / "src").mkdir(parents=True)
-    original = Path(__file__).resolve().parents[1] / "experiments/cuda-nbody-20261021/input/reference.cu"
+    original = Path(__file__).resolve().parent / "fixtures/cuda/reference.cu"
     (source / "src/nbody_kernel.cu").write_bytes(original.read_bytes())
     (source / "src/launch.json").write_text(json.dumps(
         {"block": 256, "items_per_block": 256, "shared_memory_bytes": 0}))

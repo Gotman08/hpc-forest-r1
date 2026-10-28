@@ -77,6 +77,7 @@ async def work(root: Path):
                         output, root / "authorization.json", {launch["id"]},
                         executable=launch["codex"], model=launch["model"], effort=launch["effort"],
                         generators=launch.get("generator_pool"),
+                        documentation=True, diagnostics_root=root / "campaign",
                         defer_diagnostics=True)
         await worker.hello()
         pool = RequestPool(worker)

@@ -1,24 +1,74 @@
+<div align="center">
+
 # Forest
 
-Forest optimise des programmes C, C++ et CUDA à partir d'essais compilés,
-testés et mesurés. Mother prépare les pistes, les arbres utilisent la vraie
-politique TreeQuest AB-MCTS-A, les analystes examinent les preuves, puis les
-combinaisons sont évaluées et le résultat confirmé indépendamment.
+### L’optimisation de code, pilotée par la mesure.
 
-Le modèle par défaut reste **GPT-6 Luna, effort max**, pour tous les rôles,
-sans mélange activé. Un changement de cible, compilateur ou protocole exige
-une nouvelle campagne. Aucun gain n'est garanti.
+Explorez plusieurs pistes. Inspectez chaque essai. Livrez un programme confirmé.
 
-La version **0.2.0** retire le conseiller TabPFN. Les anciennes campagnes,
-leurs résultats et le code du conseiller restent archivés et consultables.
-La mémoire de preuves, Mother, les analystes et l'archive de programmes mesurés
-restent dans le produit. Un ancien contrat n'est jamais converti à l'ouverture.
+**C · C++ · CUDA** &nbsp; / &nbsp; **TreeQuest AB-MCTS** &nbsp; / &nbsp; **Version 0.2.0**
 
-## Installer et ouvrir
+[Démarrer](#démarrer) · [Fonctionnement](#fonctionnement) · [Documentation](docs/README.md) · [Contribuer](CONTRIBUTING.md)
 
-Application personnelle locale ; exécution autorisée sur le compte ROMEO de
-l'utilisateur. Python 3.11 minimum ; profil Windows Python 3.13 vérifié dans
-les reçus de livraison. Dans un environnement virtuel neuf :
+</div>
+
+Forest accompagne l’optimisation de programmes de calcul : il propose des variantes,
+les compile, vérifie leur correction et mesure leurs performances dans un contrat
+figé. Son application locale permet de préparer une mission, de suivre son exécution
+sur ROMEO et d’examiner le code, les décisions et les mesures qui conduisent au résultat.
+
+![Démonstration de Forest : arbres de recherche, tests et mesures d’une variante, comparaison du code et résultats. Interface réelle, données synthétiques.](docs/media/forest-demo.gif)
+
+<div align="center">
+
+**Arbres → vérification → comparaison → livraison**
+
+<sub>Interface réelle · données synthétiques · aucun calcul ROMEO.<br>
+Les temps et gains affichés illustrent le parcours ; ils ne constituent pas un benchmark.</sub>
+
+[Voir l’image fixe](docs/media/forest-overview.png) · [Scénario et reproduction du GIF](docs/DEMO.md)
+
+</div>
+
+## Ce que Forest apporte
+
+| Besoin | Dans Forest |
+|---|---|
+| Explorer plusieurs pistes d’optimisation | Mother prépare les pistes ; les arbres utilisent la politique TreeQuest AB-MCTS-A et les analystes examinent les preuves. |
+| Comprendre un résultat | Chaque essai expose ses sources, son diff, ses tests et ses mesures ; les liens de recherche, de délégation et d’intégration restent distincts. |
+| Comparer sur une base stable | Cible, compilateur, entrées, périmètre modifiable et protocole sont figés pour la campagne. Les tests restent protégés. |
+| Récupérer un résultat exploitable | Une confirmation indépendante précède la livraison du projet retenu, accompagnée d’un rapport et des mesures CSV. L’absence de gain reste explicite. |
+| Retrouver son travail | Les projets et les preuves sont conservés localement ; le suivi d’un job déjà soumis reprend après fermeture de l’application. |
+
+## Fonctionnement
+
+1. **Importer.** Déposez un fichier, un dossier ou un ZIP, avec ses tests et ses
+   documents. Forest conserve l’original et ses empreintes.
+2. **Définir le contrat.** Précisez les commandes de compilation, de vérification
+   et de mesure, les sources modifiables, la cible et le budget.
+3. **Explorer.** Lancez explicitement la mission sur ROMEO. Suivez les arbres,
+   inspectez les variantes et consultez les analyses enregistrées.
+4. **Confirmer et récupérer.** Les combinaisons sont évaluées comme de nouveaux
+   programmes. Après confirmation et finalisation, téléchargez le projet et ses preuves.
+
+Le modèle par défaut est **GPT-6 Luna · effort max**, pour tous les rôles ; le
+mélange de générateurs est désactivé. Chaque mission dispose d’une mémoire neuve.
+Changer de cible, de compilateur ou de protocole exige une nouvelle campagne.
+
+## Démarrer
+
+**Prérequis :** Python 3.11 ou plus récent. Le profil Windows Python 3.13 dispose
+de reçus de validation ; le profil Linux Python 3.12 est décrit dans le
+[guide de distribution](docs/DISTRIBUTION.md).
+
+Cloner uniquement la version actuelle du produit :
+
+```text
+git clone --depth 1 https://github.com/Gotman08/hpc-forest-r1.git
+cd hpc-forest-r1
+```
+
+Puis, depuis la racine du dépôt, sous Windows avec Python 3.13 :
 
 ```powershell
 python -m venv .venv
@@ -27,75 +77,88 @@ python -m venv .venv
 .venv/Scripts/python -m hpc_forest.webapp
 ```
 
-Ouvrir [l'application locale](http://127.0.0.1:8767). Le stockage par défaut est
-`~/.hpc-forest/application`. La configuration ROMEO utilise des chemins et un
-profil OAuth privé ; aucun jeton ne doit être placé dans le dépôt.
-Voir [le parcours utilisateur](docs/APPLICATION.md) et [l'installation d'une wheel](docs/DISTRIBUTION.md).
+Ouvrez **[Forest dans votre navigateur](http://127.0.0.1:8767)**.
+Le stockage par défaut est `~/.hpc-forest/application`.
+L’import et la préparation ne soumettent aucun job.
 
-## Préserver et reprendre
+**Une nouvelle installation démarre avec un historique vide.** Le dépôt contient
+le produit et ses exemples ; les projets personnels, campagnes, résultats et
+journaux de calcul restent dans le stockage propre à chaque utilisateur.
+Le GIF est une démonstration documentaire et n’ajoute aucune mission à l’application.
+Voir [le démarrage sans historique](docs/CLEAN-INSTALL.md).
 
-Une préparation ne peut créer qu'une mission. Une réponse de soumission perdue
-déclenche une réconciliation du job existant. « Arrêter et confirmer » ferme
-les admissions et laisse terminer les essais engagés avant la confirmation.
-Fermer l'application n'arrête pas un job ROMEO ; le suivi reprend au démarrage.
-Une restauration met les missions inachevées en attente de réconciliation.
+<details>
+<summary>Installation depuis les sources sous Linux avec Python 3.12</summary>
 
-```powershell
-# Arrêter le serveur local avant la sauvegarde.
-python -m hpc_forest.maintenance backup CHEMIN_APPLICATION NOUVELLE_SAUVEGARDE
-python -m hpc_forest.maintenance verify-backup NOUVELLE_SAUVEGARDE
-python -m hpc_forest.maintenance restore NOUVELLE_SAUVEGARDE NOUVEAU_STOCKAGE
+```bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements-linux-py312.lock
+.venv/bin/python -m pip install --no-deps .
+.venv/bin/python -m hpc_forest.webapp
 ```
 
-Voir les [notes de migration et limites de reprise](docs/MIGRATION-0.2.md).
-Les campagnes externes enregistrées dans l'application doivent aussi être
-sauvegardées : la copie les répertorie mais n'en devient pas propriétaire.
+Ce profil doit être vérifié sur la plateforme cible ; la présence d’une
+configuration CI ne constitue pas un reçu d’exécution.
+
+</details>
+
+Pour lancer une recherche, configurez votre compte ROMEO à l’aide du
+[guide de l’application](docs/APPLICATION.md#configuration-romeo) et du
+[profil d’exemple](docs/romeo.example.json). Les identifiants restent dans votre
+profil privé. Le contrôleur tourne dans l’allocation SLURM ; l’inférence est
+hébergée par OpenAI. Après soumission, la recherche peut continuer PC éteint.
+
+## Périmètre et validation
+
+| Sujet | État documenté |
+|---|---|
+| Application | Usage personnel local, serveur lié à `127.0.0.1`, exécution explicite sous le compte ROMEO de l’utilisateur. |
+| Calcul CPU | Parcours validé sur ROMEO, CPU x86_64 et GCC 14.2.0. |
+| Sources CUDA | Acceptées avec un programme hôte et des tests ; le parcours GPU ARM n’est pas validé par la livraison 0.2. |
+| Correction et performance | Correction définie par les tests fournis ; performances liées aux entrées et au protocole mesurés. Aucun gain garanti. |
+| Conservation | Reprise du suivi et sauvegarde vérifiée ; une panne du calcul distant ne déclenche pas de nouvelle allocation automatique. |
+
+Les [contrôles de contribution](CONTRIBUTING.md#vérifier-un-changement) produisent
+des reçus locaux de tests et de fabrication. Les anciennes campagnes et leurs
+mesures sont conservées séparément du produit publié ; elles ne sont pas importées
+au premier lancement et ne constituent pas une mesure de la version courante.
+
+Forest exécute le code avec les droits du compte de calcul. Son déploiement
+validé est personnel et local ; consultez la [sécurité](docs/SECURITY.md) pour
+les frontières d’exécution et les conditions d’exposition.
+
+## Documentation
+
+| Pour… | Lire… |
+|---|---|
+| Préparer et suivre une première mission | [Guide de l’application](docs/APPLICATION.md) |
+| Installer une wheel ou fabriquer une livraison | [Distribution](docs/DISTRIBUTION.md) |
+| Sauvegarder, restaurer ou migrer depuis 0.1 | [Migration et maintenance](docs/MIGRATION-0.2.md) |
+| Comprendre le moteur et ses invariants | [Architecture](docs/ARCHITECTURE.md) |
+| Vérifier une installation sans données personnelles | [Démarrage propre](docs/CLEAN-INSTALL.md) |
+| Préparer une diffusion commerciale | [Dépendances et droits](docs/THIRD-PARTY-NOTICES.md) |
+| Parcourir les guides du produit | [Index de documentation](docs/README.md) |
+
+La version 0.2 retire le conseiller TabPFN du produit courant. Les anciennes
+campagnes et leurs contrats restent consultables sans conversion à l’ouverture.
+Voir le [journal des changements](CHANGELOG.md).
 
 ## Développer
-
-| Dossier | Responsabilité |
-|---|---|
-| `src/hpc_forest/search/` | Politique TreeQuest et transactions ask/tell |
-| `src/hpc_forest/memory/` | Contrats, stockage et lecture des preuves |
-| `src/hpc_forest/storage/` | Écritures atomiques, sauvegardes et restauration |
-| `src/hpc_forest/webapp/` | Application, import, contrats, missions et ROMEO |
-| `src/hpc_forest/support/` | Validation, sources bornées et budgets partagés |
-| `src/hpc_forest/*.py` | Contrôleur, orchestration, évaluateur et adaptateurs |
-| `tests/`, `tools/` | Régressions, vérification et fabrication |
-| `docs/` | Utilisation, architecture, maintenance et décisions |
-| `experiments/`, `evidence/` | Sources figées, résultats et reçus historiques |
-| `artifacts/`, `work/` | Sorties locales conservées, hors distribution |
-
-Les frontières et invariants sont décrits dans [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-Les sources historiques ne sont pas des instructions pour le contrôleur.
 
 ```powershell
 python -m pip install -e ".[web,dev]"
 python -m pytest
 python -m ruff check src tests
 node --test tests/test_web_frontend.mjs
-python tools/check.py
-python tools/build_release.py artifacts/release-NOUVEAU
 ```
 
-Les tests locaux n'appellent aucun modèle hébergé et n'allouent aucun job HPC.
-Les compilations nécessitent GCC/G++. Les contrôles intégrés vérifient que le
-code est resté figé et enregistrent ses empreintes.
+Les tests locaux n’appellent aucun modèle hébergé et n’allouent aucun job HPC.
+Les tests avec compilation nécessitent GCC/G++. Le
+[guide de contribution](CONTRIBUTING.md) décrit les contrôles et l’organisation
+du dépôt ; `python tools/check.py` produit un reçu consolidé.
 
-## Preuves et limites
+---
 
-Le [rapport de stabilisation 0.2](docs/VALIDATION-STABILISATION-20261028.md)
-décrit les tests, l'installation isolée, les sauvegardes et leurs limites.
-
-Le [rapport des huit recherches du 27 octobre](experiments/exploration-luna-20261027/RESULTATS.md)
-conserve les résultats ROMEO et leurs limites. Ces mesures concernent leur
-moteur figé, pas automatiquement la version 0.2.0. Les historiques antérieurs
-restent indexés dans le [README archivé](docs/reference/README-0.1-20261028.md).
-
-Forest exécute du code avec les droits du compte de calcul. Il ne fournit pas
-un bac à sable contre du code hostile et ne doit pas être exposé comme service
-multi-utilisateur. Voir [SECURITY.md](docs/SECURITY.md).
-
-La distribution technique n'établit pas les droits commerciaux sur les codes
-importés, sujets de concours, dépendances ou services. Voir les
-[notices et points restant à vérifier](docs/THIRD-PARTY-NOTICES.md).
+Les droits de distribution de Forest restent à définir par leurs titulaires.
+Les codes importés, dépendances et services conservent leurs conditions propres.
+Les [notices](docs/THIRD-PARTY-NOTICES.md) recensent les points à vérifier avant diffusion.

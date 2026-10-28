@@ -971,6 +971,8 @@ class Controller:
             "postprocess": self.db.get(f"postprocess:{self.db.get('current_epoch')}")
                 if finish_started(self.config) else None,
             "forest_plan": forest_plan(self.db),
+            "investigation": self.db.get(f"investigation:{self.db.get('current_epoch')}"),
+            "investigation_phase": self.db.get(f"mother_plan:investigation:{self.db.get('current_epoch')}"),
             "research_roles": research_roles(self.db),
             "mother_conversation": self.db.get(f"mother_conversation:{self.db.get('current_epoch')}"),
             "mother_assembly_started": self.db.get(f"mother_assembly_started:{self.db.get('current_epoch')}"),

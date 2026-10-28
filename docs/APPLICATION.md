@@ -1,8 +1,8 @@
 # Application — exécution autonome sur ROMEO
 
 Le parcours **dépôt → lancement ROMEO → confirmation → téléchargement** est raccordé.
-L'interface classique à cinq écrans conserve les arbres à la craie. Forest reste
-le nom du moteur ; le nom du produit reste à choisir.
+L'interface classique à cinq écrans conserve les arbres à la craie. Le produit
+et son moteur portent le nom Forest.
 
 Le contrôleur et le client Codex authentifié par OAuth tournent dans l'allocation
 SLURM. L'inférence reste hébergée par OpenAI : les poids ne sont pas installés sur
@@ -174,6 +174,26 @@ python -m build --wheel
 Les tests locaux utilisent des connecteurs simulés, sans allocation ni modèle.
 Les exécutions réelles et leurs identifiants sont documentés séparément.
 
-Suites possibles : profil GPU ARM, arrêt propre dans l'interface, reprise
-distante explicite après panne du nœud et limites de coût.
+## Arrêter, sauvegarder et restaurer
+
+« Arrêter et confirmer » annule une mission encore non soumise. Après soumission,
+le moteur 0.2 ferme les admissions, termine les essais engagés puis effectue la
+confirmation. Une demande et sa transmission sont conservées séparément ; une
+réponse réseau perdue n'autorise ni une nouvelle mission ni une resoumission.
+Les anciens moteurs figés restent inchangés et ne prennent pas en charge cette
+commande. « Reprendre le suivi » réconcilie un job connu, sans nouvelle allocation.
+
+Une seule instance peut utiliser un stockage donné. Arrêter le serveur local
+avant une sauvegarde. La commande de maintenance vérifie SQLite et les fichiers,
+puis restaure uniquement vers un répertoire neuf. Les missions inachevées passent
+en attente de réconciliation. Les campagnes externes sont répertoriées et doivent
+être sauvegardées séparément. Voir [MIGRATION-0.2.md](MIGRATION-0.2.md).
+
+Les contrats contenant l'ancien conseiller sont consultables mais refusés pour
+un nouveau lancement. L'interface propose une copie migrée du projet, en laissant
+les sources et contrats historiques intacts. Le défaut reste Luna Max.
+
+Suites possibles : profil GPU ARM, reprise distante après panne du nœud et
+limites de coût. La stabilisation n'ajoute pas de nouvelle mesure de performance
+ROMEO et ne valide pas un service pour plusieurs utilisateurs.
 

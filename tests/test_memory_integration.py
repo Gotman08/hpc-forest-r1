@@ -16,9 +16,9 @@ from hpc_forest import codex_mailbox as mailbox
 from hpc_forest import codex_process
 from hpc_forest.controller import Controller, create_workspace
 from hpc_forest.core import ForestError, InfrastructureError, canonical
-from hpc_forest.memory_contract import POLICY, empty_read
-from hpc_forest.memory_retrieval import MemoryReader
-from hpc_forest.memory_store import sync_memory
+from hpc_forest.memory.contract import POLICY, empty_read
+from hpc_forest.memory.retrieval import MemoryReader
+from hpc_forest.memory.store import sync_memory
 from hpc_forest.model_skills import campaign_traces, policy, verify_binding
 from hpc_forest.reporting import report
 

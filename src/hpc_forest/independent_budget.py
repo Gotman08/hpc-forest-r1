@@ -4,8 +4,9 @@ from __future__ import annotations
 import time
 from statistics import median
 
+from hpc_forest.memory.contract import guided
+
 from .forest import pairwise_mother, research_roles
-from .memory_contract import guided
 from .support.budgets import mandatory_final_g
 
 

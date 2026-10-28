@@ -6,7 +6,7 @@ from test_memory import fact, mission
 from test_memory import memory_db as memory_fixture
 
 from hpc_forest.core import canonical
-from hpc_forest.memory_retrieval import MemoryReader, evidence_ids
+from hpc_forest.memory.retrieval import MemoryReader, evidence_ids
 
 memory_db = memory_fixture
 

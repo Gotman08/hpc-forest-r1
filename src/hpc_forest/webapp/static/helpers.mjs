@@ -26,6 +26,7 @@ export const states = {
   unconfirmed:["Résultat non confirmé","amber"], running:["Recherche en cours","blue"],
   confirming:["Confirmation","blue"], initialized:["Initialisée","blue"],
   checkpointed:["Point de reprise","amber"], failed:["Interrompue","red"],
+  recovery_required:["Réconciliation requise","amber"],
   unavailable:["Preuves indisponibles","red"], needs_input:["À compléter","amber"],
   ready:["Contrat prêt","green"], prepared:["Prête à transférer","blue"],
   valid:["Correct","green"], incorrect:["Incorrect","red"],

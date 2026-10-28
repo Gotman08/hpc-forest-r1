@@ -7,17 +7,18 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import SimpleQueue
 
+from hpc_forest.search.binary import SearchExhausted
+
 from . import active_control as controls
 from . import active_lifecycle as lifecycle
 from .active_contract import enabled, settings
 from .active_snapshot import watermark
 from .active_state import children, state
 from .adaptive_budget import admit, record_timing
-from .advisor import next_completed
 from .backends import Generated
-from .binary_search import SearchExhausted
 from .core import BudgetExhausted, ForestError, InfrastructureError, Mission
 from .forest_scheduler import _generate
+from .operator_control import stop_requested
 
 
 def due(db, epoch, role, cfg):
@@ -83,7 +84,6 @@ def run_research(controller, epoch, baseline, max_rounds=None):
     initial_children = db.get(f"forest_plan:{epoch_id}")["children"]
     width = len(initial_children)
     completed, pending, exhausted = SimpleQueue(), {}, set()
-    ready = []
     pending_key = f"research_pending:{epoch_id}"
     counts, limits, waiting = {}, {}, controls.recover(controller, epoch_id)
     fatal = None
@@ -135,7 +135,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
         checkpoint = max_rounds is not None and all(
             r in exhausted or r in limits and counts[r] >= limits[r]
             for r in counts if not r.startswith("Gm"))
-        if current["closed"] or db.get(f"active_mother_broken:{epoch_id}") or fatal or checkpoint:
+        if current["closed"] or db.get(f"active_mother_broken:{epoch_id}") or fatal or checkpoint or stop_requested(controller):
             for job in waiting:
                 controls.stop_unadmitted(controller, job)
             waiting = []
@@ -185,7 +185,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
         nonlocal fatal
         refresh()
         current = state(db, epoch_id)
-        if current["closed"] or fatal or db.get(f"active_mother_broken:{epoch_id}"):
+        if current["closed"] or fatal or db.get(f"active_mother_broken:{epoch_id}") or stop_requested(controller):
             return
         if lifecycle.guarded(db) and current.get("lifecycle", {}).get("closing"):
             return  # Finish admitted work before reviewing closure.
@@ -245,7 +245,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
         lifecycle.observe(db, epoch_id, identity)
     try:
         with ThreadPoolExecutor(max_workers=width + cfg["control_workers"], thread_name_prefix="forest-active") as pool:
-            if not any(counts.values()) and (max_rounds is None or max_rounds > 0):
+            if not any(counts.values()) and (max_rounds is None or max_rounds > 0) and not stop_requested(controller):
                 if db.get(f"forest_wave:{epoch_id}:0") and not db.get(f"research_initial_dispatch:{epoch_id}"):
                     raise InfrastructureError("Interrupted initial wave cannot replay model calls")
                 roles = [c["role"] for c in initial_children]
@@ -274,10 +274,10 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                     checkpoint = max_rounds is not None and all(
                         r in exhausted or r in limits and counts[r] >= limits[r]
                         for r in counts if not r.startswith("Gm"))
-                    if not fatal and not checkpoint and lifecycle.idle_review(db, epoch_id):
+                    if not fatal and not checkpoint and not stop_requested(controller) and lifecycle.idle_review(db, epoch_id):
                         dispatch_controls(pool)
                         refill(pool)
-                    if (not pending and not fatal and not checkpoint
+                    if (not pending and not fatal and not checkpoint and not stop_requested(controller)
                             and lifecycle.resume_after_idle_review(db, epoch_id, [
                                 r for r in counts if not r.startswith("Gm")
                                 and r not in exhausted and not (r in limits and counts[r] >= limits[r])
@@ -285,7 +285,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                         refill(pool)
                     if not pending:
                         break
-                future = next_completed(controller, completed, pending, ready)
+                future = completed.get()
                 item = pending[future]
                 if item["kind"] == "control":
                     response, finished = future.result()
@@ -313,6 +313,9 @@ def run_research(controller, epoch, baseline, max_rounds=None):
         research = [c["role"] for c in children(db, epoch_id) if c.get("kind") != "intermediate_integration"]
         if fatal:
             status = fatal
+        elif stop_requested(controller):
+            status = "search_complete"
+            runtime["stop_reason"] = "operator_stop"
         elif current["closed"]:
             status = "search_complete"
         elif max_rounds is not None and all(counts[r] >= limits[r] or r in exhausted for r in research):

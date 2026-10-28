@@ -1,4 +1,6 @@
 """Experimental controls must fail closed before any search dispatch."""
+import ast
+import hashlib
 import importlib.util
 import json
 import tarfile
@@ -55,10 +57,19 @@ def test_predeclared_factorial_has_equal_budgets_unique_orders_and_no_results():
     assert protocol['search_target_seconds_per_arm'] == 5400
     assert protocol['end_to_end_cap_seconds_per_arm'] == 7200
     assert all(len(o) == 5 and set(o) == set(protocol['conditions']) for o in protocol['orders'])
-    assert protocol['conditions'] == load('prepare').CONDITIONS
+    # The archived generator belongs to the retired advisor runtime. Read its
+    # literal preregistration as data without executing its obsolete imports.
+    source = ast.parse((STUDY / 'reproduction/prepare.py').read_text(encoding='utf8'))
+    conditions, = [node.value for node in source.body if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name) and target.id == 'CONDITIONS'
+                           for target in node.targets)]
+    assert protocol['conditions'] == ast.literal_eval(conditions)
     assert protocol['generator_pool'] == [] and not protocol['operator_algorithm_hints']
     for case in protocol['cases']:
-        assert load('prepare').manifest(STUDY / 'inputs' / case['case']) == case['files']
+        root = STUDY / 'inputs' / case['case']
+        actual = {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                  for path in root.rglob('*') if path.is_file()}
+        assert actual == case['files']
 
 
 def test_missing_delivery_is_visible_and_not_assigned_a_speedup(monkeypatch):

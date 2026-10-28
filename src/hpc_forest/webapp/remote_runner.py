@@ -120,7 +120,7 @@ def supervise(root: Path):
                 raise InfrastructureError("A selected model/effort is absent from the ROMEO Codex catalogue")
     phase(root, "preparing", model=launch["model"], effort=launch["effort"], authentication="ChatGPT")
     config = prepare_project(root, launch)
-    from ..search_policy import make_algorithm, settings
+    from hpc_forest.search.policy import make_algorithm, settings
 
     make_algorithm(settings(config))  # Fail before initialization if optional dependencies are missing.
     create_workspace(root / "campaign", config, root / "source", root / "validation")

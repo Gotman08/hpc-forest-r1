@@ -9,6 +9,9 @@ from dataclasses import asdict
 from importlib.resources import files
 from pathlib import Path
 
+from hpc_forest.search import Search
+from hpc_forest.search.binary import SearchExhausted, enabled
+
 from .adaptive_budget import (
     admission_deadline,
     admit,
@@ -17,7 +20,6 @@ from .adaptive_budget import (
     record_timing,
 )
 from .backends import CodexBackend, RecipeBackend
-from .binary_search import SearchExhausted, enabled
 from .completion import finalize
 from .config import load_config, validate
 from .core import (
@@ -49,7 +51,6 @@ from .knowledge import Knowledge
 from .observations import measured_observations
 from .ollama_backend import OllamaBackend, resolve_model
 from .registry import Registry
-from .search import Search
 from .submission import resolve_submission, validate_launch, validate_submission
 from .support.budgets import (
     FINISH_STARTED,
@@ -91,10 +92,8 @@ def create_workspace(
         raise ForestError(f"Refusing to overwrite an existing directory: {destination}")
     config = json.loads(json.dumps(config or load_config()))
     validate(config)
-    from .advisor import settings as advisor_settings
     from .control_versions import contracts
 
-    config["advisor"] = advisor_settings(config)  # Persist defaults, not a moving interpretation.
     if config["backend"] == "ollama":
         config["ollama"] = resolve_model(config["ollama"])
     config["target_id"] = config.get("target_id", local_target_id())
@@ -372,7 +371,7 @@ class Controller:
         return result
 
     def _context(self, mission: Mission, sources: list[dict]) -> dict:
-        from .memory_store import sync_memory
+        from hpc_forest.memory.store import sync_memory
 
         sync_memory(self.db, self.root)
         annotations = []
@@ -460,15 +459,14 @@ class Controller:
                     "decision_id": mission.control_decision_id, "source_ids": mission.sources,
                     "base_source_id": mission.base_source_id,
                     "rule": "A new program evaluated independently; no source reward is copied"}
+        from hpc_forest.memory.context import attach_memory
+
         from .evolution_archive import attach as attach_diversity
-        from .memory_context import attach_memory
 
         return attach_memory(self, mission, attach_diversity(self, mission, context))
 
     def _new_mission(self, role: str, epoch: dict, reserved_slot=None) -> tuple[Mission, dict, str]:
         from .active_contract import enabled as active_enabled
-        from .advisor import account_context, capture, choose
-        from .advisor import settings as advisor_settings
 
         if active_enabled(self.config):
             from .active_state import state as active_state
@@ -503,7 +501,6 @@ class Controller:
             mission = self.search.ask(
                 tree_id, actions, epoch["id"], base_commit, count + 1, "", slot,
                 route_generators=(child or {}).get("kind", "research") == "research",
-                advisor=(lambda proposals: choose(self, proposals)) if advisor_settings(self.config)["enabled"] else None,
             )
         if active_enabled(self.config):
             from .active_state import context as active_context
@@ -538,11 +535,6 @@ class Controller:
         branch = "integration" if mission.role == "G" else "exp"
         branch += f"/{self.config['problem']}/{mission.role}/{mission.id}"
         make_worktree(self.root / "repo", Path(mission.worktree), branch, mission.base_commit)
-        try:
-            with account_context(self):
-                capture(self, mission)
-        except (ForestError, OSError, ValueError) as exc:
-            self.db.event("advisor_features_unavailable", {"id": mission.id, "error": type(exc).__name__})
         return mission, self._context(mission, sources), slot
 
     def _evaluate_mission(self, mission: Mission, baseline: dict) -> Outcome:
@@ -638,17 +630,11 @@ class Controller:
                 self.db.settle_tokens(slot, 0 if self.config["backend"] == "recipe" else None)
             outcome = Outcome("infrastructure_error", reason=str(exc))
         self.search.finish(mission, outcome)
-        from .advisor import account_context
-        from .advisor import observe as observe_advisor
+        from hpc_forest.memory.store import sync_memory
+
         from .evolution_archive import record as record_diversity
-        from .memory_store import sync_memory
 
         record_diversity(self, mission, outcome)
-        try:
-            with account_context(self):
-                observe_advisor(self, mission, outcome)
-        except (ForestError, OSError, ValueError) as exc:
-            self.db.event("advisor_sample_unavailable", {"id": mission.id, "error": type(exc).__name__})
         sync_memory(self.db, self.root)
         row = self.db.one("SELECT created FROM trials WHERE id=?", (mission.id,))
         record_timing(self.db, "mission:" + mission.role,
@@ -673,7 +659,7 @@ class Controller:
                 self.evaluator.deadline = search_deadline(
                     self.evaluator.deadline, self.config["budget"]["confirmation_seconds"])
             self.search.recover_pending()
-            from .memory_store import sync_memory
+            from hpc_forest.memory.store import sync_memory
 
             sync_memory(self.db, self.root)
             if not unlimited_tokens(self.config) and not soft and self.db.costs()["unknown_usage_calls"]:
@@ -964,12 +950,10 @@ class Controller:
 
     def status(self) -> dict:
         from .active_reporting import summary as active_summary
-        from .advisor import summary as advisor_summary
 
         return {
             "status": self.db.get("status"),
             "active_architecture": active_summary(self.db),
-            "advisor": advisor_summary(self.db),
             "epoch": self.db.get("current_epoch"),
             "costs": self.db.costs(),
             "deadline": self.db.get("deadline"),

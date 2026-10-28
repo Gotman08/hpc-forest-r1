@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .binary_search import enabled
+from hpc_forest.search.binary import enabled
+
 from .core import Mission, digest
 from .registry import Registry
 

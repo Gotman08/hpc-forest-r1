@@ -166,4 +166,3 @@ def test_unstarted_arms_are_not_report_errors_or_successes(tmp_path, monkeypatch
     assert report["assigned_arms"] == 1 and report["delivered"] == 0
     assert not report["audit_errors"] and report["independent_mother_threads"] == 0
     assert all(c["complete_valid_pairs"] == 0 for c in report["contrasts"])
-

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from hpc_forest.config import DEFAULT, validate
 from hpc_forest.core import atomic_json, file_digest
-from hpc_forest.memory_contract import POLICY
+from hpc_forest.memory.contract import POLICY
 from hpc_forest.model_skills import policy
 
 SCOPE = "cuda-nbody-luna-max-memory-v1"

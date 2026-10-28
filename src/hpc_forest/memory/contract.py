@@ -4,8 +4,8 @@ from __future__ import annotations
 import copy
 import json
 
-from .core import CandidateRejected, ForestError
-from .support.validation import require_integer
+from hpc_forest.core import CandidateRejected, ForestError
+from hpc_forest.support.validation import require_integer
 
 VERSION = "hpc-forest-memory-v1"
 POLICY = "memory-guided-v1"

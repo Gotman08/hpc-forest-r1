@@ -9,8 +9,9 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean, median
 
+from hpc_forest.search.policy import label as search_label
+
 from .core import ForestError, digest
-from .search_policy import label as search_label
 
 
 def positive(value):

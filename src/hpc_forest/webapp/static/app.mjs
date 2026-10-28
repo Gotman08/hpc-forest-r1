@@ -248,6 +248,15 @@ app.addEventListener("click",event=>{
       form.append("name",document.querySelector("#project-name").value.trim()||state.uploads[0]?.name||"Projet");
       selectProject(await api("/projects",{method:"POST",body:form})); state.uploads=[];
       notify("Projet importé. Complétez son contrat de vérification."); go("#/prepare/"+state.project.id);
+    } else if(name==="migrate-project") {
+      selectProject(await api("/projects/"+state.project.id+"/migrate",{method:"POST"}));
+      notify("Nouvelle copie créée ; l’original est conservé."); go("#/prepare/"+state.project.id);
+    } else if(name==="resume-tracking") {
+      state.mission=await api("/missions/"+state.mission.id+"/resume-tracking",{method:"POST"});
+      notify("Réconciliation du job existant demandée."); await render();
+    } else if(name==="stop") {
+      state.mission=await api("/missions/"+state.mission.id+"/stop",{method:"POST"});
+      notify("Demande d’arrêt sauvegardée."); await render();
     } else if(name==="launch") {
       const mission=await api("/prepared/"+state.prepared.id+"/launch",{method:"POST"});
       state.mission=mission; context("mission",mission.id);

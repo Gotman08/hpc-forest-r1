@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from .source_diversity import diversity_counts
+from hpc_forest.source_diversity import diversity_counts
 
 MEASURED = "json_extract(payload,'$.facts.outcome.correct')=1 AND json_extract(payload,'$.facts.outcome.mean_seconds')>0"
 

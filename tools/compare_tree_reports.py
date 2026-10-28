@@ -7,8 +7,8 @@ import json
 import math
 from pathlib import Path
 
-from hpc_forest.binary_search import enabled
 from hpc_forest.core import atomic_json, digest
+from hpc_forest.search.binary import enabled
 from hpc_forest.support.budgets import finish_started, mandatory_final_g, postprocess_token_limit
 
 

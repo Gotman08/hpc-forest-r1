@@ -7,10 +7,10 @@ import pytest
 from hpc_forest.config import validate
 from hpc_forest.core import CandidateRejected, ForestError, Mission, Outcome, canonical
 from hpc_forest.integration_policy import limits, validate_decision
-from hpc_forest.memory_context import bounded_history, source_view
-from hpc_forest.memory_contract import empty_read, extract_memory, memory_contract
-from hpc_forest.memory_retrieval import MemoryReader, bounded_page, evidence_ids
-from hpc_forest.memory_store import MemoryStore, rebuild_memory, sync_memory
+from hpc_forest.memory.context import bounded_history, source_view
+from hpc_forest.memory.contract import empty_read, extract_memory, memory_contract
+from hpc_forest.memory.retrieval import MemoryReader, bounded_page, evidence_ids
+from hpc_forest.memory.store import MemoryStore, rebuild_memory, sync_memory
 from hpc_forest.proposal_contract import SOURCE_SCHEMA
 from hpc_forest.registry import Registry
 from hpc_forest.search import Search

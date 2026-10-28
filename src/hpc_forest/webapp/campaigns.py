@@ -10,7 +10,9 @@ import math
 import sqlite3
 from pathlib import Path
 
-from ..search_diagnostics import diagnostics
+from hpc_forest.search.diagnostics import diagnostics
+
+from ..compatibility import historical_advisor
 from .paths import AppError, contained, relative_name
 from .store import Store
 
@@ -183,8 +185,7 @@ class Campaigns:
             "effort": (config.get("codex") or {}).get("reasoning_effort"),
             "backend": config.get("backend"), "problem": config.get("problem"),
             "search_diagnostics": diagnostics(config, data["trials"]),
-            "advisor": {"enabled": config.get("advisor", {}).get("enabled", False),
-                        "model": "TabPFN-3.5", **m.get("advisor_totals", {})},
+            "advisor": historical_advisor(config, m.get("advisor_totals", {})),
             "target": identity.get("target", config.get("target_id", "")),
             "host": identity.get("hostname", ""), "machine": identity.get("machine", ""),
             "compiler": (identity.get("compiler") or {}).get("flavor", ""),

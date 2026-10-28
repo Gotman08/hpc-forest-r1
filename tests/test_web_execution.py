@@ -84,31 +84,31 @@ def test_bundle_restores_layout_and_protected_contract(application, tmp_path):
     assert "PYTHONPATH=" in arguments["command"] and "sha256sum -c" in arguments["command"]
 
 
-def test_advisor_is_frozen_with_the_one_forest_and_luna_identity(application, tmp_path):
+def test_one_forest_keeps_luna_and_rejects_retired_advisor(application, tmp_path):
     store, settings, projects, old_prepared, missions = application
     project = store.get(old_prepared["project_id"])
+    for enabled in (False, True):
+        with pytest.raises(AppError, match="TabPFN"):
+            projects.update(project["id"], {**project["contract"], "advisor": {"enabled": enabled}})
     projects.update(project["id"], {**project["contract"], "model": "gpt-6-luna",
-                    "reasoning_effort": "max", "advisor": {"enabled": True}})
+                    "reasoning_effort": "max"})
     prepared = projects.prepare(project["id"])
     mission = missions.launch(prepared["id"])
-    with pytest.raises(AppError, match="TabPFN"):
-        freeze_bundle(store, mission, settings)
-    provisioned = {"python": "/runtime/tabpfn/python", "model_path": "/weights/model.safetensors",
-                   "model_sha256": "a" * 64}
-    settings["profiles"]["cpu"]["advisor_runtime"] = provisioned
     bundle, launch = freeze_bundle(store, mission, settings)
     root = tmp_path / ("forest-app-" + mission["id"])
     extract_verified(bundle, root)
     config = prepare_project(root, launch)
-    assert config["advisor"]["enabled"] and config["advisor_runtime"] == provisioned
+    assert "advisor" not in config and "advisor_runtime" not in launch
+    with zipfile.ZipFile(bundle) as archive:
+        assert not any("advisor" in name for name in archive.namelist())
     assert config["codex"]["model"] == "gpt-6-luna" and config["codex"]["reasoning_effort"] == "max"
     assert config["codex"]["generator_pool"] == []
     assert config["search"]["algorithm"] == "ab-mcts-a"
-    assert '"advisor"' not in config["forest"]["statement"]  # Do not prime the LLM differently for A/B.
-    # Changing the launch switch cannot rewrite the frozen input contract.
+    assert '"advisor"' not in config["forest"]["statement"]
     other = tmp_path / "tampered"
     extract_verified(bundle, other)
-    with pytest.raises(InfrastructureError, match="differs"):
+    from hpc_forest.core import ForestError
+    with pytest.raises(ForestError, match="TabPFN"):
         prepare_project(other, {**launch, "advisor": {"enabled": False}})
 
 

@@ -13,7 +13,7 @@ from test_mother_forest import decomposition
 
 from hpc_forest import codex_process
 from hpc_forest.active_state import state
-from hpc_forest.memory_contract import empty_read
+from hpc_forest.memory.contract import empty_read
 from hpc_forest.reporting import report
 
 

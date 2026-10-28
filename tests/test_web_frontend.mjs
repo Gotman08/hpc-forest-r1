@@ -79,17 +79,16 @@ test("Optional sampler stays disabled without remote prerequisites and diagnosti
   assert(html.includes("&lt;script&gt;"));
 });
 
-test("TabPFN is one optional adviser, preserving Luna and the existing policy",()=>{
+test("Retired TabPFN has no controls; historical evidence remains readable",()=>{
   const base={model:"gpt-6-luna",reasoning_effort:"max",target:"cpu"};
-  assert.deepEqual(searchFormValues(base).advisor,{enabled:false});
-  const configured=searchFormValues({...base,tabpfn_advisor:"on"});
-  assert.deepEqual(configured.advisor,{enabled:true});
+  const configured=searchFormValues(base);
+  assert(!Object.hasOwn(configured,"advisor"));
   assert.equal(configured.model,"gpt-6-luna");
   assert.equal(configured.reasoning_effort,"max");
   assert.deepEqual(configured.search,{algorithm:"ab-mcts-a",distribution:"gaussian"});
-  assert(searchControls(base,{}).includes('name="tabpfn_advisor" disabled'));
+  assert(!searchControls(base,{}).includes('name="tabpfn_advisor"'));
   const html=searchControls({...base,advisor:{enabled:true}},{connection:{advisor_targets:["cpu"]}});
-  assert(html.includes('name="tabpfn_advisor" checked >'));
+  assert(!html.includes('name="tabpfn_advisor"'));
   const result=searchSummary({search_diagnostics:{policy:"ab-mcts-a",trees:[],models:[]},
     advisor:{enabled:true,scope:"treequest_parent_proposals",calls:2,reorders:1,seconds:1.2,last_status:"<script>"}});
   assert(result.includes("2 appels")&&result.includes("1 choix de parent modifiés"));

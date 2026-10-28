@@ -58,6 +58,9 @@ function field(name,label,value,extra="",hint="",type="text") {
 }
 export function prepareView(project,info={}) {
   const c=project.contract;
+  if(project.missing?.some(m=>m.field==="migration")) return heading("Contrat historique",e(project.name))+
+    note("Ce projet contient des réglages TabPFN retirés. L’original et ses missions restent consultables. Créez une copie avec le contrat courant pour préparer une nouvelle recherche.","amber")+
+    button("Créer une copie sans conseiller","migrate-project","plus","primary");
   return heading("Préparer la mission","Définissez ce que le programme doit faire et comment vérifier son résultat.",badge(project.state))+
     (project.ready?note('<strong>Le contrat est complet.</strong><p>Vous pouvez figer un dossier de mission. Les commandes n’ont pas encore été exécutées.</p>',"green"):
       note('<strong>Vérification à compléter</strong><p>'+project.missing.map(m=>e(m.label)).join(" · ")+'</p>',"amber"))+
@@ -84,7 +87,7 @@ export function prepareView(project,info={}) {
 
 export function preparedView(mission,info={}) {
   return heading("Mission préparée",e(mission.name),badge("prepared"))+
-    note('<strong>Le dossier est sauvegardé. Aucun job n’a été soumis.</strong><p>Le code initial, les documents et le contrat sont figés dans une nouvelle mission. Vous pouvez maintenant lancer la campagne sur ROMEO.</p>')+
+    note('<strong>Le dossier est sauvegardé. Aucun job n’a été soumis.</strong><p>Le code initial, les documents et le contrat sont figés dans une nouvelle mission. Vous pouvez maintenant lancer la campagne sur ROMEO.</p><p>Les commandes et le code s’exécuteront avec les droits de votre compte ROMEO. Importez uniquement du code de confiance ; cette version ne fournit pas de bac à sable contre du code hostile.</p>')+
     '<div class="columns"><section class="card">'+cardTitle("Prêt pour la prochaine étape")+
     '<dl class="key-values"><div><dt>Modèle</dt><dd>'+e(modelLabel(mission.contract.model,mission.contract.reasoning_effort))+'</dd></div><div><dt>Cible</dt><dd>ROMEO · '+e(mission.target.toUpperCase())+'</dd></div><div><dt>Création</dt><dd>'+date(mission.created)+'</dd></div><div><dt>Mémoire</dt><dd>Nouvelle mission</dd></div></dl>'+
     '<p class="small">Recherche : '+e(mission.contract.contract?.search?.algorithm||"ab-mcts-a")+' · '+e(mission.contract.contract?.search?.distribution||"")+'<br>Générateurs : '+e((mission.contract.contract?.generator_pool||[]).map(m=>modelLabel(m.model,m.reasoning_effort)).join(", ")||"Modèle principal uniquement")+'<br>Archive de diversité : '+(mission.contract.contract?.evolution?.enabled?"activée":"désactivée")+'</p>'+
@@ -185,7 +188,10 @@ export function remoteMissionView(mission,campaign) {
     (mission.last_error?note(e(mission.last_error),"amber"):"")+
     (mission.sync_error?note("Synchronisation retardée. Les dernières preuves reçues restent visibles ; une nouvelle récupération sera tentée automatiquement.","amber"):"")+
     '<div class="button-row">'+button("Actualiser","retry","refresh","secondary")+
+    (["recovery_required","failed"].includes(mission.state)?button("Reprendre le suivi","resume-tracking","refresh","secondary"):"")+
+    (!["completed","failed","cancelled","recovery_required"].includes(mission.state)?button(mission.stop_requested_at?"Arrêt demandé":"Arrêter et confirmer","stop","pause","secondary",mission.stop_requested_at?"disabled":""):"")+
     (mission.campaign_id?link("Voir les résultats","#/results/"+mission.campaign_id,"bars","secondary"):"")+'</div></section>'+
+    (mission.stop_requested_at?note("La demande est conservée. Les essais déjà admis se terminent, puis Forest prépare et confirme le résultat. La livraison reste soumise à une confirmation réussie."):"")+
     (campaign?missionView(campaign):empty("La mission est prise en charge","Le suivi est sauvegardé. Vous pouvez fermer cet écran ; le job continuera sur ROMEO une fois soumis."))+
     '<p class="bottom-note">Suivi automatique toutes les 10 secondes. La compilation, les tests et la confirmation utilisent le même contrat figé.</p>';
 }

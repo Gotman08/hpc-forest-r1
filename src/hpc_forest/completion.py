@@ -5,11 +5,12 @@ import json
 import time
 from pathlib import Path
 
+from hpc_forest.memory.contract import guided
+
 from .adaptive_budget import record_timing
 from .core import ForestError, InfrastructureError
 from .forest import forest_plan, pairwise_mother, persistent_mother, research_roles
 from .gitops import make_worktree
-from .memory_contract import guided
 from .node_harness import wrap_backend
 from .support.budgets import mission_token_reservation, unlimited_tokens
 
@@ -58,7 +59,7 @@ def _mission(controller, epoch: dict, baseline: dict, state: dict, *, sources=No
         context["integration_pair"] = {**merge, "input_ids": [s["id"] for s in sources],
             "context_compaction": "codex-cli-automatic"}
     if merge is not None and guided(controller.config):
-        from .memory_retrieval import MemoryReader, bounded_page, card
+        from hpc_forest.memory.retrieval import MemoryReader, bounded_page, card
 
         with MemoryReader(controller.root, mission, controller.config, epoch["protocol_id"]) as reader:
             ideas = [card(reader.exact(identity)) for identity in merge["idea_ids"]]
@@ -97,7 +98,7 @@ def _integrate(controller, epoch, baseline, state, *, sources=None, merge=None):
     if merge is not None:
         state["steps"][-1].update(status="failed" if failed else "complete",
             outcome=outcome, mother=mother, retained_ids=mission.sources)
-        from .memory_contract import enabled as memory_enabled
+        from hpc_forest.memory.contract import enabled as memory_enabled
 
         if memory_enabled(controller.config):
             row = controller.db.one("SELECT payload FROM memory_facts WHERE id=?", (mission.id,))

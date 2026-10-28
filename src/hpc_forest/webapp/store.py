@@ -55,7 +55,7 @@ class Store:
     def list(self, kind: str) -> list[dict]:
         with self.connect() as db:
             rows = db.execute(
-                "SELECT * FROM records WHERE kind=? ORDER BY updated DESC LIMIT 500",
+                "SELECT * FROM records WHERE kind=? ORDER BY updated DESC",
                 (kind,)).fetchall()
         return [{**json.loads(r["payload"]), "id": r["id"], "kind": r["kind"],
                  "created": r["created"], "updated": r["updated"]} for r in rows]
@@ -68,6 +68,43 @@ class Store:
             if cursor.rowcount != 1:
                 raise AppError("Projet ou mission introuvable.")
         return self.get(identifier, kind)
+
+    def mutate(self, identifier: str, change, *, kind: str) -> dict:
+        """Serialize a read-modify-write, preserving concurrent fields/attachments."""
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT payload FROM records WHERE id=? AND kind=?",
+                             (identifier, kind)).fetchone()
+            if row is None:
+                raise AppError("Projet ou mission introuvable.")
+            payload = change(json.loads(row["payload"]))
+            db.execute("UPDATE records SET payload=?,updated=? WHERE id=? AND kind=?",
+                       (json.dumps(payload, ensure_ascii=False, allow_nan=False), time.time(), identifier, kind))
+        return self.get(identifier, kind)
+
+    def find(self, kind: str, field: str, value: str) -> dict | None:
+        if field not in {"prepared_id", "root"}:
+            raise ValueError("Unsupported record lookup")
+        with self.connect() as db:
+            row = db.execute("SELECT id FROM records WHERE kind=? AND json_extract(payload,?)=?",
+                             (kind, "$." + field, value)).fetchone()
+        return self.get(row["id"], kind) if row else None
+
+    def transition(self, identifier: str, expected: str, changes: dict, *, kind: str) -> bool:
+        """Claim a lifecycle transition before any irreversible external action."""
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT payload FROM records WHERE id=? AND kind=?",
+                             (identifier, kind)).fetchone()
+            if row is None:
+                raise AppError("Projet ou mission introuvable.")
+            payload = json.loads(row["payload"])
+            if payload.get("state") != expected:
+                return False
+            payload.update(changes)
+            db.execute("UPDATE records SET payload=?,updated=? WHERE id=?",
+                       (json.dumps(payload, ensure_ascii=False), time.time(), identifier))
+            return True
 
     @staticmethod
     def payload(record: dict) -> dict:

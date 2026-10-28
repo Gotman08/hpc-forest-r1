@@ -5,7 +5,7 @@ import json
 import math
 from collections import Counter
 
-from .search_policy import label, settings
+from hpc_forest.search.policy import label, settings
 
 
 def diagnostics(config: dict, trials: list[dict]) -> dict:

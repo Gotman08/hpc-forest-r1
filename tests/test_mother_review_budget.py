@@ -5,7 +5,7 @@ import pytest
 from test_memory import memory_db as memory_fixture
 from test_mother_conversation import persistent_settings
 
-from hpc_forest.memory_contract import POLICY
+from hpc_forest.memory.contract import POLICY
 from hpc_forest.mother_review import review_admission
 
 memory_db = memory_fixture

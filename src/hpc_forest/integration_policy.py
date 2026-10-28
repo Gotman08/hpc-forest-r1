@@ -6,10 +6,11 @@ import json
 import math
 import time
 
+from hpc_forest.memory.consultations import Consultations
+from hpc_forest.memory.contract import POLICY, READ_SCHEMA, empty_read, settings, validate_read
+from hpc_forest.memory.retrieval import MemoryReader, card, evidence_ids
+
 from .core import CandidateRejected, InfrastructureError, Mission, atomic_json
-from .memory_consultations import Consultations
-from .memory_contract import POLICY, READ_SCHEMA, empty_read, settings, validate_read
-from .memory_retrieval import MemoryReader, card, evidence_ids
 from .model_skills import bind
 
 
@@ -134,9 +135,10 @@ def _reference(controller, epoch, baseline):
 
 
 def _select(controller, epoch, baseline, state, number, bounds):
+    from hpc_forest.memory.context import attach_memory
+
     from .adaptive_budget import record_timing
     from .independent_budget import assembly_admission
-    from .memory_context import attach_memory
     from .mother import mother_context
 
     db, cfg = controller.db, settings(controller.config)

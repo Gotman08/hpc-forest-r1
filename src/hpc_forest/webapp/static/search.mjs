@@ -14,7 +14,6 @@ export function searchControls(contract,info) {
   const selected=policy.algorithm+(policy.algorithm==="ab-mcts-a"?"/"+policy.distribution:"");
   const pool=contract.generator_pool||[], models=info.models||[{id:"gpt-6-luna",label:"GPT-6 Luna",efforts:["max"]}];
   const canM=info.connection?.search_algorithms?.[contract.target]?.includes("ab-mcts-m");
-  const canAdvisor=info.connection?.advisor_targets?.includes(contract.target);
   return '<section class="card"><h2>Stratégie de recherche</h2><label class="field">Exploration<select name="search_policy">'+
     searchChoices.map(([id,label])=>'<option value="'+id+'" '+(id===selected?'selected ':'')+(id==="ab-mcts-m"&&!canM?'disabled':'')+'>'+label+(id==="ab-mcts-m"&&!canM?' · profil requis':'')+'</option>').join("")+'</select><small>TreeQuest de Sakana AI. Le défaut conserve la recherche actuelle.</small></label>'+
     '<label class="pool-toggle"><input type="checkbox" name="mix_generators" '+(pool.length?'checked':'')+'> Choix adaptatif entre plusieurs modèles</label>'+
@@ -25,9 +24,7 @@ export function searchControls(contract,info) {
         '<select name="generator_effort_'+e(m.id)+'" aria-label="Effort '+e(m.label)+'">'+m.efforts.map(v=>'<option '+(v===(choice?.reasoning_effort||"max")?'selected':'')+'>'+e(v)+'</option>').join("")+'</select></div>';
     }).join("")+'<small>Le modèle principal est inclus avec son effort. Choisissez au moins un autre modèle.</small></div>'+
     '<label class="pool-toggle"><input type="checkbox" name="diversity_archive" '+(contract.evolution?.enabled?'checked':'')+'> Conserver des variantes différentes</label>'+
-    '<p class="muted small">Inspiré de ShinkaEvolve : garder des codes corrects variés, même moins rapides, comme pistes pour les analyses et combinaisons.</p>'+
-    '<label class="pool-toggle"><input type="checkbox" name="tabpfn_advisor" '+(contract.advisor?.enabled?'checked ':'')+(canAdvisor?'':'disabled')+'> Conseiller TabPFN · expérimental</label>'+
-    '<p class="muted small">Conseille le choix du parent avant génération avec AB-MCTS-A. Son coût compte dans le budget. '+(canAdvisor?'Luna reste le modèle de génération et d’analyse.':'Installation et poids vérifiés sur ROMEO requis.')+'</p></section>';
+    '<p class="muted small">Garder des codes corrects variés, même moins rapides, comme pistes pour les analyses et combinaisons.</p></section>';
 }
 
 export function searchFormValues(data) {
@@ -42,8 +39,8 @@ export function searchFormValues(data) {
     if(generator_pool.length<2) throw new Error("Choisissez au moins un autre modèle pour activer le mélange.");
   }
   const clean=Object.fromEntries(Object.entries(data).filter(([key])=>
-    key!=="search_policy"&&key!=="mix_generators"&&!key.startsWith("generator_")&&key!=="__checks"&&key!=="diversity_archive"&&key!=="tabpfn_advisor"));
-  return {...clean,search,generator_pool,evolution:{enabled:!!data.diversity_archive},advisor:{enabled:!!data.tabpfn_advisor}};
+    key!=="search_policy"&&key!=="mix_generators"&&!key.startsWith("generator_")&&key!=="__checks"&&key!=="diversity_archive"));
+  return {...clean,search,generator_pool,evolution:{enabled:!!data.diversity_archive}};
 }
 
 export function syncGeneratorControls(form) {
@@ -68,5 +65,5 @@ export function searchSummary(campaign) {
     '<dl class="key-values small"><div><dt>Essais depuis la racine</dt><dd>'+total("root_trials")+'</dd></div><div><dt>Essais depuis un parent</dt><dd>'+total("refinements")+'</dd></div><div><dt>Profondeur maximale</dt><dd>'+Math.max(0,...trees.map(t=>t.max_depth))+'</dd></div></dl>'+
     '<details><summary>Générateurs utilisés</summary>'+d.models.map(m=>'<p class="small"><strong>'+e(m.model)+(m.effort?' · '+e(m.effort):'')+'</strong><br>'+m.admitted+' essais · '+m.correct+' corrects · '+m.unscored+' sans score<br>Meilleur essai : '+seconds(m.best_seconds)+'</p>').join("")+'</details>'+
     '<p class="muted tiny">Essais admis, y compris les échecs. Les générateurs n’ont pas reçu les mêmes programmes : ce tableau ne les classe pas.</p>'+
-    (campaign.advisor?.enabled?'<p class="small"><strong>Conseiller TabPFN-3.5</strong><br>'+Number(campaign.advisor.calls||0)+' appels · '+Number(campaign.advisor.reorders||0)+(campaign.advisor.scope==="treequest_parent_proposals"?' choix de parent modifiés · ':' priorités modifiées · ')+seconds(campaign.advisor.seconds||0)+'<br>État : '+e(campaign.advisor.last_status||"Aucun avis émis")+'</p>':'')+'</section>';
+    (campaign.advisor?.enabled?'<p class="small"><strong>Conseiller TabPFN — historique archivé</strong><br>'+Number(campaign.advisor.calls||0)+' appels · '+Number(campaign.advisor.reorders||0)+(campaign.advisor.scope==="treequest_parent_proposals"?' choix de parent modifiés · ':' priorités modifiées · ')+seconds(campaign.advisor.seconds||0)+'<br>État : '+e(campaign.advisor.last_status||"Aucun avis émis")+'</p>':'')+'</section>';
 }

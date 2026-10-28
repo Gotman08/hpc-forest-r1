@@ -47,7 +47,7 @@ def test_fresh_cuda_memory_payload_has_original_source_and_exact_validator(tmp_p
     manifest = json.loads((payload / "runtime-manifest.json").read_text())
     assert all(file_digest(payload / name) == sha for name, sha in manifest.items())
     with tarfile.open(destination / "payload.tar.gz") as archive:
-        assert "project/src/hpc_forest/memory_store.py" in archive.getnames()
+        assert "project/src/hpc_forest/memory/store.py" in archive.getnames()
         assert not any("experiments/" in name or "registry.sqlite3" in name for name in archive.getnames())
     with pytest.raises(FileExistsError):
         prepare(source, destination, repo)

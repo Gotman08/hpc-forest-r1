@@ -166,8 +166,9 @@ def validate_settings(config):
         if type(cfg[name]) not in (int, float) or not 0 < cfg[name] <= 1:
             raise ForestError("forest.active." + name + " must be in (0,1]")
     if enabled(config):
+        from hpc_forest.memory.contract import active
+
         from .forest import persistent_mother
-        from .memory_contract import active
 
         if not persistent_mother(config) or not active(config):
             raise ForestError("Active Forest requires persistent Mother and active per-tree memory")

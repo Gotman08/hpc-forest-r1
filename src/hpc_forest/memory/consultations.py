@@ -1,8 +1,8 @@
 """Durable consultation receipts without growing the model's list of identifiers."""
 from __future__ import annotations
 
-from .core import InfrastructureError
-from .memory_retrieval import evidence_ids
+from hpc_forest.core import InfrastructureError
+from hpc_forest.memory.retrieval import evidence_ids
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memory_consultations(

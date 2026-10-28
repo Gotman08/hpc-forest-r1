@@ -8,10 +8,12 @@ import sys
 import tomllib
 from pathlib import Path
 
+from hpc_forest.memory.contract import validate_settings as validate_memory
+
 from .adaptive_budget import validate_adaptive
+from .compatibility import require_current
 from .core import ForestError
 from .forest import persistent_mother, validate_forest
-from .memory_contract import validate_settings as validate_memory
 from .model_policy import EFFORT, MODEL, require_identity
 from .model_skills import validate_settings as validate_skills
 from .submission import validate_submission
@@ -83,10 +85,17 @@ def _merge(base, changes):
 
 
 def load_config(path: Path | None = None) -> dict:
-    config = copy.deepcopy(DEFAULT)
     if path:
         with path.open("rb") as stream:
             changes = json.load(stream) if path.suffix == ".json" else tomllib.load(stream)
+        return config_from_data(changes)
+    return config_from_data({})
+
+
+def config_from_data(changes: dict) -> dict:
+    """Apply explicit legacy defaults identically for file reads and migration."""
+    config = copy.deepcopy(DEFAULT)
+    if changes:
         # A supplied finite legacy profile keeps its original lifecycle. Only
         # new duration profiles inherit adaptive completion from DEFAULT.
         if (changes.get("completion", {}).get("reserve_policy") != "adaptive"
@@ -103,20 +112,15 @@ def load_config(path: Path | None = None) -> dict:
 
 
 def validate(c: dict) -> None:
-    from .advisor import runtime as advisor_runtime
-    from .advisor import settings as advisor_settings
+    from hpc_forest.search.policy import settings as search_settings
+
     from .model_policy import generator_pool
-    from .search_policy import settings as search_settings
 
     search_settings(c)
     from .evolution_archive import settings as evolution_settings
 
     evolution_settings(c)
-    advisor = advisor_settings(c)
-    if advisor["enabled"] and (search_settings(c)["algorithm"] != "ab-mcts-a"
-            or c.get("binary_tree", {}).get("enabled") or c.get("method") == "U"):
-        raise ForestError("TabPFN parent advice requires independent AB-MCTS-A research trees")
-    advisor_runtime(c)
+    require_current(c)
     codex = c.get("codex", {})
     if not isinstance(codex, dict):
         raise ForestError("codex must be an object")

@@ -1,280 +1,101 @@
-# R1 — reconstruction isolée du moteur
+# Forest
 
-Ce projet reprend la version figée de R1 utilisée pour les campagnes historiques.
-Les 89 fichiers de départ ont été vérifiés avant copie. Le reçu est dans
-docs/provenance-baseline.json ; la documentation originale est conservée dans
-docs/reference/README-original.md.
+Forest optimise des programmes C, C++ et CUDA à partir d'essais compilés,
+testés et mesurés. Mother prépare les pistes, les arbres utilisent la vraie
+politique TreeQuest AB-MCTS-A, les analystes examinent les preuves, puis les
+combinaisons sont évaluées et le résultat confirmé indépendamment.
 
-Le travail porte sur le code : simplification, helpers partagés et correction des
-validations. Par défaut, la méthode reste celle de R1 : mère de préparation puis
-de synthèse, rôles A/B/C et intégration G, véritable TreeQuest AB-MCTS-A 0.3.2,
-évaluateur externe et confirmations séparées. La lecture du code ne lance aucun
-modèle, aucune campagne ni allocation.
+Le modèle par défaut reste **GPT-6 Luna, effort max**, pour tous les rôles,
+sans mélange activé. Un changement de cible, compilateur ou protocole exige
+une nouvelle campagne. Aucun gain n'est garanti.
 
-## Application locale
+La version **0.2.0** retire le conseiller TabPFN. Les anciennes campagnes,
+leurs résultats et le code du conseiller restent archivés et consultables.
+La mémoire de preuves, Mother, les analystes et l'archive de programmes mesurés
+restent dans le produit. Un ancien contrat n'est jamais converti à l'ouverture.
 
-L'[application locale à cinq écrans](docs/APPLICATION.md) permet d'importer un
-projet, de figer son contrat, de lancer Forest sur ROMEO puis de télécharger le
-code confirmé, son rapport et ses mesures. Le contrôleur et le client Codex OAuth
-tournent sur ROMEO sans relais du PC. Le modèle et l'effort se choisissent par
-mission : GPT-6 Luna, GPT-6.1 Sol ou GPT-6 Astra. Les arbres à la craie affichent
-les essais réellement enregistrés dans une interface classique.
-Démarrage : `pip install -e ".[web]"`, puis `python -m hpc_forest.webapp`.
-Voir la configuration du connecteur et les limites CPU/GPU dans la documentation,
-et les [preuves du parcours autonome](docs/VALIDATION-APPLICATION-AUTONOME-20261025.md).
+## Installer et ouvrir
 
-Le [conseiller TabPFN](docs/TABPFN-ADVISOR.md) est intégré comme option du même
-contrôleur : il peut choisir parmi des parents proposés par AB-MCTS-A avant génération. Luna Max,
-TreeQuest, les analystes et la confirmation restent en place. Son activation exige
-des poids installés et vérifiés sur ROMEO. Le [comparatif réel](experiments/tabpfn-advisor-20261025/RAPPORT.md)
-conserve huit essais et sept livraisons confirmées ; aucun avis n'a été émis en ligne,
-donc aucun bénéfice prédictif n'est démontré. Les [preuves de validation](docs/VALIDATION-TABPFN-20261025.md)
-distinguent les tests d'intégration de la comparaison de performance avec et sans
-conseil ; aucun gain n'est présumé. La nouvelle comparaison à 90 minutes par condition
-est définie dans le [protocole d'admission](experiments/tabpfn-admission-20261025/protocol.json).
-Le [rapport final à 90 minutes](experiments/tabpfn-admission-20261025/RAPPORT.md)
-conserve dix exécutions, six livraisons et leur remesure commune sur ROMEO :
-56 lancements du conseiller et 34 changements de parent. Une paire UTF-8
-complémentaire est favorable, mais les échecs de contrôle et les arrêts précoces
-empêchent de conclure à un gain général. Les tests et les audits sont dans la
-[validation du choix de parent](docs/VALIDATION-TABPFN-ADMISSION-20261025.md).
+Application personnelle locale ; exécution autorisée sur le compte ROMEO de
+l'utilisateur. Python 3.11 minimum ; profil Windows Python 3.13 vérifié dans
+les reçus de livraison. Dans un environnement virtuel neuf :
 
-Le [diagnostic contrôlé du 27 octobre](experiments/controlled-advisor-20261026/ANALYSE-REGRESSIONS-TABPFN.md)
-sépare les effets du conseiller, des données et du pilotage. Les
-[corrections correspondantes](docs/CORRECTIONS-QUALITE-20261027.md) ajoutent une
-valeur sans saturation artificielle, une prévalidation économique, les temps par
-configuration et des preuves de code pour la clôture. Elles conservent un seul
-Forest et Luna Max ; leur effet sur les speedups reste à mesurer sur ROMEO.
-La [validation locale de ce lot](docs/VALIDATION-QUALITE-20261027.md) conserve
-1 142 tests Python réussis, trois sauts explicités, neuf tests d'interface et Ruff.
+```powershell
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements-windows-py313.lock
+.venv/Scripts/python -m pip install --no-deps .
+.venv/Scripts/python -m hpc_forest.webapp
+```
 
-## Forest + analystes
+Ouvrir [l'application locale](http://127.0.0.1:8767). Le stockage par défaut est
+`~/.hpc-forest/application`. La configuration ROMEO utilise des chemins et un
+profil OAuth privé ; aucun jeton ne doit être placé dans le dépôt.
+Voir [le parcours utilisateur](docs/APPLICATION.md) et [l'installation d'une wheel](docs/DISTRIBUTION.md).
 
-Le défaut reste **GPT-6 Luna, effort `max`** pour tous les rôles : Mother,
-recherche, réparations, fusion et analystes. Une nouvelle mission peut choisir
-explicitement une autre identité prise en charge par l'application ; ce même
-modèle et cet effort sont figés pour tous ses rôles. Les campagnes historiques
-conservent leur identité et ne sont pas converties.
+## Préserver et reprendre
 
-Le premier lot ajoute **un analyste indépendant par arbre de recherche**, en
-observation seulement, après la confirmation finale. Ses dossiers et bilans
-restent dans un répertoire séparé. Aucun avis n'entre dans les prompts, la
-mémoire de recherche, les admissions, les récompenses ou la sélection AB-MCTS.
-Consulter [le mode d'emploi et les garanties](docs/ANALYSTES-OBSERVATION.md).
+Une préparation ne peut créer qu'une mission. Une réponse de soumission perdue
+déclenche une réconciliation du job existant. « Arrêter et confirmer » ferme
+les admissions et laisse terminer les essais engagés avant la confirmation.
+Fermer l'application n'arrête pas un job ROMEO ; le suivi reprend au démarrage.
+Une restauration met les missions inachevées en attente de réconciliation.
 
-La [boucle active](docs/ARCHITECTURE-ACTIVE.md) est disponible pour les nouvelles
-campagnes avec `--active-mode full` : analyses pendant la recherche, décisions
-de Mother aux jalons, branches dérivées, imports explicites et combinaisons
-intermédiaires mesurées. Les modes `local`, `steering` et `sharing` permettent
-d'isoler ces contributions. Le défaut `off` conserve l'ordonnanceur historique.
+```powershell
+# Arrêter le serveur local avant la sauvegarde.
+python -m hpc_forest.maintenance backup CHEMIN_APPLICATION NOUVELLE_SAUVEGARDE
+python -m hpc_forest.maintenance verify-backup NOUVELLE_SAUVEGARDE
+python -m hpc_forest.maintenance restore NOUVELLE_SAUVEGARDE NOUVEAU_STOCKAGE
+```
 
-Les corrections de la boucle active ajoutent des extraits de code avec citations
-vérifiées pour les JEV, une exploration bornée des progrès récents et une clôture
-en deux décisions après la fin des essais admis. Un résultat nouveau invalide
-une décision d'arrêt devenue périmée. La validation de ce lot du 24 octobre
-comptait **895 tests**, sans échec ni saut, et la vérification Ruff.
+Voir les [notes de migration et limites de reprise](docs/MIGRATION-0.2.md).
+Les campagnes externes enregistrées dans l'application doivent aussi être
+sauvegardées : la copie les répertorie mais n'en devient pas propriétaire.
 
-La [comparaison des corrections sur ROMEO](experiments/architecture-corrections-20261024/RAPPORT.md)
-remesure SGEMM, UTF-8 et Mandelbrot avec les anciennes versions dans la même
-allocation par cas : gains de 2,37× et 4,92× sur l'active précédente pour les
-deux premiers, légère régression de Mandelbrot. Le
-[tableau de bord](experiments/architecture-corrections-20261024/TABLEAU-DE-BORD.html),
-les [CSV](experiments/architecture-corrections-20261024/comparaison.csv) et les
-preuves conservent aussi les limites : références contradictoires dans certaines
-revues de clôture, diagnostics demandés mais non exécutés comme tels, et
-vectorisation insuffisante de Mandelbrot. Les tests réussis ne signifient pas
-que ces défauts observés sont résolus.
+## Développer
 
-La validation initiale du moteur actif comptait **878 tests réussis**.
-La [campagne ROMEO du 24 octobre 2026](experiments/architecture-active-20261024/README.md)
-documente les 21 programmes du tableau, leurs arbres, les décisions de Mother,
-les coûts et les remesures appariées avec les anciens candidats. Le
-[diagnostic détaillé](experiments/architecture-active-20261024/ANALYSE.md)
-conserve les gains, les régressions et les limites observées. Le
-[classeur Excel](experiments/architecture-active-20261024/COMPARAISON-ROMEO.xlsx)
-et le [CSV principal](experiments/architecture-active-20261024/COMPARAISON.csv)
-mettent côte à côte les speedups publiés et ceux mesurés sur le même matériel.
+| Dossier | Responsabilité |
+|---|---|
+| `src/hpc_forest/search/` | Politique TreeQuest et transactions ask/tell |
+| `src/hpc_forest/memory/` | Contrats, stockage et lecture des preuves |
+| `src/hpc_forest/storage/` | Écritures atomiques, sauvegardes et restauration |
+| `src/hpc_forest/webapp/` | Application, import, contrats, missions et ROMEO |
+| `src/hpc_forest/support/` | Validation, sources bornées et budgets partagés |
+| `src/hpc_forest/*.py` | Contrôleur, orchestration, évaluateur et adaptateurs |
+| `tests/`, `tools/` | Régressions, vérification et fabrication |
+| `docs/` | Utilisation, architecture, maintenance et décisions |
+| `experiments/`, `evidence/` | Sources figées, résultats et reçus historiques |
+| `artifacts/`, `work/` | Sorties locales conservées, hors distribution |
 
-Sous Windows, les preuves conservent des chemins longs. Activer leur prise en
-charge dans le dépôt avec `git config --local core.longpaths true`. Pour un
-nouveau clone, utiliser `git clone -c core.longpaths=true <URL-du-depot>` afin
-que Git puisse aussi extraire ces fichiers pendant le clonage.
+Les frontières et invariants sont décrits dans [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Les sources historiques ne sont pas des instructions pour le contrôleur.
 
-![Architecture Forest + JEV proposée](docs/images/forest-architecture-proposee.png)
+```powershell
+python -m pip install -e ".[web,dev]"
+python -m pytest
+python -m ruff check src tests
+node --test tests/test_web_frontend.mjs
+python tools/check.py
+python tools/build_release.py artifacts/release-NOUVEAU
+```
 
-*Schéma fourni par l'utilisateur : architecture de référence. La boucle active
-implémente les retours vers Mother aux jalons et les combinaisons intermédiaires.
-Leur effet sur les performances doit être établi par les mesures. « JEV »
-désigne ici le rôle d'analyste réalisé par Luna Max, sans service TypeSafe AI.*
+Les tests locaux n'appellent aucun modèle hébergé et n'allouent aucun job HPC.
+Les compilations nécessitent GCC/G++. Les contrôles intégrés vérifient que le
+code est resté figé et enregistrent ses empreintes.
 
-## Organisation
+## Preuves et limites
 
-| Emplacement | Responsabilité |
-| --- | --- |
-| src/hpc_forest/controller.py | Ordonnancement et vie de la campagne |
-| src/hpc_forest/forest_scheduler.py | Progression indépendante des N arbres parallèles |
-| src/hpc_forest/active_scheduler.py | Recherche et appels de contrôle pendant les jalons |
-| src/hpc_forest/active_control.py | Instantanés, appels durables et reçus de Mother |
-| src/hpc_forest/active_analysis.py | Extraits de source, différences et validation des citations JEV |
-| src/hpc_forest/active_lifecycle.py | Progrès protégés, preuves nouvelles et revue de clôture |
-| src/hpc_forest/active_state.py | Décisions, branches, suspensions et imports autorisés |
-| src/hpc_forest/active_reporting.py | Coûts, couverture et liens décision → essai → résultat |
-| src/hpc_forest/independent_budget.py | Réserve par phase et prévision de la file de mesures |
-| src/hpc_forest/completion.py | Synthèse et intégration finales après fermeture des admissions |
-| src/hpc_forest/search.py | TreeQuest et persistance ask/tell |
-| src/hpc_forest/binary_search.py | Politique binaire gloutonne optionnelle |
-| src/hpc_forest/mother.py | Préparation et synthèse de la mère |
-| src/hpc_forest/node_harness.py | Développement borné d'un candidat |
-| src/hpc_forest/assets/skills/ | Six skills génériques pour Mother, les enfants et la fusion |
-| src/hpc_forest/model_skills.py | Chargement par rôle, empreintes et traces d'utilisation |
-| src/hpc_forest/model_policy.py | Modèles et efforts autorisés ; Luna Max par défaut, identité figée par mission |
-| src/hpc_forest/observer_snapshot.py | Dossiers figés par arbre, registre lu sans modification |
-| src/hpc_forest/tree_observer.py | Analystes après confirmation, budget et rapports séparés |
-| src/hpc_forest/evaluator.py | Compilation, correction et mesures |
-| src/hpc_forest/registry.py | Registre, réservations et consommation |
-| src/hpc_forest/support/ | Sources bornées, échéances et validation numérique |
-| tests/ | Régressions historiques et nouvelles gardes |
-| tools/check.py | Vérification locale avec imports du nouveau projet |
-| tools/prepare_smoke.py | Préparation d'un pilote officiel Luna MAX ; Count 2023 par défaut |
-| tools/native_smoke.py | Pilote court ARM64 et worker local lié à sa seule session |
-| tools/official_pilot.py | Sujet officiel avec le protocole complet du R1 historique |
-| tools/compare_tree_reports.py | Comparaison contrôlée de deux rapports de politiques |
-| docs/ | Provenance et décisions de reconstruction |
-| artifacts/ | Reçus locaux de vérification, exclus des sources |
-| experiments/ | Campagnes sélectionnées, sources gelées et résultats mesurés |
+Le [rapport de stabilisation 0.2](docs/VALIDATION-STABILISATION-20261028.md)
+décrit les tests, l'installation isolée, les sauvegardes et leurs limites.
 
-Les nouvelles campagnes `--mother-trees` chargent explicitement les skills adaptés
-à chaque rôle, y compris pendant les réparations et la fusion dans la même
-conversation Mother. Leurs contenus et les preuves de chargement, déclarations
-du modèle et appels MCP observés sont décrits dans
-[les skills des modèles](docs/SKILLS-MODELES.md).
+Le [rapport des huit recherches du 27 octobre](experiments/exploration-luna-20261027/RESULTATS.md)
+conserve les résultats ROMEO et leurs limites. Ces mesures concernent leur
+moteur figé, pas automatiquement la version 0.2.0. Les historiques antérieurs
+restent indexés dans le [README archivé](docs/reference/README-0.1-20261028.md).
 
-## Développement
+Forest exécute du code avec les droits du compte de calcul. Il ne fournit pas
+un bac à sable contre du code hostile et ne doit pas être exposé comme service
+multi-utilisateur. Voir [SECURITY.md](docs/SECURITY.md).
 
-Python 3.11 ou supérieur et les dépendances de pyproject.toml sont nécessaires.
-Utiliser un environnement Python propre au projet pour toute installation future.
-Le module importé reste hpc_forest pour conserver les interfaces existantes ; la
-distribution et la commande installée se nomment hpc-forest-r1.
-
-Le point d'entrée de vérification est tools/check.py. Il vérifie Ruff puis les
-tests, impose les sources de ce dossier aux sous-processus Python, et écrit ses
-rapports dans un dossier neuf sous artifacts/. Les tests utilisent des doubles de
-transport ; ils n'appellent pas de modèle hébergé.
-
-Le contrôle local complet de la reconstruction a donné 252 réussites et trois
-sauts faute de GCC/G++. La wheel reconstruite a été comparée aux 38 fichiers du
-paquet. Les reçus détaillés sont conservés dans artifacts/.
-
-Le pilote demandé porte sur un sujet officiel déjà étudié : **Number of Ways to
-Traverse a Grid, Marathon 2023**. Il emploie la source initiale et les tests figés,
-Luna MAX pour la mère et les fils, deux missions par rôle A/B/C/G, deux interventions
-de la mère et le budget historique de 30 minutes et 1,5 million de tokens.
-
-Le pilote AB-MCTS de reconstruction est terminé : huit candidats valides, onze appels Luna MAX
-avec une réparation, 266 005 tokens exacts et un programme confirmé à 20,058 ms
-contre 80,102 ms pour la source initiale, soit 74,959 % de réduction du temps.
-L'ancien essai comparable atteignait 89,979 %. Le nouveau résultat est donc
-inférieur sur cette exécution. Les conditions, limites de comparaison et preuves
-d'isolement des branches sont dans [la validation](docs/VALIDATION.md).
-
-Un exemple synthétique de matrices a été choisi à tort lors du premier contrôle.
-Ses reçus sont conservés comme diagnostics du transport et sont exclus de toute
-comparaison avec les résultats des sujets officiels.
-
-Les [rapports, CSV et sources des comparaisons ROMEO](experiments/comparaisons-romeo-20261024/README.md)
-rassemblent les speedups publiés, les références remesurées, les résultats de
-Forest avant et après reprises, les historiques et diagnostics des moteurs,
-les classeurs Excel, les tableaux de bord et les schémas d'architecture.
-Les programmes, scripts de reproduction et preuves conservés disposent
-d'un manifeste d'intégrité ; les valeurs des résultats restent inchangées.
-
-## Fin de recherche
-
-La durée cible est configurable (`30m`, `2h`, `5h`, `24h`, etc.). Les nouveaux
-profils répètent les cycles sans plafond d'essais, avec une réserve recalculée
-à partir des durées observées. Les modèles engagés finissent ; puis Mother
-effectue sa synthèse finale, G produit son programme et **G final est toujours
-inclus dans la confirmation indépendante**, en plus des finalistes ordinaires.
-Cette séquence peut dépasser la durée cible. Aucun quota applicatif de tokens
-n'est imposé. `python tools/prepare_smoke.py --duration 2h --mother-trees` prépare le prochain
-profil Luna MAX avec N arbres choisis par Mother. Cette commande ne
-lance aucun job. Le [contrat de fin de recherche](docs/FIN-DE-RECHERCHE.md)
-décrit les prévisions de temps, la confirmation et les contrats historiques.
-
-## N arbres choisis par Mother
-
-Le parcours ci-dessous décrit le mode historique `forest.active.mode=off`.
-Le [mode actif](docs/ARCHITECTURE-ACTIVE.md) conserve le départ commun et ajoute
-le pilotage pendant la recherche.
-
-Avec `--mother-trees`, Mother choisit le nombre d'arbres AB-MCTS et attribue un
-sujet précis à chacun selon le code et le problème, sans recevoir la durée
-cible ni le temps restant. **Tous les N arbres sont
-lancés en parallèle**, sans réglage de concurrence distinct. Chacun poursuit
-sa recherche dès que sa propre mesure a mis à jour son état AB-MCTS-A ; il
-n'attend pas la fin des générations des autres arbres. Les mesures restent
-exclusives sur leur cible. Ensuite, **la même conversation
-Mother reprend et assemble les programmes deux par deux**, sans pouvoir lancer
-ou relancer les arbres. Chaque fusion intermédiaire est mesurée ; la meilleure
-entrée reste disponible si elle régresse. La compaction de l'historique reste
-automatique dans Codex CLI, avec le même UUID. G final est mesuré puis confirmé
-indépendamment. Le [fonctionnement de la forêt](docs/FORET-MOTHER.md)
-décrit le départ commun, la progression indépendante et les preuves de reprise.
-
-Les nouvelles campagnes de ce mode donnent aussi à Mother et aux enfants accès
-au **MCP-ROMEO existant**, avec le profil et l'identité SSH du fichier fourni au
-relais par `--codex-config`. Les appels sont tracés ; le contrôleur conserve les
-mesures officielles et Mother ne peut pas relancer les modèles pendant la fusion.
-Les campagnes historiques ne changent pas d'accès.
-
-Les nouveaux plans fournissent aussi un [accès aux références officielles](docs/DOCUMENTATION-OFFICIELLE.md)
-NVIDIA, OpenMP, MPI, SIMD et compilateurs par le MCP `hpc_docs`. Le cache et les
-preuves de lecture sont communs à Mother, aux N enfants et à la fusion finale.
-La documentation du cluster reste servie par le MCP-ROMEO existant.
-
-## Limites à conserver
-
-Les nouvelles campagnes peuvent activer le [harnais mémoire](docs/MEMOIRE.md)
-avec `memory.mode=active` et `forest.integration=memory-guided-v1`. Les N arbres
-écrivent et optimisent du code avec leur mémoire propre. Après la recherche,
-Mother consulte un index paginé, choisit les programmes et idées à associer,
-écrit les programmes combinés et reçoit leurs mesures. Les variantes lentes
-restent consultables. N n'est pas fixé ; la taille des vues reste bornée pour
-de petites forêts comme pour 500 ou 600 arbres. Les profils historiques gardent
-leurs contrats. Le [pilote CUDA mémoire](examples/cuda_nbody/README.md) prépare
-une nouvelle campagne Luna Max sans lancer d'allocation.
-
-Le [test CUDA N-corps du 21 octobre 2026](experiments/cuda-nbody-20261021/README.md)
-archive les sources, le protocole, les contrôles et les résultats d'un lancement
-Luna MAX avec quatre arbres parallèles et G final confirmé. Son rapport conserve
-aussi la réserve encore prudente et l'échec de l'export standard, dont les sources
-confirmées ont été récupérées. Il s'agit d'un cas historique, pas d'un lanceur GPU générique.
-Le moteur courant dispose d'un [contrat d'export CUDA](docs/EXPORT-CUDA.md)
-pour livrer le kernel NVRTC et son lancement confirmés sans exiger un lanceur C.
-
-Un [mode binaire optionnel](docs/ARBRE-BINAIRE.md) est disponible pour les nouveaux
-essais : `binary_tree.enabled=true` ou `init --binary-tree`. Il compare deux enfants
-du même parent et poursuit le plus rapide parmi ceux qui sont corrects. AB-MCTS-A
-reste activé par défaut ; `--no-binary-tree` permet de le choisir explicitement.
-Les branches écartées restent dans les preuves. La mère conserve son rôle R1.
-La suite logicielle du mode binaire passe avec 294 tests et Ruff. Son premier
-pilote officiel confirme 71,776 % de réduction du temps contre 74,959 % pour
-AB-MCTS-A, sur une paire par arbre : le mode actuel conserve donc le défaut.
-
-Une réussite des tests logiciels ne démontre aucun gain HPC, aucune activation
-native sur ROMEO et aucune conformité universelle aux énoncés. La conformité
-algorithmique stricte d'un sujet demande son propre contrat : comparer les sorties
-ne suffit notamment pas à imposer l'utilisation de quicksort.
-
-Les résultats, caches, sessions, autorisations et intentions historiques ne sont
-pas importés. Les transports hérités et les scripts d'exemples restent du code de
-référence ; leur présence n'autorise pas leur exécution ni la réutilisation d'une
-ancienne identité de campagne.
-# Extensions Sakana AI
-
-Forest propose les variantes officielles AB-MCTS-A (gaussien/bêta) et AB-MCTS-M
-optionnelle de TreeQuest, des modes témoins, un mélange explicite de générateurs
-et une archive de diversité inspirée de ShinkaEvolve. GPT-6 Luna Max reste le
-défaut. Les réglages sont disponibles dans la préparation de l'application.
-
-Voir [l'intégration, les limites et le protocole de comparaison](docs/SAKANA-INTEGRATION.md).
+La distribution technique n'établit pas les droits commerciaux sur les codes
+importés, sujets de concours, dépendances ou services. Voir les
+[notices et points restant à vérifier](docs/THIRD-PARTY-NOTICES.md).

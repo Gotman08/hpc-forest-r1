@@ -17,8 +17,8 @@ from hpc_forest.adaptive_budget import record_timing
 from hpc_forest.config import load_config
 from hpc_forest.controller import Controller, create_workspace
 from hpc_forest.core import BudgetExhausted, InfrastructureError, atomic_json, file_digest
-from hpc_forest.memory_contract import guided
-from hpc_forest.memory_store import memory_summary
+from hpc_forest.memory.contract import guided
+from hpc_forest.memory.store import memory_summary
 from hpc_forest.native_matrix import install_identity
 from hpc_forest.reporting import package, report
 

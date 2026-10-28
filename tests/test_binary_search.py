@@ -11,7 +11,6 @@ import pytest
 import treequest
 
 from hpc_forest.backends import Generated
-from hpc_forest.binary_search import VERSION, BinaryGreedy, SearchExhausted
 from hpc_forest.cli import parser
 from hpc_forest.config import validate
 from hpc_forest.controller import Controller
@@ -19,6 +18,7 @@ from hpc_forest.core import BudgetExhausted, ForestError, InfrastructureError, O
 from hpc_forest.observations import measured_observations
 from hpc_forest.reporting import report
 from hpc_forest.search import Search, unpack
+from hpc_forest.search.binary import VERSION, BinaryGreedy, SearchExhausted
 
 
 def enable(db, **budget):

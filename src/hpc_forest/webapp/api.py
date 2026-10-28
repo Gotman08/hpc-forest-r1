@@ -13,6 +13,8 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import UploadFile
 
+from .. import __version__
+from ..core import FileLock
 from ..model_policy import EFFORT, MODEL, catalog
 from .campaigns import Campaigns
 from .execution import Missions, public_mission
@@ -105,13 +107,14 @@ def create_app(data_dir: Path, campaign_roots: list[Path] | None = None,
 
     @asynccontextmanager
     async def lifespan(_app):
-        task = asyncio.create_task(missions.monitor())
-        try:
-            yield
-        finally:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+        with FileLock(store.root / "application.lock"):
+            task = asyncio.create_task(missions.monitor())
+            try:
+                yield
+            finally:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
 
     app = FastAPI(title="Forest - espace de travail", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.store, app.state.projects, app.state.campaigns = store, projects, campaigns
@@ -131,7 +134,7 @@ def create_app(data_dir: Path, campaign_roots: list[Path] | None = None,
     @app.get("/api/info")
     def info():
         return {
-            "version": "0.2", "model": MODEL, "effort": EFFORT, "models": catalog(), "execution_target": "ROMEO",
+            "version": __version__, "model": MODEL, "effort": EFFORT, "models": catalog(), "execution_target": "ROMEO",
             "mode": "local", "submission_enabled": missions.availability()["configured"],
             "connection": missions.availability(),
             "submission_message": missions.availability()["message"],
@@ -194,6 +197,10 @@ def create_app(data_dir: Path, campaign_roots: list[Path] | None = None,
     def prepare_mission(identifier: str):
         return projects.prepare(identifier)
 
+    @app.post("/api/projects/{identifier}/migrate", status_code=201)
+    def migrate_project(identifier: str):
+        return projects.migrate(identifier)
+
     @app.get("/api/prepared/{identifier}")
     def get_prepared(identifier: str):
         return store.get(identifier, "prepared")
@@ -209,6 +216,14 @@ def create_app(data_dir: Path, campaign_roots: list[Path] | None = None,
     @app.get("/api/missions/{identifier}")
     def mission_status(identifier: str):
         return public_mission(missions.get(identifier))
+
+    @app.post("/api/missions/{identifier}/stop", status_code=202)
+    def stop_mission(identifier: str):
+        return public_mission(missions.request_stop(identifier))
+
+    @app.post("/api/missions/{identifier}/resume-tracking", status_code=202)
+    def resume_tracking(identifier: str):
+        return public_mission(missions.resume_tracking(identifier))
 
     @app.get("/api/prepared/{identifier}/download")
     def prepared_download(identifier: str):

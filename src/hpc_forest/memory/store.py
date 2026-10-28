@@ -5,9 +5,9 @@ import json
 import re
 from pathlib import Path
 
-from .core import canonical, digest
-from .memory_contract import VERSION, enabled
-from .source_diversity import source_evidence
+from hpc_forest.core import canonical, digest
+from hpc_forest.memory.contract import VERSION, enabled
+from hpc_forest.source_diversity import source_evidence
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memory_facts(
@@ -127,8 +127,8 @@ def sync_memory(db, root):
 
 def rebuild_memory(root):
     """Recreate derived memory under the campaign lock; never replay an experiment."""
-    from .core import FileLock, ForestError
-    from .registry import Registry
+    from hpc_forest.core import FileLock, ForestError
+    from hpc_forest.registry import Registry
 
     root = Path(root).resolve(strict=True)
     with FileLock(root / "campaign.lock"):

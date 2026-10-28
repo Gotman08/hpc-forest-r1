@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from hpc_forest.memory.context import source_view
+from hpc_forest.memory.contract import memory_contract
+
 from .core import Mission
 from .forest import role_goal
 from .harness_research import research_contract
-from .memory_context import source_view
-from .memory_contract import memory_contract
 from .model_skills import bind
 from .proposal_contract import SOURCE_SCHEMA
 

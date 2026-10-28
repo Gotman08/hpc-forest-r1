@@ -25,8 +25,8 @@ from hpc_forest.codex_conversation import first_turn, next_turn
 from hpc_forest.config import validate
 from hpc_forest.core import ForestError, InfrastructureError, Outcome
 from hpc_forest.forest import forest_width, research_roles
-from hpc_forest.memory_retrieval import MemoryReader
-from hpc_forest.memory_store import sync_memory
+from hpc_forest.memory.retrieval import MemoryReader
+from hpc_forest.memory.store import sync_memory
 from hpc_forest.observer_contract import empty_read, schema_for
 from hpc_forest.registry import Registry
 from hpc_forest.search import Search
@@ -76,7 +76,7 @@ def campaign(tmp_path, monkeypatch):
     db.set("mother_conversation:1", receipt_for(initial, "a" * 64))
     monkeypatch.setattr("hpc_forest.observer_snapshot.committed_source_snapshot",
                         lambda root, commit: {"src/main.c": "int " + commit + ";"})
-    monkeypatch.setattr("hpc_forest.memory_store.source_evidence", lambda *args: {})
+    monkeypatch.setattr("hpc_forest.memory.store.source_evidence", lambda *args: {})
     yield controller
     db.close()
 

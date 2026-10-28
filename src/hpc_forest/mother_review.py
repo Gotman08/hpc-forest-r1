@@ -8,13 +8,14 @@ import uuid
 from pathlib import Path
 from statistics import median
 
+from hpc_forest.memory.contract import settings as memory_settings
+
 from . import codex_mailbox as mailbox
 from .adaptive_budget import record_timing
 from .codex_conversation import next_turn, verify_receipt
 from .core import BudgetExhausted, InfrastructureError, atomic_json, canonical
 from .forest import pairwise_mother
 from .independent_budget import forecast_independent
-from .memory_contract import settings as memory_settings
 from .model_skills import bind
 
 

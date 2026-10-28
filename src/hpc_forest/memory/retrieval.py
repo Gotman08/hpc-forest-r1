@@ -7,12 +7,12 @@ import json
 import sqlite3
 from pathlib import Path
 
-from .core import CandidateRejected, InfrastructureError, canonical, digest
-from .memory_contract import VERSION, settings, validate_read
-from .memory_overview import tree_overview
-from .memory_store import terms
-from .source_diversity import compact_evidence
-from .support.sources import committed_source_snapshot, source_snapshot
+from hpc_forest.core import CandidateRejected, InfrastructureError, canonical, digest
+from hpc_forest.memory.contract import VERSION, settings, validate_read
+from hpc_forest.memory.overview import tree_overview
+from hpc_forest.memory.store import terms
+from hpc_forest.source_diversity import compact_evidence
+from hpc_forest.support.sources import committed_source_snapshot, source_snapshot
 
 
 def text_digest(content):
@@ -77,7 +77,7 @@ class MemoryReader:
         self.scope = "epoch=? AND protocol_id=?"
         self.args = [mission.epoch, protocol_id]
         if mission.role != "G":
-            from .active_contract import enabled as active_enabled
+            from hpc_forest.active_contract import enabled as active_enabled
 
             imported = mission.import_ids if active_enabled(config) else []
             self.scope += " AND (tree_id=? OR tree_id='baseline'"

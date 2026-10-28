@@ -5,7 +5,7 @@ from test_memory import fact, mission
 from test_memory import memory_db as memory_fixture
 
 from hpc_forest.gitops import git, initialize_source
-from hpc_forest.memory_retrieval import MemoryReader
+from hpc_forest.memory.retrieval import MemoryReader
 from hpc_forest.source_diversity import compare_sources, source_evidence
 
 memory_db = memory_fixture

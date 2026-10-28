@@ -10,6 +10,11 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
+from hpc_forest.memory.context import bounded_history
+from hpc_forest.memory.contract import active, enabled
+from hpc_forest.memory.contract import settings as memory_settings
+from hpc_forest.memory.retrieval import MemoryReader, evidence_ids
+
 from .backends import Generated
 from .core import (
     BudgetExhausted,
@@ -23,10 +28,6 @@ from .core import (
 from .evaluator import create_evaluator
 from .gitops import assert_allowed_changes, git, initialize_source, worktree_tree_hash
 from .harness_research import DocumentationReader
-from .memory_context import bounded_history
-from .memory_contract import active, enabled
-from .memory_contract import settings as memory_settings
-from .memory_retrieval import MemoryReader, evidence_ids
 from .registry import Registry
 from .support.budgets import expired, generation_deadline, search_deadline, unlimited_tokens
 from .support.sources import SourceLimitExceeded, source_snapshot

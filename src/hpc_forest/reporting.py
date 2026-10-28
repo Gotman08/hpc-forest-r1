@@ -8,16 +8,18 @@ import time
 import zipfile
 from pathlib import Path
 
+from hpc_forest.memory.store import memory_summary
+from hpc_forest.search import Search
+from hpc_forest.search.diagnostics import diagnostics
+from hpc_forest.search.policy import label as search_label
+
 from .adaptive_budget import admission_deadline
+from .compatibility import RETIRED_SETTINGS, historical_advisor, recorded_topology
 from .core import FileLock, ForestError, atomic_json, digest, verify_protected
 from .forest import assignment, forest_plan, research_roles
 from .gitops import git
-from .memory_store import memory_summary
 from .model_skills import campaign_traces
 from .registry import Registry
-from .search import Search
-from .search_diagnostics import diagnostics
-from .search_policy import label as search_label
 from .submission import delivery_manifest
 from .support.budgets import mandatory_final_g
 
@@ -26,7 +28,7 @@ def report(root: Path, output: Path | None = None) -> Path:
     root = root.resolve()
     output = output or root / "report"
     output.mkdir(parents=True, exist_ok=True)
-    db = Registry(root / "registry.sqlite3")
+    db = Registry(root / "registry.sqlite3", readonly=True)
     try:
         rows = []
         for row in db.rows("SELECT * FROM trials ORDER BY created,id"):
@@ -115,16 +117,16 @@ def report(root: Path, output: Path | None = None) -> Path:
             "evaluations": db.evaluations("search") + db.evaluations("postprocess") + db.evaluations("confirmation"),
             "events": db.rows("SELECT * FROM events ORDER BY id"),
             "epochs": db.rows("SELECT * FROM epochs ORDER BY id"),
-            "search_topology": Search(db).snapshot(),
+            "search_topology": recorded_topology(db) if RETIRED_SETTINGS.intersection(config) else Search(db).snapshot(),
             "search_diagnostics": diagnostics(config, db.rows("SELECT * FROM trials ORDER BY created,id")),
         }
         from .active_reporting import export as export_active
         from .evolution_archive import view as diversity_view
 
         payload["active_architecture"] = export_active(db, output)
-        from .advisor import export as export_advisor
-
-        payload["advisor"] = export_advisor(db, output)
+        historical = historical_advisor(config, db.get("advisor_totals", {}))
+        if historical is not None:
+            payload["advisor"] = historical
         payload["diversity_archive"] = diversity_view(db, db.get("current_epoch", 1))
         if payload["diversity_archive"] is not None:
             atomic_json(output / "diversity-archive.json", payload["diversity_archive"])

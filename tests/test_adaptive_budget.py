@@ -65,7 +65,7 @@ def test_cli_duration_initializes_an_unlimited_adaptive_campaign(tmp_path, monke
 
 
 def test_all_exhausted_trees_stop_without_spinning(db, tmp_path, adaptive_config, monkeypatch):
-    from hpc_forest.binary_search import SearchExhausted
+    from hpc_forest.search.binary import SearchExhausted
 
     db.set("config", adaptive_config)
     db.set("current_epoch", 1)

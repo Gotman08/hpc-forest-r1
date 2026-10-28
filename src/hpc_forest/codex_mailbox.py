@@ -9,12 +9,13 @@ import time
 import uuid
 from pathlib import Path
 
+from hpc_forest.memory.contract import extract_memory
+
 from .backends import Generated
 from .codex_conversation import next_turn, verify_receipt
 from .core import CandidateRejected, InfrastructureError, Mission, atomic_json
 from .forest import persistent_mother
 from .harness_research import extract_research
-from .memory_contract import extract_memory
 from .model_policy import (
     EFFORT,
     MODEL,

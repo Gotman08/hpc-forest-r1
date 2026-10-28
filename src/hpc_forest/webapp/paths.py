@@ -38,7 +38,7 @@ def contained(root: Path, name: str) -> Path:
     current = root
     for part in relative.split("/"):
         current = current / part
-        if current.is_symlink():
+        if current.is_symlink() or (hasattr(current, "is_junction") and current.is_junction()):
             raise AppError("Les liens symboliques ne sont pas pris en charge.")
     return target
 

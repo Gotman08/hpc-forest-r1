@@ -13,14 +13,13 @@ from pathlib import Path
 
 import numpy as np
 
-from .advisor import VERSION as ADVISOR_VERSION
-from .advisor import settings as advisor_settings
-from .binary_search import VERSION as BINARY_VERSION
-from .binary_search import BinaryGreedy, enabled
-from .core import ForestError, InfrastructureError, Mission, Outcome, canonical, digest
-from .model_policy import generator_pool
-from .registry import Registry
-from .search_policy import DEFAULT, make_algorithm, settings
+from hpc_forest.compatibility import require_current
+from hpc_forest.core import ForestError, InfrastructureError, Mission, Outcome, canonical, digest
+from hpc_forest.model_policy import generator_pool
+from hpc_forest.registry import Registry
+from hpc_forest.search.binary import VERSION as BINARY_VERSION
+from hpc_forest.search.binary import BinaryGreedy, enabled
+from hpc_forest.search.policy import DEFAULT, make_algorithm, settings
 
 VERSION = importlib.metadata.version("treequest")
 
@@ -67,9 +66,6 @@ class Search:
         self.version = BINARY_VERSION if self.binary else VERSION if (
             self.settings == DEFAULT and not self.pool
         ) else VERSION + ":" + digest({"search": self.settings, "generators": self.pool})[:20]
-        if advisor_settings(config)["enabled"]:
-            self.version += ":" + digest({"advisor": ADVISOR_VERSION,
-                                         "settings": advisor_settings(config)})[:20]
 
     def initialize(self, epoch: int, role: str, seed: int) -> str:
         tree_id = f"e{epoch}:{role}"
@@ -144,8 +140,8 @@ class Search:
         *,
         budget_phase: str = "search",
         route_generators: bool = True,
-        advisor=None,
     ) -> Mission:
+        require_current(self.db.get("config", {}))
         if self.db.one("SELECT id FROM trials WHERE tree_id=? AND state='pending'", (tree_id,)):
             raise ForestError("Only one pending trial per local tree; parallelize across trees")
         row, (state, rng) = self._tree(tree_id)
@@ -161,44 +157,12 @@ class Search:
             else:
                 choices[role] = (role, {})
         started = time.perf_counter()
-        proposals = []
         try:
             np.random.set_state(rng)
             state, trial = self.algo.ask(state, list(choices))
             next_rng = np.random.get_state()
-            proposals.append((state, trial, next_rng))
-            # Each proposal is a genuine TreeQuest ask against the SAME measured
-            # tree. Only the selected checkpoint will be persisted/told. Preview
-            # draws never add nodes/rewards and fallback retains the first RNG.
-            if (advisor is not None and self.policy == "ab-mcts-a" and route_generators
-                    and budget_phase == "search" and "G" not in actions):
-                identities = {(trial.node_to_expand, trial.action)}
-                for _ in range(7):
-                    preview, _ = unpack(row["checkpoint"], row["sha256"])
-                    preview, alternative = self.algo.ask(preview, list(choices))
-                    key = (alternative.node_to_expand, alternative.action)
-                    if key not in identities:
-                        proposals.append((preview, alternative, np.random.get_state()))
-                        identities.add(key)
         finally:
             np.random.set_state(global_rng)
-        candidates = []
-        for _, proposal, _ in proposals:
-            parent = proposal.parent_state
-            role, generator = choices[proposal.action]
-            candidates.append(Mission(
-                id=uuid.uuid4().hex[:16], tree_id=tree_id, trial_id=str(proposal.trial_id),
-                epoch=epoch, role=role, base_commit=parent["commit"] if parent else base,
-                parent_id=parent["experiment_id"] if parent else None, delegation_parent=f"R/{role}",
-                depth=parent["depth"] + 1 if parent else 1, ordinal=ordinal, worktree=worktree,
-                budget_phase=budget_phase, generator=generator.copy(), search_action=proposal.action))
-        chosen = 0
-        if advisor is not None and self.policy == "ab-mcts-a" and route_generators and "G" not in actions:
-            for candidate in candidates:
-                candidate.selection["proposal_seconds"] = time.perf_counter() - started
-            identity = advisor(candidates)
-            chosen = next((i for i, candidate in enumerate(candidates) if candidate.id == identity), 0)
-        state, trial, next_rng = proposals[chosen]
         parent = trial.parent_state
         role, generator = choices[trial.action]
         selected_parent = state.tree.get_node(trial.node_to_expand)
@@ -207,11 +171,13 @@ class Search:
                      "expansion": "root" if not parent else "sibling" if selected_parent.children else "refinement",
                      "seconds": time.perf_counter() - started,
                      "available_actions": list(choices)}
-        if advisor is not None:
-            selection.update(advisor_scope="treequest_parent_proposals", proposal_count=len(proposals),
-                             selected_proposal=chosen, default_parent_id=candidates[0].parent_id)
-        mission = candidates[chosen]
-        mission.selection = selection
+        mission = Mission(
+            id=uuid.uuid4().hex[:16], tree_id=tree_id, trial_id=str(trial.trial_id),
+            epoch=epoch, role=role, base_commit=parent["commit"] if parent else base,
+            parent_id=parent["experiment_id"] if parent else None, delegation_parent=f"R/{role}",
+            depth=parent["depth"] + 1 if parent else 1, ordinal=ordinal, worktree=worktree,
+            budget_phase=budget_phase, generator=generator.copy(), search_action=trial.action,
+            selection=selection)
         blob = pack(state, next_rng)
         with self.db.connection:
             self.db.connection.execute(

@@ -10,7 +10,7 @@ from hpc_forest.config import validate
 from hpc_forest.core import ForestError
 from hpc_forest.independent_budget import assembly_admission
 from hpc_forest.integration_policy import integrate_memory, limits
-from hpc_forest.memory_contract import POLICY
+from hpc_forest.memory.contract import POLICY
 
 
 def memory_budget(db, width=3):

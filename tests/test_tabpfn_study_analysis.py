@@ -105,4 +105,3 @@ def test_preloaded_memory_is_detected(experiment):
     write(path, data)
     with pytest.raises(ValueError, match="Fresh-memory"):
         analysis.arm_summary(pair, arm, measured)
-

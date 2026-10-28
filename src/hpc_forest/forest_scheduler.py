@@ -10,12 +10,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from queue import SimpleQueue
 
+from hpc_forest.search.binary import SearchExhausted
+
 from .adaptive_budget import admit, record_timing
-from .advisor import next_completed
 from .backends import Generated
-from .binary_search import SearchExhausted
 from .core import BudgetExhausted, ForestError, Mission
 from .forest import research_roles
+from .operator_control import stop_requested
 
 
 def _generate(controller, mission, context):
@@ -46,7 +47,6 @@ def run_research(controller, epoch, baseline, max_rounds=None):
     if first_receipt and not db.get(f"research_initial_dispatch:{epoch_id}"):
         raise ForestError("An interrupted initial research wave cannot replay its model invocations")
     completed = SimpleQueue()
-    ready = []
     pending, exhausted = {}, set()
     fatal = None
     runtime = {"policy": "independent-v1", "parallelism": len(roles),
@@ -81,6 +81,8 @@ def run_research(controller, epoch, baseline, max_rounds=None):
 
     def refill(pool, preferred=None):
         nonlocal fatal
+        if stop_requested(controller):
+            return
         ordered = ([preferred] if preferred else []) + [r for r in roles if r != preferred]
         for role in ordered:
             if not eligible(role):
@@ -123,7 +125,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
 
     try:
         with ThreadPoolExecutor(max_workers=len(roles), thread_name_prefix="forest-tree") as pool:
-            if initial and (max_rounds is None or max_rounds > 0):
+            if initial and (max_rounds is None or max_rounds > 0) and not stop_requested(controller):
                 slots = db.reserve_research_wave(roles, 0)
                 batch = []
                 try:
@@ -148,7 +150,7 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                 refill(pool)
 
             while pending:
-                future = next_completed(controller, completed, pending, ready)
+                future = completed.get()
                 mission, slot, _ = pending[future]
                 generated, started, finished = future.result()
                 record_timing(db, "generation:" + mission.role, finished - started)
@@ -173,6 +175,9 @@ def run_research(controller, epoch, baseline, max_rounds=None):
 
         if fatal:
             status = fatal
+        elif stop_requested(controller):
+            status = "search_complete"
+            runtime["stop_reason"] = "operator_stop"
         elif limits and all(counts[r] >= limits[r] or r in exhausted for r in roles):
             status = "checkpointed"
         elif len(exhausted) == len(roles):

@@ -7,9 +7,9 @@ from test_memory import memory_db as memory_fixture
 
 from hpc_forest.core import CandidateRejected, InfrastructureError
 from hpc_forest.integration_policy import _select, selection_messages, validate_decision
-from hpc_forest.memory_consultations import Consultations
-from hpc_forest.memory_contract import empty_read, extract_memory
-from hpc_forest.memory_retrieval import MemoryReader
+from hpc_forest.memory.consultations import Consultations
+from hpc_forest.memory.contract import empty_read, extract_memory
+from hpc_forest.memory.retrieval import MemoryReader
 
 memory_db = memory_fixture
 
@@ -73,7 +73,7 @@ def test_exhausted_selection_does_not_force_redundant_code_after_valid_integrati
     monkeypatch.setattr(db, "reserve", lambda *args: slot)
     monkeypatch.setattr("hpc_forest.mother.mother_context", lambda c, m, x: {
         **x, "mother_conversation": {"id": "mother"}})
-    monkeypatch.setattr("hpc_forest.memory_context.attach_memory", lambda c, m, x: {
+    monkeypatch.setattr("hpc_forest.memory.context.attach_memory", lambda c, m, x: {
         **x, "memory": {"page": {"items": []}, "catalog": {"items": [], "total": 600}}})
     monkeypatch.setattr("hpc_forest.independent_budget.assembly_admission", lambda db: {"can_read": False})
     backend = SimpleNamespace(generate=lambda *args: SimpleNamespace(

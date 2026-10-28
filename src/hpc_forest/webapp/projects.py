@@ -12,11 +12,13 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from ..advisor import settings as advisor_settings
+from hpc_forest.search.policy import settings as search_settings
+
+from ..compatibility import RETIRED_SETTINGS, RETIREMENT_MESSAGE, require_current, without_retired
 from ..core import ForestError, InfrastructureError
 from ..evolution_archive import settings as evolution_settings
 from ..model_policy import EFFORT, MODEL, generator_pool, require_identity
-from ..search_policy import settings as search_settings
+from ..storage.files import atomic_bytes
 from .paths import (
     MAX_EXPANDED,
     MAX_FILE,
@@ -34,7 +36,7 @@ SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".cu", ".cuh"}
 CONTRACT_FIELDS = {
     "build_command", "test_command", "benchmark_command", "expected_result",
     "editable_paths", "target", "duration_minutes", "statement",
-    "model", "reasoning_effort", "search", "generator_pool", "evolution", "advisor",
+    "model", "reasoning_effort", "search", "generator_pool", "evolution",
 }
 
 
@@ -121,20 +123,22 @@ def infer_contract(files: list[tuple[str, bytes]]) -> dict:
         "model": MODEL, "reasoning_effort": EFFORT,
         "search": search_settings({}), "generator_pool": [],
         "evolution": evolution_settings({"evolution": {"enabled": True}}),
-        "advisor": advisor_settings({}),
     }
 
 
 def validate_contract(value: dict) -> dict:
     if isinstance(value, dict):
-        value = {"model": MODEL, "reasoning_effort": EFFORT, "search": {}, "generator_pool": [], "evolution": {}, "advisor": {}, **value}
+        try:
+            require_current(value)
+        except ForestError as exc:
+            raise AppError(str(exc)) from exc
+        value = {"model": MODEL, "reasoning_effort": EFFORT, "search": {}, "generator_pool": [], "evolution": {}, **value}
     if not isinstance(value, dict) or set(value) != CONTRACT_FIELDS:
         raise AppError("Le contrat contient des champs manquants ou non reconnus.")
     try:
         require_identity(value)
         pool = generator_pool(value)
         value = {**value, "search": search_settings(value),
-                 "advisor": advisor_settings(value),
                  "evolution": evolution_settings(value),
                  "generator_pool": pool if value["generator_pool"] else []}
     except InfrastructureError as exc:
@@ -195,6 +199,8 @@ def project_view(record: dict) -> dict:
                                     "search": search_settings({}), "generator_pool": [],
                                     "evolution": evolution_settings({}), **record["contract"]}}
     missing = missing_fields(record["contract"], record["files"])
+    if RETIRED_SETTINGS.intersection(record["contract"]):
+        missing.append({"field": "migration", "label": RETIREMENT_MESSAGE})
     return {**record, "missing": missing, "ready": not missing,
             "model": record["contract"]["model"], "effort": record["contract"]["reasoning_effort"],
             "state": "needs_input" if missing else "ready"}
@@ -241,10 +247,9 @@ class Projects:
         return project_view(record)
 
     def update(self, identifier: str, contract: dict) -> dict:
-        record = self.store.get(identifier, "project")
-        payload = self.store.payload(record)
-        payload["contract"] = validate_contract(contract)
-        return project_view(self.store.update(identifier, payload, kind="project"))
+        contract = validate_contract(contract)
+        return project_view(self.store.mutate(identifier, lambda payload: {**payload, "contract": contract},
+                                              kind="project"))
 
     def attach(self, identifier: str, role: str, filename: str, data: bytes) -> dict:
         if role not in {"statement", "test_data"} or not data or len(data) > MAX_FILE:
@@ -252,18 +257,20 @@ class Projects:
         name = relative_name(filename)
         if "/" in name:
             raise AppError("Le document doit avoir un nom de fichier simple.")
-        record = self.store.get(identifier, "project")
+        self.store.get(identifier, "project")
         folder = contained(self.store.root, f"projects/{identifier}/attachments")
         folder.mkdir(exist_ok=True)
         stored = uuid.uuid4().hex + Path(name).suffix.lower()
-        (folder / stored).write_bytes(data)
-        payload = self.store.payload(record)
-        payload["attachments"].append({"name": name, "role": role, "stored": stored,
-                                       "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
-        return project_view(self.store.update(identifier, payload, kind="project"))
+        atomic_bytes(folder / stored, data)
+        def append(payload):
+            payload["attachments"].append({"name": name, "role": role, "stored": stored,
+                                           "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+            return payload
+        return project_view(self.store.mutate(identifier, append, kind="project"))
 
     def prepare(self, identifier: str) -> dict:
         project = project_view(self.store.get(identifier, "project"))
+        validate_contract(project["contract"])
         if not project["ready"]:
             raise AppError("Complétez le contrat de vérification avant de préparer la mission.")
         mission_id = uuid.uuid4().hex
@@ -303,4 +310,30 @@ class Projects:
             }, mission_id)
         except Exception:
             self._discard_created(folder)
+            raise
+
+    def migrate(self, identifier: str) -> dict:
+        """Copy a historical project into a new contract; preserve its record/files."""
+        record = self.store.get(identifier, "project")
+        if not RETIRED_SETTINGS.intersection(record["contract"]):
+            raise AppError("Ce projet utilise déjà le contrat courant.")
+        contract = validate_contract(without_retired(record["contract"]))
+        source = contained(self.store.root, "projects/" + identifier)
+        new_id = uuid.uuid4().hex
+        destination = contained(self.store.root, "projects/" + new_id)
+        destination.mkdir(parents=True)
+        entries = [("source/" + item["path"], item["sha256"]) for item in record["files"]]
+        entries += [("attachments/" + item["stored"], item["sha256"]) for item in record["attachments"]]
+        try:
+            for name, expected in entries:
+                content = contained(source, name).read_bytes()
+                if hashlib.sha256(content).hexdigest() != expected:
+                    raise AppError("Une source historique a changé ; migration refusée.")
+                atomic_bytes(contained(destination, name), content)
+            (destination / "attachments").mkdir(exist_ok=True)
+            payload = {**self.store.payload(record), "contract": contract,
+                       "migration_from": identifier, "name": record["name"] + " · nouveau contrat"}
+            return project_view(self.store.create("project", payload, new_id))
+        except Exception:
+            self._discard_created(destination)
             raise

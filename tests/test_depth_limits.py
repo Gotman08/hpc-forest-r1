@@ -7,10 +7,10 @@ import numpy as np
 import pytest
 import treequest
 
-from hpc_forest.binary_search import BinaryGreedy, SearchExhausted
 from hpc_forest.controller import Controller
 from hpc_forest.core import BudgetExhausted, Outcome
 from hpc_forest.search import Search
+from hpc_forest.search.binary import BinaryGreedy, SearchExhausted
 
 
 @pytest.mark.parametrize("binary", [False, True])

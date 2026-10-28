@@ -17,8 +17,8 @@ from hpc_forest.model_policy import (
     require_request_identity,
 )
 from hpc_forest.search import Search, unpack
-from hpc_forest.search_diagnostics import diagnostics
-from hpc_forest.search_policy import DEFAULT, make_algorithm, settings
+from hpc_forest.search.diagnostics import diagnostics
+from hpc_forest.search.policy import DEFAULT, make_algorithm, settings
 
 POLICIES = [DEFAULT, {"algorithm": "ab-mcts-a", "distribution": "beta"},
             {"algorithm": "standard-mcts"}, {"algorithm": "repeated-sampling"},

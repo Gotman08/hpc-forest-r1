@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,10 +13,18 @@ import time
 from pathlib import Path
 
 
+def execution_environment(inherited: dict[str, str]) -> dict[str, str]:
+    """Minimize accidental credential propagation; this is not an OS sandbox."""
+    private = re.compile(r"(?:TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
+    return {key: value for key, value in inherited.items()
+            if not private.search(key) and key not in {"CODEX_HOME", "SSH_AUTH_SOCK", "SSH_AGENT_PID",
+                                                       "FOREST_STUDY_BROKER", "AWS_PROFILE"}}
+
+
 def run(phase: str, trusted: Path, worktree: Path, build: Path, evaluation_phase="search"):
     spec = json.loads((trusted / "project.json").read_text())
     project = build / "project"
-    env = {**os.environ, "FOREST_PHASE": evaluation_phase, "FOREST_PROJECT": str(project),
+    env = {**execution_environment(dict(os.environ)), "FOREST_PHASE": evaluation_phase, "FOREST_PROJECT": str(project),
            "FOREST_ATTACHMENTS": str(trusted / "attachments")}
     if phase == "build":
         project.mkdir(parents=True, exist_ok=False)

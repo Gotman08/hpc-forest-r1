@@ -6,10 +6,11 @@ import time
 import uuid
 from pathlib import Path
 
+from hpc_forest.memory.contract import guided
+
 from .adaptive_budget import admission_deadline, forecast
 from .core import BudgetExhausted, ForestError, canonical
 from .forest import forest_plan, model_selected, pairwise_mother, research_roles
-from .memory_contract import guided
 from .support.budgets import (
     adaptive,
     expired,
@@ -55,10 +56,20 @@ CREATE TABLE IF NOT EXISTS documents(
 
 
 class Registry:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, readonly: bool = False):
         self.path = path
-        self.connection = sqlite3.connect(path, timeout=30)
+        self.connection = (sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=30)
+                           if readonly else sqlite3.connect(path, timeout=30))
         self.connection.row_factory = sqlite3.Row
+        if readonly:
+            self.connection.execute("PRAGMA query_only=ON")
+            self.connection.execute("BEGIN")
+            return
+        previous = {row["name"] for row in self.connection.execute("PRAGMA table_info(slots)")}
+        if previous and "tokens_settled" not in previous:
+            from .storage.sqlite import backup_database
+
+            backup_database(path, path.with_name(path.name + ".before-tokens-settled-" + uuid.uuid4().hex + ".sqlite3"))
         self.connection.execute("PRAGMA foreign_keys=ON")
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.executescript(SCHEMA)

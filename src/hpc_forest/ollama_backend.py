@@ -248,7 +248,7 @@ class OllamaBackend:
             return generated
         try:
             data = json.loads(response["message"]["content"])
-            from .memory_contract import extract_memory
+            from hpc_forest.memory.contract import extract_memory
 
             rejected_lessons = []
             data, memory_read, lessons = extract_memory(data, context, rejected_lessons=rejected_lessons)

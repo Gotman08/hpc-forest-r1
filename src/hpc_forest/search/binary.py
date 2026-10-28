@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from treequest.algos.tree import Tree
 from treequest.trial import Trial
 
-from .core import ForestError
+from hpc_forest.core import ForestError
 
 VERSION = "binary-greedy-v3"
 

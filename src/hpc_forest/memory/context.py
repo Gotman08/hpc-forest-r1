@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import copy
 
-from .core import atomic_json, canonical
-from .memory_contract import VERSION, active, settings
-from .memory_retrieval import MemoryReader, evidence_ids, text_digest
-from .support.sources import source_snapshot
+from hpc_forest.core import atomic_json, canonical
+from hpc_forest.memory.contract import VERSION, active, settings
+from hpc_forest.memory.retrieval import MemoryReader, evidence_ids, text_digest
+from hpc_forest.support.sources import source_snapshot
 
 
 def attach_memory(controller, mission, context):
@@ -71,7 +71,7 @@ def source_view(worktree, context):
     if len(canonical(files)) <= limit:
         return files, context
     context = copy.deepcopy(context)
-    from .memory_retrieval import bounded_page
+    from hpc_forest.memory.retrieval import bounded_page
 
     manifest = [{"path": path, "characters": len(content), "sha256": text_digest(content)}
                 for path, content in files.items()]

@@ -5,7 +5,7 @@ import math
 
 import treequest as tq
 
-from .core import ForestError, InfrastructureError
+from hpc_forest.core import ForestError, InfrastructureError
 
 ALGORITHMS = {
     "ab-mcts-a": "AB-MCTS-A (Sakana)",
@@ -75,7 +75,7 @@ def make_algorithm(value: dict):
     if algorithm == "standard-mcts":
         return tq.StandardMCTS(samples_per_action=value["samples_per_action"],
                                exploration_weight=value["exploration_weight"])
-    from .search_baselines import SamplingBaseline
+    from hpc_forest.search.baselines import SamplingBaseline
 
     return SamplingBaseline(algorithm)
 

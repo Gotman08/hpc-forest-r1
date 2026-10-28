@@ -12,20 +12,20 @@ import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from ..advisor import runtime as advisor_runtime
-from ..advisor import settings as advisor_settings
+from hpc_forest.search.policy import settings as search_settings
+
 from ..codex_worker import RomeoFiles
-from ..core import atomic_json, file_digest
+from ..core import FileLock, atomic_json, file_digest
 from ..evolution_archive import settings as evolution_settings
 from ..model_policy import generator_pool, require_identity
-from ..search_policy import settings as search_settings
 from .campaigns import Campaigns, _read
 from .paths import AppError, contained
+from .projects import validate_contract
 from .runner_support import editable_files, executable, extract_verified
 from .store import Store
 
 LOGGER = logging.getLogger(__name__)
-TERMINAL = {"completed", "failed", "cancelled"}
+TERMINAL = {"completed", "failed", "cancelled", "recovery_required"}
 
 
 def public_mission(record: dict) -> dict:
@@ -54,6 +54,7 @@ def connection(path: Path) -> dict | None:
 def freeze_bundle(store: Store, mission: dict, settings: dict) -> tuple[Path, dict]:
     prepared = store.get(mission["prepared_id"], "prepared")
     selected = prepared["contract"]
+    validate_contract(selected["contract"])
     require_identity(selected)
     editable_files(selected)
     executable(selected["contract"])
@@ -65,20 +66,21 @@ def freeze_bundle(store: Store, mission: dict, settings: dict) -> tuple[Path, di
     if profile is None:
         raise AppError("Le profil " + prepared["target"] + " n'est pas encore installé sur ROMEO.")
     search = search_settings(selected["contract"])
-    advisor = advisor_settings(selected["contract"])
-    provisioned = advisor_runtime({"advisor_runtime": profile.get("advisor_runtime", {})})
-    if advisor["enabled"] and not provisioned:
-        raise AppError("TabPFN doit être installé et ses poids vérifiés sur ROMEO avant activation.")
+    if "advisor_runtime" in profile:
+        raise AppError("Le profil ROMEO contient advisor_runtime, retiré avec TabPFN. "
+                       "Sauvegardez romeo.json puis retirez ce réglage pour les nouvelles missions.")
     pool = generator_pool(selected["contract"]) if selected["contract"].get("generator_pool") else []
     if search["algorithm"] == "ab-mcts-m" and "ab-mcts-m" not in profile.get("search_algorithms", []):
         raise AppError("AB-MCTS-M exige le profil optionnel sakana-m installé et déclaré sur ROMEO.")
     package = Path(__file__).resolve().parents[1]
-    paths = [p for p in package.rglob("*") if p.is_file() and "__pycache__" not in p.parts]
+    paths = [p for p in package.rglob("*") if p.is_file() and not p.is_symlink()
+             and "__pycache__" not in p.parts and (p.suffix in {".py", ".mjs", ".html", ".css", ".svg"}
+                                                   or "assets" in p.relative_to(package).parts)]
     manifest = {
         "schema": "forest-app-launch-v1", "id": mission["id"], "session_id": mission["session_id"],
+        "operator_control": "drain_then_confirm-v1",
         "model": selected["model"], "effort": selected["reasoning_effort"],
         "search": search, "generator_pool": pool, "evolution": evolution_settings(selected["contract"]),
-        "advisor": advisor, "advisor_runtime": provisioned if advisor["enabled"] else {},
         "target": prepared["target"], "input_sha256": file_digest(source),
         "architecture": profile["architecture"], "codex": profile["codex"],
         "duration_minutes": selected["contract"]["duration_minutes"],
@@ -154,7 +156,6 @@ class Missions:
         try:
             value = self.settings()
             return {"configured": bool(value), "targets": list(value["profiles"]) if value else [],
-                    "advisor_targets": [k for k, p in value["profiles"].items() if p.get("advisor_runtime")] if value else [],
                     "search_algorithms": {k: p.get("search_algorithms", []) for k, p in value["profiles"].items()}
                         if value else {},
                     "message": "Connecteur configuré ; OAuth est vérifié sur le nœud au lancement."
@@ -165,20 +166,61 @@ class Missions:
     def get(self, identifier):
         return self.store.get(identifier, "mission")
 
+    def request_stop(self, identifier):
+        def stop(payload):
+            if payload["state"] in TERMINAL:
+                return payload
+            if payload["state"] in {"staging", "planned"}:
+                payload.update(state="cancelled", finished_at=time.time())
+            elif not payload.get("launch", {}).get("operator_control"):
+                raise AppError("Cette mission utilise un moteur historique sans arrêt propre. "
+                               "Son job doit être géré explicitement sur ROMEO.")
+            payload.setdefault("stop_requested_at", time.time())
+            return payload
+        result = self.store.mutate(identifier, stop, kind="mission")
+        self.wakeup.set()
+        return result
+
+    async def deliver_stop(self, client, record):
+        if not record.get("stop_requested_at") or record.get("stop_delivered_at"):
+            return
+        path = contained(self.store.root, "missions/" + record["id"] + "/stop-request.json")
+        atomic_json(path, {"schema": "forest-operator-stop-v1", "mission_id": record["id"],
+                          "session_id": record["session_id"], "requested_at": record["stop_requested_at"]})
+        await client.upload(path, record["remote_root"] + "/stop-request.json")
+        self.update(record["id"], stop_delivered_at=time.time())
+
+    def resume_tracking(self, identifier):
+        def resume(payload):
+            if payload["state"] not in {"recovery_required", "failed"}:
+                return payload
+            if not payload.get("remote_root") or not payload.get("connection"):
+                raise AppError("Aucune identité distante à réconcilier. Préparez une nouvelle mission ; "
+                               "cette sauvegarde reste conservée.")
+            payload.update(state="queued" if payload.get("job_id") else "submitting",
+                           recovery_pending=False, attempts=0, last_attempt=0, last_error=None)
+            return payload
+        result = self.store.mutate(identifier, resume, kind="mission")
+        self.wakeup.set()
+        return result
+
     def update(self, identifier, **changes):
-        record = self.get(identifier)
-        return self.store.update(identifier, {**self.store.payload(record), **changes}, kind="mission")
+        return self.store.mutate(identifier, lambda payload: {**payload, **changes}, kind="mission")
 
     def launch(self, prepared_id: str):
-        for item in self.store.list("mission"):
-            if item["prepared_id"] == prepared_id:
-                return item
+        existing = self.store.find("mission", "prepared_id", prepared_id)
+        if existing:
+            return existing
         settings = self.settings()
         if not settings:
             raise AppError("Configurez le connecteur ROMEO avant le lancement.")
         prepared = self.store.get(prepared_id, "prepared")
+        validate_contract(prepared["contract"]["contract"])
         if prepared["target"] not in settings["profiles"]:
             raise AppError("L'environnement pour cette cible n'est pas configuré.")
+        if "advisor_runtime" in settings["profiles"][prepared["target"]]:
+            raise AppError("Le profil ROMEO contient advisor_runtime, retiré avec TabPFN. "
+                           "Sauvegardez romeo.json puis retirez ce réglage pour les nouvelles missions.")
         require_identity(prepared["contract"])
         editable_files(prepared["contract"])
         executable(prepared["contract"]["contract"])
@@ -190,11 +232,22 @@ class Missions:
                 "submitted": False, "attempts": 0, "last_error": None,
             })
         except sqlite3.IntegrityError:
-            return next(m for m in self.store.list("mission") if m["prepared_id"] == prepared_id)
+            existing = self.store.find("mission", "prepared_id", prepared_id)
+            if existing:
+                return existing
+            raise
         self.wakeup.set()
         return record
 
     async def start(self, client, record, settings):
+        folder = contained(self.store.root, "missions/" + record["id"])
+        with FileLock(folder / "dispatch.lock"):
+            record = self.get(record["id"])
+            if record["state"] not in {"staging", "planned"}:
+                return
+            await self._start_locked(client, record, settings)
+
+    async def _start_locked(self, client, record, settings):
         identifier = record["id"]
         folder = contained(self.store.root, "missions/" + identifier)
         if not record.get("bundle_sha256"):
@@ -212,12 +265,15 @@ class Missions:
                 raise AppError("ROMEO n'a pas fourni de plan de soumission.")
             atomic_json(folder / "slurm-plan.json", plan)
             review_plan(plan, arguments)
-            record = self.update(identifier, state="planned", plan_id=plan["plan_id"])
+            if not self.store.transition(identifier, "staging", {"state": "planned", "plan_id": plan["plan_id"]}, kind="mission"):
+                return
+            record = self.get(identifier)
         if record["state"] == "planned":
             review_plan(json.loads((folder / "slurm-plan.json").read_text(encoding="utf8")),
                         job_arguments(record, settings, record["launch"], record["bundle_sha256"]))
             # Durable transition BEFORE the network write; an unknown outcome is never replayed.
-            self.update(identifier, state="submitting")
+            if not self.store.transition(identifier, "planned", {"state": "submitting"}, kind="mission"):
+                return
             result = await client.call("job_submit", plan_id=record["plan_id"], confirm=True)
             job = str(result.get("job_id", ""))
             if not re.fullmatch(r"[0-9]+", job):
@@ -241,13 +297,22 @@ class Missions:
         folder.mkdir()
         extract_verified(archive, folder)
         _read(folder)
-        campaign_id = record.get("campaign_id") or uuid.uuid4().hex
-        payload = {"source_root": str(folder), "name": record["name"], "access": "read_only",
-                   "mission_id": record["id"], "project_id": record["project_id"]}
-        if record.get("campaign_id"):
-            self.store.update(campaign_id, payload, kind="campaign")
-        else:
-            self.store.create("campaign", payload, campaign_id)
+        with self.store.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT payload FROM records WHERE id=? AND kind='mission'", (record["id"],)).fetchone()
+            if row is None:
+                raise AppError("Mission introuvable.")
+            current = json.loads(row["payload"])
+            campaign_id = current.get("campaign_id") or uuid.uuid4().hex
+            payload = {"source_root": str(folder), "name": current["name"], "access": "read_only",
+                       "mission_id": record["id"], "project_id": current["project_id"]}
+            now = time.time()
+            db.execute("INSERT INTO records VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                       "payload=excluded.payload,updated=excluded.updated",
+                       (campaign_id, "campaign", now, now, json.dumps(payload)))
+            current.update(campaign_id=campaign_id, synced_at=now)
+            db.execute("UPDATE records SET payload=?,updated=? WHERE id=?",
+                       (json.dumps(current), now, record["id"]))
         view = self.campaigns.snapshot(campaign_id)
         self.update(record["id"], campaign_id=campaign_id, synced_at=time.time(),
                     speedup=view.get("speedup"), sync_error=None)
@@ -311,12 +376,22 @@ class Missions:
                     elif record["state"] == "submitting":
                         await self.reconcile(client, record)
                     else:
+                        # A queued job may not have extracted its directory yet. Keep
+                        # monitoring it even while delivery of the stop file fails.
+                        try:
+                            await self.deliver_stop(client, record)
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as exc:
+                            self.update(record["id"], stop_delivery_error=type(exc).__name__ +
+                                        ": arrêt en attente de transmission ; suivi maintenu.")
                         await self.refresh(client, record)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 LOGGER.warning("ROMEO mission %s: %s", record["id"], type(exc).__name__)
-                self.update(record["id"], last_error=str(exc)[:600],
+                self.update(record["id"], last_error=str(exc)[:600] if isinstance(exc, AppError)
+                            else type(exc).__name__ + ": connexion ROMEO à réessayer ; aucune nouvelle soumission implicite.",
                             attempts=record.get("attempts", 0) + 1, last_attempt=time.time())
 
     async def monitor(self):

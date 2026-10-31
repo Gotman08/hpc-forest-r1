@@ -66,6 +66,9 @@ def _mission(controller, epoch: dict, baseline: dict, state: dict, *, sources=No
             context["integration_ideas"] = bounded_page(ideas, offset=0, total=len(ideas),
                 maximum=context["memory"]["max_result_characters"])
         context["integration_selection"] = merge["selection"]
+        if merge.get("protected_refinement"):
+            context["post_integration_refinement"] = {"base_id": merge["base_id"],
+                "source_ids": mission.sources, "round": merge["round"]}
         context["memory"]["evidence_ids"] = list(dict.fromkeys([
             *context["memory"]["evidence_ids"], *mission.sources, *merge["idea_ids"]]))
     return mission, context, slot

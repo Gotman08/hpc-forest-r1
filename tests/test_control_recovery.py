@@ -70,12 +70,13 @@ def test_output_limit_advances_only_verified_terminal_native_turn(tmp_path, faul
         run_turn(request, "2" * 64, tmp_path / "replay", lambda: pytest.fail("Never replay"))
 
 
-def test_terminal_control_failure_is_billed_and_retried_within_same_allowance(campaign):  # noqa: F811
+@pytest.mark.parametrize("reason", ["model_output_limit", "invalid_structured_output"])
+def test_terminal_control_failure_is_billed_and_retried_within_same_allowance(campaign, reason):  # noqa: F811
     job = controls.create(campaign, 1, "mother")
     request, sha, _ = controls.begin_call(campaign, job)
     response = mailbox.response_envelope(request, sha, data=None, error="No complete proposal",
         infrastructure_error=False, conversation=receipt_for(request, sha),
-        recovery={"reason": "model_output_limit", "continuation": "same_native_thread"},
+        recovery={"reason": reason, "continuation": "same_native_thread"},
         usage={"tokens": None, "token_accounting": "unknown"})
     controls.finish_call(campaign, job, response, time.time())
     assert job["status"] == "ready" and job["calls"][0]["status"] == "failed"
@@ -91,6 +92,69 @@ def test_terminal_control_failure_is_billed_and_retried_within_same_allowance(ca
         conversation=receipt_for(second, sha2), usage={"tokens": 9, "token_accounting": "exact"})
     controls.finish_call(campaign, job, result, time.time())
     assert job["status"] == "complete" and len(job["calls"]) == job["maximum"]
+
+
+@pytest.mark.parametrize("fault", [None, "transport", "wrong_thread", "forged_text", "forbidden_tool",
+                                  "runtime_error", "not_rejected", "failed_turn", "multiple_terminals",
+                                  "partial_data", "assembly", "analyst"])
+def test_rejected_json_keeps_only_a_verified_completed_steering_turn(tmp_path, fault):
+    start = request_for(first_turn())
+    initial = tmp_path / "first"
+    initial.mkdir()
+    thread = "00000000-0000-0000-0000-000000000010"
+
+    def plan():
+        usage = {"input_tokens": 2, "output_tokens": 1}
+        (initial / "codex.jsonl").write_text("\n".join(json.dumps(v) for v in [
+            {"type": "thread.started", "thread_id": thread}, {"type": "turn.completed", "usage": usage}]))
+        return {"data": {"fixture": True}, "error": None,
+                "usage": {"tokens": 3, "token_accounting": "exact", "events": [usage]}}
+
+    first = run_turn(start, "1" * 64, initial, plan)
+    request = {**start, "conversation": next_turn(first["conversation"], phase="steering"),
+               "active_control": {"kind": "mother"}}
+    if fault == "assembly":
+        request["conversation"]["phase"] = "assembly"
+    if fault == "analyst":
+        request["active_control"]["kind"] = "analyst"
+    output = tmp_path / "second"
+    output.mkdir()
+
+    def invoke():
+        thread = first["conversation"]["thread_id"]
+        if fault == "wrong_thread":
+            thread = "00000000-0000-0000-0000-000000000001"
+        terminal = {"type": "turn.completed", "usage": {"input_tokens": 7, "output_tokens": 3}}
+        if fault == "forged_text":
+            terminal = {"type": "item.completed", "item": {"type": "agent_message", "text": json.dumps(terminal)}}
+        if fault == "failed_turn":
+            terminal = {"type": "turn.failed", "error": {"message": "Connection interrupted"}}
+        events = [{"type": "thread.started", "thread_id": thread}, terminal]
+        if fault == "multiple_terminals":
+            events.append(terminal)
+        (output / "codex.jsonl").write_text("\n".join(json.dumps(v) for v in events))
+        return {"data": {"partial": True} if fault == "partial_data" else None,
+                "error": "Response violates the requested JSON schema",
+                "infrastructure_error": fault == "transport",
+                "rejection": None if fault == "not_rejected" else {"reason": "invalid_structured_output"},
+                "usage": {"tokens": 10, "token_accounting": "exact",
+                          "events": [{"input_tokens": 7, "output_tokens": 3}],
+                          "forbidden_tool_events": ["command_execution"] if fault == "forbidden_tool" else [],
+                          "tool_runtime_errors": ["Runtime unavailable"] if fault == "runtime_error" else []}}
+
+    result = run_turn(request, "2" * 64, output, invoke)
+    assert result["error"] and result["usage"]["tokens"] == 7  # Only this turn, never cumulative usage twice.
+    if fault is None:
+        assert result["data"] is None
+        assert result["recovery"] == {"reason": "invalid_structured_output", "continuation": "same_native_thread"}
+        later = {**start, "conversation": next_turn(result["conversation"], phase="steering")}
+        final = complete_turn(later, "3" * 64, tmp_path / "third")
+        assert final["conversation"]["thread_id"] == first["conversation"]["thread_id"]
+        assert final["conversation"]["turn"] == 2
+    else:
+        assert "conversation" not in result and "recovery" not in result
+    with pytest.raises(InfrastructureError, match="matching"):
+        run_turn(request, "2" * 64, tmp_path / "replay", lambda: pytest.fail("Never replay"))
 
 
 def test_idle_review_cannot_abandon_protected_trials_or_loop_without_evidence(corrected):  # noqa: F811

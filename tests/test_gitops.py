@@ -33,3 +33,15 @@ def test_git_objects_survive_long_path_without_persisting_settings(tmp_path):
     ensure_clean(destination, commit)
     assert (destination / "src" / "main.c").read_text() == "int main(void) { return 0; }\n"
     assert "core.longpaths" not in git(destination, "config", "--local", "--list")
+
+
+def test_latin1_source_diff_is_readable_text(tmp_path):
+    source = tmp_path / "source"
+    (source / "src").mkdir(parents=True)
+    (source / "src" / "main.c").write_bytes(b"int main(void) { return 0; }\n")
+    repo = tmp_path / "repo"
+    base = initialize_source(source, repo)
+    (repo / "src" / "main.c").write_bytes("/* donnée */\nint main(void) { return 0; }\n".encode("latin-1"))
+    git(repo, "commit", "-am", "Latin-1 comment")
+    diff = git(repo, "diff", base, git(repo, "rev-parse", "HEAD"), "--", "src")
+    assert "+/* donn\ufffde */" in diff

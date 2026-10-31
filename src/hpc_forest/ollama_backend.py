@@ -194,8 +194,9 @@ class OllamaBackend:
             },
         }
         if unlimited_tokens(config):
+            # Lift the output quota only. num_ctx is the window size: without it the
+            # server falls back to its default window and silently truncates prompts.
             payload["options"]["num_predict"] = -1
-            payload["options"].pop("num_ctx")
         logs = root / "logs" / mission.id
         atomic_json(logs / "ollama-request.json", payload)
         start = time.monotonic()

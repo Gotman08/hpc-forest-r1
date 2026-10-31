@@ -29,6 +29,17 @@ def imports(db, epoch, role):
     return state(db, epoch)["imports"].get(role, [])
 
 
+def _planned(db, epoch, current):
+    """Trees of the decision being applied, including those created by its earlier actions."""
+    return [*db.get(f"forest_plan:{epoch}", {}).get("children", []), *current["children"]]
+
+
+def _new_role(db, epoch, current, prefix):
+    roles = [c["role"] for c in _planned(db, epoch, current)]
+    return prefix + str(max([int(r[len(prefix):]) for r in roles if r.startswith(prefix)
+                             and r[len(prefix):].isdigit()] or [0]) + 1)
+
+
 def measured_source(db, epoch, identity):
     """Only final, correct, measured programs can seed trees or an integration."""
     row = db.one("SELECT * FROM trials WHERE id=? AND epoch=? AND state<>'pending'", (identity, epoch))
@@ -65,10 +76,12 @@ def _action(db, epoch, current, action, decision_id, snapshot):
         if unavailable:
             raise InfrastructureError(f"Tree {role} cannot admit work ({unavailable}); "
                                       "continue/resume cannot bypass its limit")
-    returns_to_work = kind in {"resume", "branch", "integrate"} or (
+    returns_to_work = kind in {"resume", "branch", "integrate", "refine"} or (
         kind == "continue" and role not in current["suspended"])
     if guarded(db) and returns_to_work:
         lifecycle(current)["closing"] = None
+    if kind == "refine":
+        return _refinement(db, epoch, current, action, decision_id)
     if kind in {"branch", "integrate"}:
         selected = [measured_source(db, epoch, identity) for identity in action["source_ids"]]
         if len({item["commit"] for item in selected}) != len(selected):
@@ -81,11 +94,7 @@ def _action(db, epoch, current, action, decision_id, snapshot):
                 for field in ("subject", "objective")
             ):
                 raise InfrastructureError("A distinct objective requires a distinct research branch")
-        prefix = "Gm" if kind == "integrate" else "T"
-        roles = [c["role"] for c in [*initial, *current["children"]]]
-        index = max([int(r[len(prefix):]) for r in roles if r.startswith(prefix)
-                     and r[len(prefix):].isdigit()] or [0]) + 1
-        role = prefix + str(index)
+        role = _new_role(db, epoch, current, "Gm" if kind == "integrate" else "T")
         estimate = forecast_independent(db, [role])
         if not estimate["can_admit"]:
             raise InfrastructureError("No budget for this new experiment before confirmation")
@@ -126,6 +135,38 @@ def _action(db, epoch, current, action, decision_id, snapshot):
     return {}
 
 
+def _refinement(db, epoch, current, action, decision_id):
+    from .active_contract import settings
+    from .independent_budget import forecast_independent
+
+    if db.get("config").get("binary_tree", {}).get("enabled"):
+        raise InfrastructureError("Seeded refinements require a TreeQuest policy")
+    source = measured_source(db, epoch, action["source_ids"][0])
+    if source["role"] != action["tree"]:
+        raise InfrastructureError("A refinement source must belong to its target tree")
+    parent = next(c for c in _planned(db, epoch, current) if c["role"] == action["tree"])
+    for child in current["children"]:
+        if child.get("kind") == "refinement" and child.get("base_source_id") == source["id"]:
+            return {"existing_tree": child["role"], "base_source_id": source["id"]}
+    estimate = forecast_independent(db, [action["tree"]])
+    unstarted = sum(c.get("experiment_budget_seconds", 0) for c in current["children"]
+                    if not db.one("SELECT id FROM trials WHERE epoch=? AND role=? LIMIT 1", (epoch, c["role"])))
+    if (not estimate["can_admit"] or estimate["remaining_seconds"] is not None
+            and estimate["remaining_seconds"] < estimate["reserve_seconds"] + estimate["next_work_seconds"] + unstarted):
+        raise InfrastructureError("No budget for the measured continuation before final refinement and confirmation")
+    role = _new_role(db, epoch, current, "T")
+    child = {"role": role, "kind": "refinement", "subject": parent["subject"],
+             "objective": parent["objective"] + "\nTargeted continuation: " + action["rationale"],
+             "stop_condition": action["stop_condition"], "base_commit": source["commit"],
+             "base_source_id": source["id"], "source_ids": [source["id"]],
+             "cost_role": action["tree"], "refinement_trials": settings(db.get("config"))["progress_trials"],
+             "experiment_budget_seconds": estimate["candidate_work_seconds"], "control_decision_id": decision_id}
+    current["children"].append(child)
+    current["imports"][role] = [source["id"]]
+    return {"created_tree": role, "base_source_id": source["id"], "search_root": source["id"],
+            "policy": "independent-measured-root-ab-mcts"}
+
+
 def apply(db, epoch, job_id, snapshot, decision):
     """Apply a receipt once; state and its decision ledger commit in one transaction.
 
@@ -149,6 +190,11 @@ def apply(db, epoch, job_id, snapshot, decision):
                 raise InfrastructureError("Search already closed")
             if guarded(db) and action["kind"] == "close" and len(decision["decisions"]) != 1:
                 raise InfrastructureError("Closure review must be a standalone decision")
+            if guarded(db) and action["kind"] in {"continue", "refine"}:
+                protection = lifecycle(current)["protections"].get(action["tree"], {})
+                known = snapshot["trees"][action["tree"]]["completed_ids"]
+                if protection.get("source_id") and protection["source_id"] not in known:
+                    raise InfrastructureError("New measured evidence requires fresh continuation advice")
             invalidate(db, epoch, snapshot, action)
             detail = _action(db, epoch, proposed, action, identity, snapshot)
             current = proposed
@@ -174,11 +220,16 @@ def apply(db, epoch, job_id, snapshot, decision):
 
 
 def context(db, mission):
+    from .active_lifecycle import ancestors
+
     current = state(db, mission.epoch)
     analyst = current["analysts"].get(mission.role, {})
+    protections = current.get("lifecycle", {}).get("protections", {})
+    parents = ancestors(db, mission.epoch, mission.id)
+    protected = next((p for p in protections.values() if p["source_id"] in parents and p["remaining"]), None)
     return {"plan_revision": current["revision"], "analyst_report_id": analyst.get("report_id"),
             "analyst_interpretation": analyst.get("report"),
             "mother_interpretation": current["advice"].get(mission.role),
             "authorized_import_ids": current["imports"].get(mission.role, []),
-            "protected_progress": current.get("lifecycle", {}).get("protections", {}).get(mission.role),
+            "protected_progress": protected,
             "warning": "Model interpretations, not correctness, rewards or measured performance"}

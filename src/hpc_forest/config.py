@@ -112,6 +112,9 @@ def config_from_data(changes: dict) -> dict:
 
 
 def validate(c: dict) -> None:
+    from .execution_validation import requirements
+
+    requirements(c.get("execution_validation"))
     from hpc_forest.search.policy import settings as search_settings
 
     from .model_policy import generator_pool

@@ -5,13 +5,22 @@ import pytest
 
 import hpc_forest.backends as backends
 from hpc_forest.core import Mission, ProcessResult
+from hpc_forest.model_policy import DSH_MODEL
 
 
 @pytest.mark.parametrize("with_usage", [True, False])
+@pytest.mark.parametrize("model", ["gpt-6-luna", DSH_MODEL])
 def test_codex_contract_preserves_model_and_records_available_usage(
-    tmp_path, monkeypatch, config, with_usage
+    tmp_path, monkeypatch, config, with_usage, model
 ):
     captured = {}
+    config["codex"]["model"] = model
+    if model == DSH_MODEL:
+        from hpc_forest.controller import RESULT_SCHEMA
+
+        monkeypatch.setenv("ROMEO_LLM_KEY", "fixture-private-key")
+        (tmp_path / "trusted").mkdir()
+        (tmp_path / "trusted/result-schema.json").write_text(json.dumps(RESULT_SCHEMA))
     monkeypatch.setattr(backends.shutil, "which", lambda _: "fake-codex-for-contract-test")
 
     def fake_process(argv, cwd, log, timeout, **kwargs):
@@ -61,7 +70,10 @@ def test_codex_contract_preserves_model_and_records_available_usage(
     result = backends.CodexBackend().generate(mission, {"deadline": 9999999999}, config, tmp_path)
     assert result.error is None
     assert result.tokens == (150 if with_usage else None)
-    assert captured["argv"][captured["argv"].index("--model") + 1] == "gpt-6-luna"
+    assert captured["argv"][captured["argv"].index("--model") + 1] == model
+    assert ("--output-schema" in captured["argv"]) is (model != DSH_MODEL)
+    if model == DSH_MODEL:
+        assert json.loads(captured["stdin"].splitlines()[-1]) == RESULT_SCHEMA
     assert 'model_reasoning_effort="max"' in captured["argv"]
     assert "workspace-write" in captured["argv"]
     assert not any("bypass" in arg for arg in captured["argv"])

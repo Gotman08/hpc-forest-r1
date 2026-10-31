@@ -10,7 +10,7 @@ d'optimisation n'est injecté. Les anciennes campagnes restent lisibles et ne
 sont pas migrées implicitement.
 
 Le contrat `investigation` est figé dans la nouvelle campagne. Valeurs par
-défaut : six collectes par requête, 120 secondes par collecte (attente du verrou,
+défaut : douze collectes par requête, 120 secondes par collecte (attente du verrou,
 compilation, test et analyse inclus), 300 secondes de validité par requête,
 256 Mio de fichiers par collecte. La fin de recherche ferme les droits de
 collecte ; l'assemblage lit les preuves déjà acquises. Ces limites encadrent
@@ -51,7 +51,7 @@ preuve de performance.
 |---|---|---|---|
 | Mother, investigation et préparation | Programmes évalués du snapshot | Sources, interfaces et preuves paginées | Oui, dans le grant |
 | Analyste vivant, Mother aux jalons | IDs visibles dans son dossier figé | Idem | Oui, diagnostic ciblé sur ces programmes |
-| Générateur | Programmes évalués du snapshot | Idem | Non ; décrit les questions dans ses notes |
+| Générateur de recherche | Programmes évalués du snapshot | Idem | Oui ; aucun brouillon non évalué ni chemin arbitraire |
 | Mother après fermeture | Programmes évalués | Idem | Non |
 
 Un analyste peut donc reprendre une mesure après un essai qui laisse une
@@ -59,6 +59,23 @@ question ouverte. Ce droit ne donne aucun moyen de modifier un objectif, un
 parent de recherche, une source d'intégration, les tests ou un score. Les
 anciens outils ROMEO qui soumettent des jobs ne sont pas activés dans ce
 parcours. Les diagnostics utilisent l'allocation courante seulement.
+
+Une suspension bloque les nouvelles admissions, mais laisse terminer les essais
+déjà engagés. Un progrès mesuré tardif peut rouvrir l'arbre avant sa clôture.
+Lorsqu'un nouvel essai tient encore dans le budget, un arbre de
+recherche conserve une fenêtre de trois programmes évalués pour distinguer
+un premier échec d'une piste épuisée. Les échecs d'infrastructure sans score
+ne remplissent pas cette fenêtre. Les intégrations intermédiaires conservent
+leur contrat d'un seul programme. TreeQuest continue à choisir les parents :
+ces garde-fous ne changent ni ses scores, ni sa politique AB-MCTS.
+
+La réserve de recherche protège un programme final, ses lectures de sélection
+estimées et la confirmation indépendante. Les autres tours d'assemblage sont
+optionnels et passent leur propre contrôle d'admission. Leur nombre nominal
+reste visible dans la prévision, sans être prélevé d'avance sur tous les essais.
+Les analystes sont invités à profiler la meilleure variante correcte de leur
+arbre et à lire ses preuves natives avant de conseiller une poursuite ou un arrêt.
+Une collecte réussie sur la référence n'est pas une mesure de la variante.
 
 ## Outils
 
@@ -68,6 +85,7 @@ parcours. Les diagnostics utilisent l'allocation courante seulement.
 | `diagnostic_sources(offset, limit)` | Sources admises, commits et état de correction officiel |
 | `diagnostic_source(source_id, path, offset, limit, byte_offset)` | Liste des fichiers puis lignes exactes ; octets base64 pour les lignes très longues |
 | `diagnostic_collect(source_id, collector, question, request_key, options)` | Collecte bornée sur une copie ; options typées, aucune commande arbitraire |
+| `diagnostic_survey(source_id, question, request_key)` | Passe les dix collecteurs sur une variante évaluée, réutilise les preuves du même commit et conserve les refus/absences |
 | `diagnostic_summaries(offset, limit)` | Collections, questions, statut et IDs |
 | `diagnostic_read(evidence_id, artifact, offset, limit, binary)` | Manifeste, texte paginé ou octets bruts ; contrôle du SHA-256 |
 | `diagnostic_table(evidence_id, artifact, table, columns, equals, order_by, descending, offset, limit)` | Tables SQLite natives, schéma et lignes filtrées ; accès en lecture seule sans SQL libre |
@@ -94,8 +112,8 @@ cellules tronquées sont signalées, et le fichier brut demeure accessible.
 | `hpctoolkit` | `hpcrun` après le lanceur MPI, `hpcstruct`, `hpcprof` ; profils, traces et base native | Support effectif d'OMPT, CUDA/HIP/Level Zero et événements dépendant du build ; HPCViewer pour l'exploration graphique |
 | `nsys` | Chronologie CUDA/NVTX/OSRT, domaines MPI/OpenMP demandables ; `nsys stats` CSV et export SQLite par rapport | Pas d'échantillonnage CPU privilégié par défaut ; rapports par rang ; chronologie perturbée par la collecte |
 | `ncu` | Filtre de noyau, métriques, saut et nombre de lancements ; rapport natif, CSV, source/SASS | Permissions GPU, replay, architecture ; replay MPI concurrent refusé ; aucune assimilation au temps bout en bout |
-| `compiler` | Interception des compilateurs, version/hash, arguments originaux et ajoutés, rapports et intermédiaires | Chemins absolus et objets déjà compilés peuvent contourner l'interception ; couverture toujours explicitée |
-| `disassembly` | `objdump -d -S -l -C`, dépendances binaires | Association ligne/instruction dépendant des informations de debug |
+| `compiler` | Interception des compilateurs ; pour les noyaux CUDA, capture des appels NVRTC, options originales, journal, PTX et CUBIN | NVRTC conserve ses options exactes ; appels statiques ou symboles obtenus par `dlopen` peuvent contourner l'observateur ; couverture explicitée |
+| `disassembly` | `objdump -d -S -l -C` ; pour CUDA, `cuobjdump` sur le CUBIN capturé et ressources statiques | Le lanceur JSON ne représente pas le code GPU ; association ligne/instruction dépendant des informations de debug |
 | `scorep` | Rebuild séparé préfixant les compilations/liens interceptés par Score-P ; CUBE/OTF2 | Compilateur et adaptateurs MPI/OpenMP compatibles requis ; aucun remplacement de compilateur |
 | `scalasca` | Build Score-P puis `scalasca -analyze -t`, archive dédiée | Gros volumes et perturbations possibles ; outils supplémentaires requis |
 
@@ -111,10 +129,20 @@ Une famille inconnue ne reçoit aucun drapeau deviné.
 Pour un projet importé, la charge doit être une commande directe, comme le
 contrat actuel de l'application. Une commande shell composée est signalée
 comme non prise en charge par cet adaptateur. Le moteur générique peut garder
-un lanceur MPI figé et placer HPCToolkit/Nsight après celui-ci. L'application
-ROMEO conserve son contrat actuel d'un cœur d'exécution ; l'ajout du profilage
-n'élargit pas ses ressources et n'en fait pas une interface de configuration
-MPI multi-nœuds.
+un lanceur MPI figé et placer HPCToolkit/Nsight après celui-ci. Un protocole
+`python protocol.py benchmark solution search` est profilé en entier, avec
+ses sous-processus ; le chemin `solution` est un argument, pas une frontière
+de commande. Les lanceurs `srun`, `mpirun`, `mpiexec`, `mpiexec.hydra` et
+`orterun` sont reconnus avec leurs options prises en charge. Les commandes
+MPI enveloppées, MPMD ou de syntaxe inconnue demandent un adaptateur explicite ;
+aucun découpage n'est deviné. Nsight Compute conserve son refus du replay MPI
+concurrent. L'application
+ROMEO conserve le placement historique sans contrat explicite. Avec un contrat
+`execution_validation`, les processus et leurs diagnostics héritent de
+l'allocation CPU vérifiée, et les variables OpenMP expriment le nombre de
+threads de calcul demandé. Le profilage ne change pas ces exigences figées.
+Le contrôle configurable actuel porte sur un nœud CPU, sans prise en charge
+implicite de MPI multi-nœuds.
 
 ## Conservation et interprétation
 
@@ -127,6 +155,9 @@ réévalue et confirme indépendamment sans ces profileurs.
 
 Les collectes prennent le même verrou de cible que l'évaluateur et utilisent
 l'affinité du contrôleur. Elles ne chevauchent donc pas ses mesures officielles.
+Les commandes figées reçoivent la phase `search` pour réutiliser les entrées de
+recherche ; les données de confirmation restent réservées au contrôleur.
+La provenance distingue cette sélection d'entrées de l'exécution diagnostique.
 L'intégrité des fichiers protégés est vérifiée avant et après. Les exécutables
 et les scripts de projet restent des programmes fournis par l'utilisateur :
 la copie et les hashes ne constituent pas une isolation OS contre un programme
@@ -154,6 +185,25 @@ ni que ses compteurs ou adaptateurs fonctionnent. `perf` peut venir du système,
 donc son absence de Spack ne suffit pas à le déclarer absent. Les sondes sur le
 nœud font foi pour cette allocation. Le service n'installe ni ne charge un
 paquet de son propre chef.
+
+## Approfondissement et coût des collectes
+
+Le contrôleur relie les fenêtres de suivi aux vrais descendants du programme qui
+a progressé. Mother peut ouvrir une continuation `refine`, bornée à deux essais
+par défaut, dans un nouvel arbre TreeQuest amorcé par ce programme. Les appels
+AB-MCTS `ask/tell` restent inchangés et aucun score n'est recopié dans l'arbre
+source. Les parents de recherche, de délégation et les imports restent distincts.
+Les dossiers encore en file sont rafraîchis avant publication ; une requête déjà
+publiée conserve son instantané et ses preuves.
+
+Les outils absents sont détectés avant l'attente du verrou cible. Le refus explicite
+Nsight Compute `ERR_NVGPUCTRPERM` est réutilisé seulement pour les mêmes binaire,
+hôte, allocation, architecture et protocole. Il reste une absence de mesure, avec
+un score absent. La configuration active complète réserve une intégration puis
+un réglage du programme intégré mesuré. Cette seconde étape peut profiler ses
+sources autorisées pendant au plus 45 secondes, si le temps restant préserve
+l'écriture, l'évaluation et la confirmation. Les autres collectes après fermeture
+restent interdites ; les résultats antérieurs restent lisibles.
 
 ## Validation reproductible
 

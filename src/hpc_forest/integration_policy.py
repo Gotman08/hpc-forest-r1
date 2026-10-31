@@ -70,6 +70,11 @@ def selection_messages(context, config):
         "Do not infer that unseen variants or an entire tree are useless from one failed trial. "
         "When must_decide=true, do not request another read. Native conversation compaction "
         "is managed by Codex; do not restart the conversation."
+        " When protected_refinement is true, refine the exact refinement_base_id: "
+        "test one remaining interaction or parameter on the already combined program. "
+        "Standalone rankings need not survive combination. Preserve correctness and "
+        "the retained mechanisms; choose the controlled change yourself. A reserved "
+        "diagnostic grant may profile this measured base before the code turn."
     )
     system, schema, binding = bind(system, schema, config.get("skills"), role="Mother", phase="assembly")
     return {"schema": schema, **binding, "messages": [
@@ -138,7 +143,7 @@ def _select(controller, epoch, baseline, state, number, bounds):
     from hpc_forest.memory.context import attach_memory
 
     from .adaptive_budget import record_timing
-    from .independent_budget import assembly_admission
+    from .independent_budget import assembly_admission, required_assembly_rounds
     from .mother import mother_context
 
     db, cfg = controller.db, settings(controller.config)
@@ -159,11 +164,24 @@ def _select(controller, epoch, baseline, state, number, bounds):
     seen = consultations.known()
     total_topics = context["memory"]["catalog"]["total"]
     backend = getattr(controller.backend, "backend", controller.backend)
+    required = min(bounds["rounds"], required_assembly_rounds(controller.config))
+    protected = bool(state["steps"]) and 1 < number <= required
+    integrated = [s for s in state["steps"] if protected and s["outcome"].get("correct") is True
+                  and isinstance(s["outcome"].get("mean_seconds"), (int, float))
+                  and math.isfinite(s["outcome"]["mean_seconds"]) and s["outcome"]["mean_seconds"] > 0]
+    refinement_base = min(integrated, key=lambda s: s["outcome"]["mean_seconds"])["mission_id"] if integrated else None
+    if protected and refinement_base:
+        with MemoryReader(controller.root, mission, controller.config, epoch["protocol_id"]) as reader:
+            refinement_card = card(reader.exact(refinement_base))
+        consultations.remember({"items": [refinement_card]})
+        seen.add(refinement_base)
+        context["memory"]["refinement_reference"] = refinement_card
     context["assembly_selection"] = {"policy": POLICY, "round": number, "max_rounds": bounds["rounds"],
         "previous_integrations": [{"id": step["mission_id"], "correct": step["outcome"].get("correct"),
                                    "mean_seconds": step["outcome"].get("mean_seconds"),
                                    "input_ids": step["input_ids"]} for step in state["steps"]],
-        "can_finish": bool(state["steps"])}
+        "can_finish": bool(state["steps"]) and not protected,
+        "protected_refinement": protected, "refinement_base_id": refinement_base if protected else None}
     for turn in range(1, bounds["selection_calls_per_round"] + 1):
         context["memory"]["coverage"] = state["coverage"] = consultations.coverage(total_topics)
         budget = assembly_admission(db)
@@ -196,7 +214,9 @@ def _select(controller, epoch, baseline, state, number, bounds):
         try:
             with MemoryReader(controller.root, mission, controller.config, epoch["protocol_id"]) as reader:
                 decision = validate_decision(generated.usage["assembly_decision"], reader, seen, cfg,
-                                             can_finish=bool(state["steps"]), must_decide=must_decide)
+                                             can_finish=context["assembly_selection"]["can_finish"], must_decide=must_decide)
+                if protected and refinement_base and decision["action"] == "integrate" and decision["base_id"] != refinement_base:
+                    raise CandidateRejected("The protected refinement must start from the measured integrated program")
                 entry.update(status="complete", decision=decision)
                 if decision != generated.usage["assembly_decision"]:
                     entry["normalized_unused_finish_fields"] = True
@@ -223,12 +243,13 @@ def _select(controller, epoch, baseline, state, number, bounds):
         if must_decide:
             break  # Do not spend the remaining time repeating a rejected selection.
     _record_selection_calls(db, turn)
-    if any(step.get("outcome", {}).get("correct") is True for step in state["steps"]):
+    if not protected and any(step.get("outcome", {}).get("correct") is True for step in state["steps"]):
         return {"action": "finish", "base_id": "", "source_ids": [], "idea_ids": [],
                 "read": empty_read(), "rationale": "Selection allowance exhausted after a valid integration; "
                 "confirm the best measured program", "controller_fallback": True}
     # The finite selection allowance cannot prevent an actual code-writing/evaluation turn.
-    return {"action": "integrate", "base_id": reference["id"], "source_ids": [reference["id"]],
+    fallback = refinement_base if protected and refinement_base else reference["id"]
+    return {"action": "integrate", "base_id": fallback, "source_ids": [fallback],
             "idea_ids": [], "read": empty_read(), "rationale": "Selection allowance exhausted; "
             "write a measured integration from the best verified reference", "controller_fallback": True}
 
@@ -241,7 +262,7 @@ def _record_selection_calls(db, count):
 def integrate_memory(controller, epoch, baseline, state):
     from .completion import _integrate
     from .forest import research_roles
-    from .independent_budget import assembly_admission
+    from .independent_budget import assembly_admission, required_assembly_rounds
 
     bounds = limits(controller.config, len(research_roles(controller.db)))
     state.update(integration_policy=POLICY, limits=bounds, steps=[], selections=[],
@@ -264,6 +285,7 @@ def integrate_memory(controller, epoch, baseline, state):
         sources = [candidates[identity] for identity in decision["source_ids"]]
         merge = {"round": number, "pair": 1, "step": number, "final": number == bounds["rounds"],
                  "base_id": decision["base_id"], "idea_ids": decision["idea_ids"],
+                 "protected_refinement": 1 < number <= required_assembly_rounds(controller.config),
                  "selection": decision}
         mission, outcome, mother = _integrate(controller, epoch, baseline, state, sources=sources, merge=merge)
         state.update(mission_id=mission.id, outcome=outcome, mother=mother,

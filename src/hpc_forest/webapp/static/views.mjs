@@ -4,6 +4,9 @@ import {forestMarkup} from "./graph.mjs";
 import {searchControls, searchSummary} from "./search.mjs";
 import {historyPage, HISTORY_PAGE_SIZES} from "./history.mjs";
 import {resultCharts} from "./result-charts.mjs";
+import {modelLabel, modelFields, requiresDsh} from "./models.mjs";
+import {validationControls, validationSummary} from "./validation.mjs";
+export {modelLabel} from "./models.mjs";
 
 const button=(label,action,symbol="arrow",cls="primary",extra="") =>
   '<button class="button '+cls+'" data-action="'+action+'" '+extra+'>'+icon(symbol)+e(label)+'</button>';
@@ -15,7 +18,6 @@ const cardTitle=(title,extra="")=>'<div class="card-title"><h2>'+e(title)+'</h2>
 const stat=(label,value,symbol="clock",cls="")=>'<div class="stat-card '+cls+'"><span class="stat-icon">'+icon(symbol)+'</span><div><p>'+label+'</p><strong>'+value+'</strong></div></div>';
 export const empty=(title,message,action="")=>'<div class="empty-state">'+icon("folder")+'<h2>'+title+'</h2><p>'+message+'</p>'+action+'</div>';
 
-export const modelLabel = (model="gpt-6-luna", effort="max") => ({"gpt-6-luna":"GPT-6 Luna","gpt-6.1-sol":"GPT-6.1 Sol","gpt-6-astra":"GPT-6 Astra"}[model]||model)+" · "+effort;
 export function shell(active,projectName="") {
   const items=[["project","Projet","folder"],["prepare","Préparation","file"],["mission","Mission","play"],
     ["results","Résultats","bars"],["history","Historique","clock"]];
@@ -77,10 +79,9 @@ export function prepareView(project,info={}) {
     '<aside class="column"><section class="card">'+cardTitle("Exécution")+
     '<label class="field">Cible<select name="target"><option value="cpu" '+(c.target==="cpu"?"selected":"")+'>ROMEO · CPU</option><option value="gpu" '+(c.target==="gpu"?"selected":"")+(!info.connection?.targets?.includes("gpu")?" disabled":"")+'>ROMEO · GPU (profil requis)</option></select></label>'+
     field("duration_minutes","Durée cible (minutes)",c.duration_minutes,'min="1" max="1440" required',"La répartition entre recherche, analyses et confirmation sera vérifiée avant exécution.","number")+
-    '<label class="field">Modèle<select name="model" id="model-choice">'+(info.models||[{id:"gpt-6-luna",label:"GPT-6 Luna",efforts:["max"]}]).map(m=>'<option value="'+e(m.id)+'" '+(c.model===m.id?'selected':'')+'>'+e(m.label)+'</option>').join("")+'</select></label>'+
-    '<label class="field">Effort<select name="reasoning_effort" id="effort-choice">'+(info.models?.find(m=>m.id===c.model)?.efforts||["max"]).map(v=>'<option value="'+e(v)+'" '+(c.reasoning_effort===v?'selected':'')+'>'+e(v)+'</option>').join("")+'</select><small>Modèle principal pour tous les rôles, sauf générateurs explicitement ajoutés ci-dessous. Figé au lancement.</small></label>'+
+    modelFields(c,info)+
     '<div class="fixed-setting">'+icon("refresh")+'<div><strong>Mémoire neuve</strong><small>Pour chaque nouvelle mission</small></div></div></section>'+
-    searchControls(c,info)+'<section class="card">'+cardTitle("Consignes du projet")+
+    validationControls(c)+searchControls(c,info)+'<section class="card">'+cardTitle("Consignes du projet")+
     field("statement","Objectif et contraintes",c.statement,'rows="5" placeholder="Interfaces à préserver, limites mémoire, formats…"',"Précisez les fonctions à préserver et les limites à respecter.","textarea")+'</section>'+
     '<section class="card connection-card">'+icon("server")+'<h3>Soumission ROMEO</h3><p>Le dossier est figé avant la soumission. La recherche continue sur ROMEO même si cet onglet ou le PC est fermé. Une réserve de 30 minutes complète la durée cible pour finaliser.</p></section></aside></div>'+
     '<div class="sticky-actions"><span id="save-state" class="muted small">Contrat sauvegardé</span><div class="button-row"><button type="submit" class="button secondary">'+icon("check")+'Enregistrer le contrat</button>'+
@@ -88,12 +89,15 @@ export function prepareView(project,info={}) {
 }
 
 export function preparedView(mission,info={}) {
+  const dsh=requiresDsh(mission.contract.contract||mission.contract,info.models);
   return heading("Mission préparée",e(mission.name),badge("prepared"))+
     note('<strong>Le dossier est sauvegardé. Aucun job n’a été soumis.</strong><p>Le code initial, les documents et le contrat sont figés dans une nouvelle mission. Vous pouvez maintenant lancer la campagne sur ROMEO.</p><p>Les commandes et le code s’exécuteront avec les droits de votre compte ROMEO. Importez uniquement du code de confiance ; cette version ne fournit pas de bac à sable contre du code hostile.</p>')+
     '<div class="columns"><section class="card">'+cardTitle("Prêt pour la prochaine étape")+
+    validationSummary({required:mission.contract.contract?.execution_validation})+
     '<dl class="key-values"><div><dt>Modèle</dt><dd>'+e(modelLabel(mission.contract.model,mission.contract.reasoning_effort))+'</dd></div><div><dt>Cible</dt><dd>ROMEO · '+e(mission.target.toUpperCase())+'</dd></div><div><dt>Création</dt><dd>'+date(mission.created)+'</dd></div><div><dt>Mémoire</dt><dd>Nouvelle mission</dd></div></dl>'+
     '<p class="small">Recherche : '+e(mission.contract.contract?.search?.algorithm||"ab-mcts-a")+' · '+e(mission.contract.contract?.search?.distribution||"")+'<br>Générateurs : '+e((mission.contract.contract?.generator_pool||[]).map(m=>modelLabel(m.model,m.reasoning_effort)).join(", ")||"Modèle principal uniquement")+'<br>Archive de diversité : '+(mission.contract.contract?.evolution?.enabled?"activée":"désactivée")+'</p>'+
-    '<div class="action-bar">'+button("Lancer sur ROMEO","launch","play","primary",info.submission_enabled&&info.connection?.targets?.includes(mission.target)?"":"disabled")+link("Télécharger le dossier","/api/prepared/"+mission.id+"/download","download","secondary")+'</div></section>'+
+    (dsh?note(info.connection?.dsh_romeo_configured?"Le modèle DeepSeek et sa passerelle doivent déjà fonctionner sur ROMEO. Cette mission ne démarre ni n’arrête leur allocation.":"Configurez la connexion dsh-romeo dans romeo.json avant de lancer cette mission.","amber"):"")+
+    '<div class="action-bar">'+button("Lancer sur ROMEO","launch","play","primary",info.submission_enabled&&info.connection?.targets?.includes(mission.target)&&(!dsh||info.connection?.dsh_romeo_configured)?"":"disabled")+link("Télécharger le dossier","/api/prepared/"+mission.id+"/download","download","secondary")+'</div></section>'+
     '<section class="card">'+cardTitle("Ce que contient le dossier")+'<ul class="check-list"><li>'+icon("check")+'Le code original et ses empreintes</li><li>'+icon("check")+'Le contrat de compilation et de vérification</li><li>'+icon("check")+'Les documents joints</li></ul><p class="muted">Il ne contient pas encore de code optimisé ni de résultat de mesure.</p>'+
     link("Revenir au projet","#/prepare/"+mission.project_id,"arrow","secondary")+'</section></div>';
 }
@@ -104,12 +108,13 @@ function stepper(c) {
   return '<ol class="stepper">'+[["Préparation",true],["Recherche",c.trial_count>0],["Confirmation",complete]].map(([label,done],i)=>
     '<li class="'+(done?'done':'pending')+'"><span class="step-dot">'+(done?icon("check"):i+1)+'</span><div><strong>'+label+'</strong><small>'+(done?'Enregistrée':'Non confirmée')+'</small></div></li>').join("")+'</ol>';
 }
-export function missionView(campaign,selected=null) {
+export function missionView(campaign,selected=null,showActivity=true) {
   const completed=["confirmed","no_gain"].includes(campaign.state);
   const integration=campaign.integrations||[];
   return heading(completed?"Recherche terminée":"Suivi de la mission",e(campaign.name)+" · "+campaign.trial_count+" essais enregistrés",badge(campaign.state))+
     evidenceNote(campaign)+(campaign.truncated?note("Cette vue est limitée aux 3 000 premiers essais. Consultez le rapport complet pour la suite.","amber"):"")+stepper(campaign)+
-    '<div class="columns mission-columns"><section class="column"><section class="chalkboard"><header class="board-header"><div><h2>Arbres de recherche</h2><p>Chaque nœud correspond à un essai enregistré.</p></div><div class="zoom-controls"><button data-action="zoom-out" aria-label="Réduire">'+icon("minus")+'</button><span id="zoom-value">100 %</span><button data-action="zoom-in" aria-label="Agrandir">'+icon("plus")+'</button><button data-action="zoom-fit" aria-label="Réinitialiser le cadrage">'+icon("fit")+'</button></div></header><div class="forest-scroll"><div class="forest-canvas">'+forestMarkup(campaign,selected)+'</div></div><footer class="board-legend"><span><i class="legend-node valid"></i>Correct</span><span><i class="legend-node"></i>Non confirmé</span><span><i class="legend-node invalid"></i>Incorrect</span><small>'+campaign.trees.length+' arbres</small></footer></section>'+
+    validationSummary(campaign.execution_validation)+
+    '<div class="columns mission-columns"><section class="column"><section class="chalkboard"><header class="board-header"><div><h2>Arbres de recherche</h2><p>Chaque nœud correspond à un essai enregistré.</p></div><div class="zoom-controls"><button data-action="zoom-out" aria-label="Réduire">'+icon("minus")+'</button><span id="zoom-value">100 %</span><button data-action="zoom-in" aria-label="Agrandir">'+icon("plus")+'</button><button data-action="zoom-fit" aria-label="Réinitialiser le cadrage">'+icon("fit")+'</button></div></header><div class="forest-scroll"><div class="forest-canvas">'+forestMarkup(campaign,selected,showActivity)+'</div></div><footer class="board-legend"><span><i class="legend-node valid"></i>Correct</span><span><i class="legend-node active"></i>En cours</span><span><i class="legend-node"></i>Non confirmé</span><span><i class="legend-node invalid"></i>Incorrect</span><span><i class="legend-edge"></i>Parent d’un autre arbre ou d’une intégration</span><small>'+campaign.trees.length+' arbres</small></footer></section>'+
     (integration.length?'<section class="card integration-card">'+icon("code")+'<div><h3>Combinaisons et intégration</h3><p>Programmes évalués séparément des arbres.</p></div>'+integration.map(t=>'<button class="button ghost small-button" data-node="'+e(t.id)+'">'+e(t.role)+' · '+seconds(t.seconds)+icon("chevron")+'</button>').join("")+'</section>':'')+
     '<section id="trial-panel" class="card trial-panel">'+cardTitle("Preuves de la variante")+'<div class="empty-detail">'+icon("info")+'Sélectionnez un nœud pour lire son code, ses tests et ses mesures.</div></section></section>'+
     '<aside class="column"><section class="card">'+cardTitle("Activité enregistrée")+'<div class="activity-item"><span class="activity-dot green"></span><div><strong>'+campaign.trial_count+' essais</strong><small>'+campaign.trees.reduce((n,t)=>n+t.correct_count,0)+' variantes correctes dans les arbres</small></div></div><div class="activity-item"><span class="activity-dot '+(campaign.best_confirmed?"green":"gray")+'"></span><div><strong>Confirmation</strong><small>'+e(campaign.final_g_status||"Non renseignée")+'</small></div></div></section>'+
@@ -132,6 +137,8 @@ export function trialPane(trial,source=null,tab="tests") {
   } else if(tab==="tests") {
     body='<div class="detail-status">'+badge(trial.state)+'<span>'+e(trial.correct===true?"Correction vérifiée":trial.correct===false?"Le programme a échoué à la vérification":"Aucune correction confirmée")+'</span></div>'+
       (trial.reason?'<p class="reason">'+e(trial.reason)+'</p>':'')+
+      validationSummary({required:trial.execution_validation?.allocation?.required,
+        allocation:trial.execution_validation?.allocation,evidence:trial.execution_validation},"Validation de cette variante")+
       '<dl class="key-values small"><div><dt>Phase</dt><dd>'+e(trial.phase)+'</dd></div><div><dt>Commit</dt><dd><code>'+e(short(trial.commit)||"—")+'</code></dd></div></dl>'+
       (trial.evaluations.length?'<details><summary>Preuves de vérification ('+trial.evaluations.length+')</summary><pre>'+safeJSON(trial.evaluations)+'</pre></details>':'');
   } else if(tab==="measures") {
@@ -151,6 +158,7 @@ export function resultsView(c) {
   const noGain=c.state==="no_gain";
   const baseline=!!c.best_confirmed?.is_baseline;
   return heading("Votre résultat",e(c.name),badge(c.state))+
+    validationSummary(c.execution_validation)+
     (confirmed?"":note('<strong>Aucun résultat final confirmé.</strong><p>Les essais restent consultables. Aucun gain ni code optimisé n’est annoncé.</p>',"amber"))+
     '<div class="stat-grid">'+stat("Temps de référence",seconds(c.reference_seconds))+stat("Version retenue",seconds(c.seconds),"clock",confirmed?"gain":"")+stat("Accélération",speedup(c.speedup),"bars",confirmed&&!noGain?"gain":"")+'</div>'+
     resultCharts(c)+
@@ -193,8 +201,8 @@ export function settingsView(info,campaignCount) {
   return heading("Paramètres","Modèle choisi par mission et connexion distante.")+
     '<div class="columns"><section class="card">'+cardTitle("Modèles disponibles")+
     '<ul class="model-list">'+(info.models||[]).map(m=>'<li>'+icon("chip")+'<div class="model-details"><strong>'+e(m.label)+'</strong><div class="model-efforts" aria-label="Efforts disponibles">'+m.efforts.map(effort=>'<span>'+e(effort)+'</span>').join("")+'</div></div></li>').join("")+'</ul><p class="muted small">Le choix et l’effort s’appliquent à tous les rôles de la mission.</p></section>'+
-    '<section class="card">'+cardTitle("Exécution sur ROMEO")+'<dl class="key-values"><div><dt>Connexion</dt><dd>'+badge(info.submission_enabled?"ready":"needs_input",info.submission_enabled?"Configurée":"À configurer")+'</dd></div><div><dt>Campagnes consultables</dt><dd>'+campaignCount+'</dd></div><div><dt>Cibles configurées</dt><dd>'+e((info.connection?.targets||[]).join(", ")||"Aucune")+'</dd></div></dl><p>'+e(info.submission_message)+'</p></section></div>'+
-    note('<strong>Exécution indépendante du PC</strong><p>Après soumission, le contrôleur et les appels au modèle tournent dans le job ROMEO. Au retour dans l’application, le suivi reprend et récupère les résultats. Les identifiants OAuth restent dans le profil privé distant.</p>');
+    '<section class="card">'+cardTitle("Exécution sur ROMEO")+'<dl class="key-values"><div><dt>Connexion</dt><dd>'+badge(info.submission_enabled?"ready":"needs_input",info.submission_enabled?"Configurée":"À configurer")+'</dd></div><div><dt>dsh-romeo</dt><dd>'+badge(info.connection?.dsh_romeo_configured?"ready":"needs_input",info.connection?.dsh_romeo_configured?"Configuré":"À configurer")+'</dd></div><div><dt>Campagnes consultables</dt><dd>'+campaignCount+'</dd></div><div><dt>Cibles configurées</dt><dd>'+e((info.connection?.targets||[]).join(", ")||"Aucune")+'</dd></div></dl><p>'+e(info.submission_message)+'</p><p class="muted small">DeepSeek : configurer la passerelle dsh-romeo et démarrer son modèle séparément. Forest ne réserve pas ses GPU.</p></section></div>'+
+    note('<strong>Exécution indépendante du PC</strong><p>Après soumission, le contrôleur et les appels au modèle tournent dans le job ROMEO. Au retour dans l’application, le suivi reprend et récupère les résultats. Les identifiants des fournisseurs restent dans le stockage privé distant.</p>');
 }
 
 export function remoteMissionView(mission,campaign) {
@@ -208,7 +216,9 @@ export function remoteMissionView(mission,campaign) {
     (!["completed","failed","cancelled","recovery_required"].includes(mission.state)?button(mission.stop_requested_at?"Arrêt demandé":"Arrêter et confirmer","stop","pause","secondary",mission.stop_requested_at?"disabled":""):"")+
     (mission.campaign_id?link("Voir les résultats","#/results/"+mission.campaign_id,"bars","secondary"):"")+'</div></section>'+
     (mission.stop_requested_at?note("La demande est conservée. Les essais déjà admis se terminent, puis Forest prépare et confirme le résultat. La livraison reste soumise à une confirmation réussie."):"")+
-    (campaign?missionView(campaign):empty("La mission est prise en charge","Le suivi est sauvegardé. Vous pouvez fermer cet écran ; le job continuera sur ROMEO une fois soumis."))+
+    (campaign?missionView(campaign,null,!["completed","failed","cancelled","recovery_required"].includes(mission.state)):
+      validationSummary({required:mission.execution_validation})+
+      empty("La mission est prise en charge","Le suivi est sauvegardé. Vous pouvez fermer cet écran ; le job continuera sur ROMEO une fois soumis."))+
     '<p class="bottom-note">Suivi automatique toutes les 10 secondes. La compilation, les tests et la confirmation utilisent le même contrat figé.</p>';
 }
 

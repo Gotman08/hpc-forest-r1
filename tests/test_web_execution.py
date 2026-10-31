@@ -3,6 +3,7 @@ import asyncio
 import io
 import json
 import shutil
+import sqlite3
 import time
 import zipfile
 from pathlib import Path
@@ -21,7 +22,7 @@ from hpc_forest.core import InfrastructureError, Mission, atomic_json, file_dige
 from hpc_forest.evaluator import create_evaluator
 from hpc_forest.model_policy import catalog
 from hpc_forest.webapp.campaigns import Campaigns
-from hpc_forest.webapp.execution import Missions, freeze_bundle, job_arguments
+from hpc_forest.webapp.execution import Missions, freeze_bundle, job_arguments, review_plan
 from hpc_forest.webapp.paths import AppError
 from hpc_forest.webapp.projects import Projects
 from hpc_forest.webapp.runner_support import (
@@ -39,6 +40,8 @@ from hpc_forest.webapp.store import Store
 def application(tmp_path):
     store = Store(tmp_path / "app")
     settings = {"codex_config": str(tmp_path / "codex.toml"), "base_dir": "/scratch/test",
+                "dsh_romeo": {"base_url": "http://gateway.example:11317/v1",
+                              "api_key_file": "/home/test/.config/forest/romeo-llm.key"},
                 "codex_home": "/home/test/.codex", "profiles": {"cpu": {
                     "python": "/runtime/python", "codex": "/runtime/codex",
                     "architecture": "x86_64", "spack_packages": ["/gcc-hash"]}}}
@@ -56,6 +59,25 @@ def application(tmp_path):
     prepared = projects.prepare(project["id"])
     missions = Missions(store, Campaigns(store))
     return store, settings, projects, prepared, missions
+
+
+@pytest.mark.parametrize("actual,accepted", [
+    ("24:30:00", True), ("1-00:30:00", True),
+    ("1-00:29:59", False), ("1-00:30:01", False), ("00:30:00", False),
+    ("1-00:60:00", False), ("unlimited", False), (None, False), (88200, False),
+])
+def test_review_plan_normalizes_days_without_changing_the_requested_duration(actual, accepted):
+    arguments = {"name": "fa-test", "command": "python run.py", "arch": "x64cpu",
+                 "workdir": "/scratch/test", "cpus_per_task": 2, "gpus_per_node": 0,
+                 "time_limit": "24:30:00", "mem_gb": 8}
+    plan = {"submittable": True, "script": "#SBATCH --job-name=fa-test\npython run.py\n",
+            "resolved": {"arch": "x64cpu", "workdir": "/scratch/test", "total_cpus": 2,
+                         "total_gpus": 0, "time": actual, "mem_gb": 8}}
+    if accepted:
+        review_plan(plan, arguments)
+    else:
+        with pytest.raises(AppError, match="plan SLURM diffère"):
+            review_plan(plan, arguments)
 
 
 def test_bundle_restores_layout_and_protected_contract(application, tmp_path):
@@ -142,6 +164,63 @@ def test_model_choice_pins_native_argv_requests_responses_and_channels(applicati
         with pytest.raises(InfrastructureError):
             validate_request({**request, "reasoning_effort": "wrong"}, launch["session_id"], request["nonce"],
                              model=entry["id"], effort=effort)
+
+
+def test_dsh_connection_is_required_for_primary_or_generator_before_launch(application):
+    from hpc_forest.model_policy import DSH_MODEL
+
+    store, settings, projects, prepared, missions = application
+    settings.pop("dsh_romeo")
+    atomic_json(store.root / "romeo.json", settings)
+    project = store.get(prepared["project_id"])
+    primary = {"model": project["contract"]["model"], "reasoning_effort": project["contract"]["reasoning_effort"]}
+    deepseek = {"model": DSH_MODEL, "reasoning_effort": "high"}
+    for chosen, pool in ((deepseek, []), (primary, [primary, deepseek])):
+        projects.update(project["id"], {**project["contract"], **chosen, "generator_pool": pool})
+        selected = projects.prepare(project["id"])
+        with pytest.raises(AppError, match="dsh_romeo"):
+            missions.launch(selected["id"])
+    assert store.list("mission") == []
+    assert missions.availability()["dsh_romeo_configured"] is False
+
+
+def test_dsh_bundle_pins_connection_without_copying_a_key(application, tmp_path):
+    from hpc_forest.model_policy import DSH_MODEL
+
+    store, settings, projects, prepared, missions = application
+    project = store.get(prepared["project_id"])
+    projects.update(project["id"], {**project["contract"], "model": DSH_MODEL, "reasoning_effort": "none"})
+    selected = projects.prepare(project["id"])
+    mission = missions.launch(selected["id"])
+    bundle, launch = freeze_bundle(store, mission, settings)
+    assert launch["dsh_romeo"] == settings["dsh_romeo"]
+    root = tmp_path / ("forest-app-" + mission["id"])
+    extract_verified(bundle, root)
+    config = prepare_project(root, launch)
+    assert config["codex"]["dsh_romeo"] == settings["dsh_romeo"]
+    assert config["codex"]["reasoning_effort"] == "none"
+    assert missions.availability()["dsh_romeo_configured"] is True
+    arguments = job_arguments(mission, settings, launch, file_digest(bundle))
+    assert "ROMEO_LLM_KEY" in arguments["command"]
+    assert "show-key" not in arguments["command"] and "--launch" not in arguments["command"]
+    gate = {"schema": "forest-app-authorization-v1", "mission_id": launch["id"],
+            "session_id": launch["session_id"], "next_model": launch["model"], "reasoning_effort": launch["effort"],
+            "dsh_romeo": launch["dsh_romeo"], "expires_at": time.time() + 600,
+            "manifest_sha256": file_digest(root / "launch.json")}
+    validate_authorization(root / "authorization.json", gate, {launch["id"]})
+    with pytest.raises(InfrastructureError, match="dsh-romeo"):
+        validate_authorization(root / "authorization.json", {**gate, "dsh_romeo": None}, {launch["id"]})
+
+
+def test_invalid_dsh_settings_do_not_disable_openai_missions(application):
+    store, settings, _, prepared, missions = application
+    settings["dsh_romeo"] = {"base_url": "http://localhost:11318/v1", "api_key_file": "/private/key"}
+    atomic_json(store.root / "romeo.json", settings)
+    assert missions.availability()["configured"] is True
+    assert missions.availability()["dsh_romeo_configured"] is False
+    mission = missions.launch(prepared["id"])
+    _, launch = freeze_bundle(store, mission, settings)
+    assert "dsh_romeo" not in launch
 
 
 class Connector:
@@ -335,3 +414,90 @@ def test_optional_m_requires_an_explicit_remote_profile(application):
     settings["profiles"]["cpu"]["search_algorithms"] = ["ab-mcts-m"]
     _, manifest = freeze_bundle(store, mission, settings)
     assert manifest["search"]["algorithm"] == "ab-mcts-m"
+
+
+def synced_view(folder, label):
+    """A minimal downloaded view: an empty Forest registry and one source file."""
+    folder.mkdir()
+    db = sqlite3.connect(folder / "registry.sqlite3")
+    try:
+        db.executescript("""
+            CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT);
+            CREATE TABLE trials(id TEXT, trial_id TEXT, tree_id TEXT, role TEXT, state TEXT,
+                                mission TEXT, result TEXT, created REAL, epoch INTEGER);
+            CREATE TABLE evaluations(id INTEGER, experiment_id TEXT, phase TEXT, payload TEXT,
+                                     created REAL, epoch INTEGER);
+            CREATE TABLE events(id INTEGER, kind TEXT, payload TEXT, created REAL);""")
+        db.executemany("INSERT INTO metadata VALUES(?,?)",
+                       [("current_epoch", "1"), ("status", json.dumps("running")), ("config", "{}")])
+        db.commit()
+    finally:
+        db.close()
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.write(folder / "registry.sqlite3", "registry.sqlite3")
+        archive.writestr("worktrees/T1/src/main.cpp", "// " + label + "\n")
+    return buffer.getvalue()
+
+
+def test_unchanged_views_are_not_reinstalled_and_stale_copies_are_removed(application, tmp_path):
+    store, _, _, prepared, missions = application
+    mission = missions.launch(prepared["id"])
+    archive = store.root / "missions" / mission["id"] / "view.zip"
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    first, second, third = (synced_view(tmp_path / name, name) for name in ("first", "second", "third"))
+    installed = []
+    for content in (first, first, second, third):
+        archive.write_bytes(content)
+        missions.install_view(missions.get(mission["id"]), archive)
+        campaign = store.get(missions.get(mission["id"])["campaign_id"], "campaign")
+        installed.append(Path(campaign["source_root"]).name)
+    assert installed[0] == installed[1]  # Identical bytes are not extracted again.
+    assert len(set(installed)) == 3
+    # Only the current copy and its predecessor remain.
+    assert {p.name for p in archive.parent.glob("view-*")} == {installed[2], installed[3]}
+
+
+class StopMonitor(BaseException):
+    """Ends a monitor loop from a test; ordinary failures must not stop it."""
+
+
+def test_monitor_survives_a_transient_storage_failure(application):
+    *_, missions = application
+    ticks = []
+
+    async def tick():
+        ticks.append(len(ticks))
+        if len(ticks) == 1:
+            missions.wake()
+            raise sqlite3.OperationalError("database is locked")
+        raise StopMonitor
+
+    missions.tick = tick
+    with pytest.raises(StopMonitor):
+        asyncio.run(missions.monitor())
+    assert len(ticks) == 2
+
+
+def test_route_threads_wake_the_monitor_through_its_event_loop(application):
+    *_, missions = application
+    ticks = []
+
+    async def tick():
+        ticks.append(len(ticks))
+        if len(ticks) == 2:
+            raise StopMonitor
+
+    missions.tick = tick
+
+    async def scenario():
+        monitor = asyncio.create_task(missions.monitor())
+        while not ticks:
+            await asyncio.sleep(0.01)
+        await asyncio.to_thread(missions.wake)  # As a synchronous FastAPI route does.
+        await asyncio.wait_for(monitor, timeout=5)
+
+    # Debug mode rejects any loop operation made from a foreign thread.
+    with pytest.raises(StopMonitor):
+        asyncio.run(scenario(), debug=True)
+    assert len(ticks) == 2

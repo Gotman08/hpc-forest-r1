@@ -24,7 +24,7 @@ def test_prelaunch_pairwise_forecast_reserves_n_minus_one_integrations(memory_db
     assert decision["planned_integration_steps"] == max(1, width - 1)
 
 
-def test_prelaunch_memory_guided_forecast_reserves_selection_and_actual_rounds(memory_db):
+def test_prelaunch_memory_guided_forecast_reserves_selection_and_required_round(memory_db):
     db, _, _, root = memory_db
     config = persistent_settings(root)
     config["forest"].update(integration=POLICY, plan_review_calls=2)
@@ -33,6 +33,6 @@ def test_prelaunch_memory_guided_forecast_reserves_selection_and_actual_rounds(m
     db.set("config", config)
     db.set("deadline", time.time() + 1800)
     decision = review_admission(db, 20)
-    assert decision["planned_integration_steps"] == 2  # Nominal work, not the conditional upper bound.
+    assert decision["planned_integration_steps"] == 1  # Optional rounds have their own later admission.
     assert decision["reserved_selection_seconds"] > 0
     assert decision["can_review"]

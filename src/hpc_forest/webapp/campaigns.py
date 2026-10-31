@@ -13,7 +13,7 @@ from pathlib import Path
 from hpc_forest.search.diagnostics import diagnostics
 
 from ..compatibility import historical_advisor
-from .paths import AppError, contained, relative_name
+from .paths import AppError, contained, database_uri, relative_name
 from .store import Store
 
 TEXT_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".cu", ".cuh",
@@ -39,7 +39,7 @@ def _read(root: Path) -> dict:
     path = contained(root, "registry.sqlite3")
     if not path.is_file():
         raise AppError("Le registre de cette campagne n'est plus accessible.")
-    connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=3)
+    connection = sqlite3.connect(database_uri(path) + "?mode=ro", uri=True, timeout=3)
     connection.row_factory = sqlite3.Row
     try:
         connection.execute("BEGIN")
@@ -92,6 +92,7 @@ def _trial(row: dict) -> dict:
         "times": [n for v in result.get("times", []) if (n := number(v)) is not None],
         "advice_ids": mission.get("advice_ids", []),
         "control_decision_id": mission.get("control_decision_id"), "created": row["created"],
+        "execution_validation": result.get("execution_validation"),
     }
 
 
@@ -189,6 +190,11 @@ class Campaigns:
             "target": identity.get("target", config.get("target_id", "")),
             "host": identity.get("hostname", ""), "machine": identity.get("machine", ""),
             "compiler": (identity.get("compiler") or {}).get("flavor", ""),
+            "execution_validation": {
+                "required": config.get("execution_validation"),
+                "allocation": identity.get("execution_validation"),
+                "winner": (best or {}).get("execution_validation"),
+            },
             "protocol_id": m.get("protocol_id"), "confirmation_repetitions":
                 (config.get("protocol") or {}).get("confirmation_repetitions"),
             "seconds": optimized, "reference_seconds": reference,

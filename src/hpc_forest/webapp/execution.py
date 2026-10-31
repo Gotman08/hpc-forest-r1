@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import shlex
+import shutil
 import sqlite3
 import time
 import uuid
@@ -15,11 +16,14 @@ from pathlib import Path, PurePosixPath
 from hpc_forest.search.policy import settings as search_settings
 
 from ..codex_worker import RomeoFiles
-from ..core import FileLock, atomic_json, file_digest
+from ..core import FileLock, ForestError, InfrastructureError, atomic_json, file_digest
+from ..dsh_romeo import required as needs_dsh
+from ..dsh_romeo import validate_remote as validate_dsh
 from ..evolution_archive import settings as evolution_settings
+from ..execution_validation import requirements as execution_requirements
 from ..model_policy import generator_pool, require_identity
 from .campaigns import Campaigns, _read
-from .paths import AppError, contained
+from .paths import AppError, contained, filesystem_path
 from .projects import validate_contract
 from .runner_support import editable_files, executable, extract_verified
 from .store import Store
@@ -29,8 +33,25 @@ TERMINAL = {"completed", "failed", "cancelled", "recovery_required"}
 
 
 def public_mission(record: dict) -> dict:
-    return {k: v for k, v in record.items() if k not in {
+    result = {k: v for k, v in record.items() if k not in {
         "connection", "launch", "remote_root", "plan_id", "bundle_sha256", "session_id"}}
+    launch = record.get("launch") or {}
+    try:
+        result["execution_validation"] = execution_requirements(launch.get("execution_validation"))
+    except ForestError:
+        result["execution_validation"] = None
+        result["execution_validation_error"] = "Contrat de validation enregistré invalide."
+    return result
+
+
+def dsh_connection(settings: dict, contract: dict) -> dict:
+    if not needs_dsh(contract):
+        return {}
+    try:
+        value = validate_dsh(settings.get("dsh_romeo"))
+    except InfrastructureError as exc:
+        raise AppError(str(exc)) from exc
+    return {"dsh_romeo": value}
 
 
 def connection(path: Path) -> dict | None:
@@ -86,7 +107,10 @@ def freeze_bundle(store: Store, mission: dict, settings: dict) -> tuple[Path, di
         "duration_minutes": selected["contract"]["duration_minutes"],
         "allocation_seconds": selected["contract"]["duration_minutes"] * 60 + 1800,
         "engine_files": {"hpc_forest/" + p.relative_to(package).as_posix(): file_digest(p) for p in paths},
+        **dsh_connection(settings, selected["contract"]),
     }
+    if selected["contract"].get("execution_validation"):
+        manifest["execution_validation"] = selected["contract"]["execution_validation"]
     folder = contained(store.root, "missions/" + mission["id"])
     folder.mkdir(parents=True, exist_ok=True)
     atomic_json(folder / "launch.json", manifest)
@@ -115,17 +139,30 @@ def job_arguments(mission: dict, settings: dict, launch: dict, bundle_sha: str) 
         f"export PYTHONPATH={quote(root + '/engine')} PYTHONDONTWRITEBYTECODE=1",
         f"export CODEX_HOME={quote(settings['codex_home'])}",
         "export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1",
-        "unset OPENAI_API_KEY CODEX_API_KEY FOREST_STUDY_BROKER",
+        "unset OPENAI_API_KEY CODEX_API_KEY OPENAI_BASE_URL OPENAI_API_BASE "
+        "ROMEO_LLM_KEY DSH_ROMEO_BASE_URL FOREST_STUDY_BROKER",
         f"cd {quote(root)}",
         f"{python} -u -m hpc_forest.webapp.remote_runner {quote(root)}",
     ])
     seconds = launch["allocation_seconds"]
+    resources = launch.get("execution_validation") or {}
     return {"name": "fa-" + mission["id"][:20], "command": command,
             "arch": "x64cpu" if launch["target"] == "cpu" else "armgpu",
             "workdir": settings["base_dir"], "nodes": 1, "ntasks_per_node": 1,
-            "cpus_per_task": 2, "gpus_per_node": int(launch["target"] == "gpu"),
+            "cpus_per_task": resources.get("cpus_per_task", 2), "gpus_per_node": int(launch["target"] == "gpu"),
             "mem_gb": 8, "time_limit": f"{seconds // 3600:02d}:{seconds // 60 % 60:02d}:00",
             "spack_packages": profile.get("spack_packages", [])}
+
+
+def _slurm_seconds(value: object) -> int | None:
+    """Compare generated HH:MM:SS with SLURM's normalized D-HH:MM:SS."""
+    if not isinstance(value, str) or len(value) > 32:
+        return None
+    match = re.fullmatch(r"(?:(\d+)-)?(\d+):([0-5]\d):([0-5]\d)", value)
+    if match is None:
+        return None
+    days, hours, minutes, seconds = match.groups()
+    return int(days or 0) * 86400 + int(hours) * 3600 + int(minutes) * 60 + int(seconds)
 
 
 def review_plan(plan: dict, arguments: dict) -> None:
@@ -133,8 +170,10 @@ def review_plan(plan: dict, arguments: dict) -> None:
     resolved, script = plan.get("resolved", {}), plan.get("script", "")
     expected = {"arch": arguments["arch"], "workdir": arguments["workdir"],
                 "total_cpus": arguments["cpus_per_task"], "total_gpus": arguments["gpus_per_node"],
-                "time": arguments["time_limit"], "mem_gb": arguments["mem_gb"]}
+                "mem_gb": arguments["mem_gb"]}
+    duration = _slurm_seconds(arguments["time_limit"])
     if (plan.get("submittable") is not True or not isinstance(script, str)
+            or duration is None or _slurm_seconds(resolved.get("time")) != duration
             or arguments["command"] not in script or any(resolved.get(k) != v for k, v in expected.items())
             or "#SBATCH --job-name=" + arguments["name"] + "\n" not in script):
         raise AppError("Le plan SLURM diffère de la mission demandée ; soumission refusée.")
@@ -144,7 +183,7 @@ class Missions:
     def __init__(self, store: Store, campaigns: Campaigns, *, connector=RomeoFiles):
         self.store, self.campaigns, self.connector = store, campaigns, connector
         self.settings_path = store.root / "romeo.json"
-        self.wakeup = asyncio.Event()
+        self.wakeup, self.loop = asyncio.Event(), None
         with store.connect() as db:
             db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS one_launch_per_prepared
                 ON records(json_extract(payload,'$.prepared_id')) WHERE kind='mission'""")
@@ -152,13 +191,39 @@ class Missions:
     def settings(self):
         return connection(self.settings_path)
 
+    def wake(self):
+        """Wake the monitor from any thread; asyncio.Event itself is not thread-safe."""
+        loop = self.loop
+        if loop is None or loop.is_closed():
+            self.wakeup.set()
+            return
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is loop:
+            self.wakeup.set()
+            return
+        try:
+            loop.call_soon_threadsafe(self.wakeup.set)
+        except RuntimeError:
+            pass  # The monitor stopped; its next start reads the durable state anyway.
+
     def availability(self):
         try:
             value = self.settings()
+            dsh = False
+            if value and "dsh_romeo" in value:
+                try:
+                    validate_dsh(value["dsh_romeo"])
+                    dsh = True
+                except InfrastructureError:
+                    pass
             return {"configured": bool(value), "targets": list(value["profiles"]) if value else [],
+                    "dsh_romeo_configured": dsh,
                     "search_algorithms": {k: p.get("search_algorithms", []) for k, p in value["profiles"].items()}
                         if value else {},
-                    "message": "Connecteur configuré ; OAuth est vérifié sur le nœud au lancement."
+                    "message": "Connecteur configuré ; l'accès au fournisseur choisi est vérifié sur le nœud au lancement."
                     if value else "Configurer romeo.json dans le stockage de l'application."}
         except (ValueError, KeyError, OSError, AppError):
             return {"configured": False, "targets": [], "message": "Configuration ROMEO à vérifier."}
@@ -178,7 +243,7 @@ class Missions:
             payload.setdefault("stop_requested_at", time.time())
             return payload
         result = self.store.mutate(identifier, stop, kind="mission")
-        self.wakeup.set()
+        self.wake()
         return result
 
     async def deliver_stop(self, client, record):
@@ -201,7 +266,7 @@ class Missions:
                            recovery_pending=False, attempts=0, last_attempt=0, last_error=None)
             return payload
         result = self.store.mutate(identifier, resume, kind="mission")
-        self.wakeup.set()
+        self.wake()
         return result
 
     def update(self, identifier, **changes):
@@ -222,6 +287,7 @@ class Missions:
             raise AppError("Le profil ROMEO contient advisor_runtime, retiré avec TabPFN. "
                            "Sauvegardez romeo.json puis retirez ce réglage pour les nouvelles missions.")
         require_identity(prepared["contract"])
+        dsh_connection(settings, prepared["contract"]["contract"])
         editable_files(prepared["contract"])
         executable(prepared["contract"]["contract"])
         try:
@@ -236,7 +302,7 @@ class Missions:
             if existing:
                 return existing
             raise
-        self.wakeup.set()
+        self.wake()
         return record
 
     async def start(self, client, record, settings):
@@ -293,29 +359,50 @@ class Missions:
                         uncertain_submission=True)
 
     def install_view(self, record, archive: Path):
-        folder = archive.parent / ("view-" + uuid.uuid4().hex)
+        """Install a downloaded view once, keeping only the current copy and its predecessor."""
+        digest = file_digest(archive)
+        if digest == record.get("view_sha256") and record.get("campaign_id"):
+            try:
+                view = self.campaigns.snapshot(record["campaign_id"])
+            except AppError:
+                view = None  # The installed copy is no longer readable: install it again.
+            if view is not None:
+                self.update(record["id"], synced_at=time.time(), speedup=view.get("speedup"), sync_error=None)
+                return view
+        folder = filesystem_path(archive.parent / ("view-" + uuid.uuid4().hex))
         folder.mkdir()
-        extract_verified(archive, folder)
-        _read(folder)
-        with self.store.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT payload FROM records WHERE id=? AND kind='mission'", (record["id"],)).fetchone()
-            if row is None:
-                raise AppError("Mission introuvable.")
-            current = json.loads(row["payload"])
-            campaign_id = current.get("campaign_id") or uuid.uuid4().hex
-            payload = {"source_root": str(folder), "name": current["name"], "access": "read_only",
-                       "mission_id": record["id"], "project_id": current["project_id"]}
-            now = time.time()
-            db.execute("INSERT INTO records VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
-                       "payload=excluded.payload,updated=excluded.updated",
-                       (campaign_id, "campaign", now, now, json.dumps(payload)))
-            current.update(campaign_id=campaign_id, synced_at=now)
-            db.execute("UPDATE records SET payload=?,updated=? WHERE id=?",
-                       (json.dumps(current), now, record["id"]))
+        try:
+            extract_verified(archive, folder)
+            _read(folder)
+            with self.store.connect() as db:
+                db.execute("BEGIN IMMEDIATE")
+                row = db.execute("SELECT payload FROM records WHERE id=? AND kind='mission'", (record["id"],)).fetchone()
+                if row is None:
+                    raise AppError("Mission introuvable.")
+                current = json.loads(row["payload"])
+                campaign_id = current.get("campaign_id") or uuid.uuid4().hex
+                previous = db.execute("SELECT payload FROM records WHERE id=? AND kind='campaign'",
+                                      (campaign_id,)).fetchone()
+                payload = {"source_root": str(folder), "name": current["name"], "access": "read_only",
+                           "mission_id": record["id"], "project_id": current["project_id"]}
+                now = time.time()
+                db.execute("INSERT INTO records VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                           "payload=excluded.payload,updated=excluded.updated",
+                           (campaign_id, "campaign", now, now, json.dumps(payload)))
+                current.update(campaign_id=campaign_id, synced_at=now)
+                db.execute("UPDATE records SET payload=?,updated=? WHERE id=?",
+                           (json.dumps(current), now, record["id"]))
+        except BaseException:
+            shutil.rmtree(folder, ignore_errors=True)  # Never referenced: the transaction rolled back.
+            raise
+        # The predecessor survives one more synchronization so a download served from it can finish.
+        keep = {folder.name} | ({Path(json.loads(previous["payload"])["source_root"]).name} if previous else set())
+        for stale in folder.parent.glob("view-*"):
+            if stale.name not in keep and stale.is_dir():
+                shutil.rmtree(stale, ignore_errors=True)  # Retried at the next installation.
         view = self.campaigns.snapshot(campaign_id)
         self.update(record["id"], campaign_id=campaign_id, synced_at=time.time(),
-                    speedup=view.get("speedup"), sync_error=None)
+                    speedup=view.get("speedup"), sync_error=None, view_sha256=digest)
         return view
 
     async def refresh(self, client, record):
@@ -345,7 +432,8 @@ class Missions:
                 archive = contained(self.store.root, "missions/" + record["id"] + "/view.zip")
                 await client.download(record["remote_root"] + "/view.zip", archive)
                 current = self.get(record["id"])
-                view = self.install_view(current, archive)
+                # Extraction and hashing take seconds: keep the API responsive meanwhile.
+                view = await asyncio.to_thread(self.install_view, current, archive)
                 if progress and progress.get("pipeline_complete") and view["downloads"]["code"]:
                     self.update(record["id"], state="completed", last_error=None, finished_at=time.time(),
                                 recovery_pending=False)
@@ -395,9 +483,16 @@ class Missions:
                             attempts=record.get("attempts", 0) + 1, last_attempt=time.time())
 
     async def monitor(self):
+        self.loop = asyncio.get_running_loop()
         while True:
             self.wakeup.clear()
-            await self.tick()
+            try:
+                await self.tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                # A locked database or a full disk must not end tracking for the whole session.
+                LOGGER.warning("Mission monitor: %s; retrying", type(exc).__name__)
             try:
                 await asyncio.wait_for(self.wakeup.wait(), timeout=15)
             except TimeoutError:

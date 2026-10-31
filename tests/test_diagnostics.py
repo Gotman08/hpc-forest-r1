@@ -28,19 +28,22 @@ def diagnostic_campaign(tmp_path):
     root.mkdir()
     source = tmp_path / "input"
     (source / "src").mkdir(parents=True)
-    (source / "src/program.py").write_text("print(sum(i*i for i in range(1000)))\n")
+    (source / "src/program.py").write_text(
+        "import sys\nassert sys.argv[1] == 'search'\nprint(sum(i*i for i in range(1000)))\n")
     commit = initialize_source(source, root / "repo")
     trusted = root / "trusted"
     trusted.mkdir()
     (trusted / "build.py").write_text(
         "import pathlib,sys\np=pathlib.Path(sys.argv[1]);p.write_bytes(b'diagnostic-fixture')\n")
-    (trusted / "check.py").write_text('print(\'{"correct":true,"cases":1}\')\n')
+    (trusted / "check.py").write_text(
+        'import sys\nassert sys.argv[1] == "search"\nprint(\'{"correct":true,"cases":1}\')\n')
     config = load_config()
     config.update(backend="codex", forest={"policy": "mother"}, target_id="diagnostic-" + tmp_path.name,
                   compiler={}, investigation={"enabled": True, "require_allocation": False})
     config["codex"].update(session_id="a" * 32, transport="codex-mailbox", mailbox_dir=str(root / "mailbox"))
     config["protocol"].update(build=["{python}", "{trusted}/build.py", "{binary}"],
-        check=["{python}", "{trusted}/check.py"], benchmark=["{python}", "{worktree}/src/program.py"])
+        check=["{python}", "{trusted}/check.py", "{phase}"],
+        benchmark=["{python}", "{worktree}/src/program.py", "{phase}"])
     atomic_json(trusted / "config.json", config)
     db = Registry(root / "registry.sqlite3")
     for key, value in {"config": config, "manifest": protected_manifest(trusted), "current_epoch": 1,
@@ -86,6 +89,8 @@ def test_real_workload_isolated_evidence_idempotence_and_official_score_unchange
     db.close()
     manifest = service.evidence(result["id"])
     assert "build-provenance.json" in {p["path"] for p in manifest["items"]}
+    provenance = json.loads((root / "diagnostics/collections" / result["id"] / "build-provenance.json").read_text())
+    assert provenance["execution_kind"] == "diagnostic" and provenance["input_phase"] == "search"
     page = service.evidence(result["id"], "runtime.log", limit=1)
     assert page["lines"] == ["332833500"]
     raw = service.evidence(result["id"], "runtime.log", limit=3, binary=True)
@@ -95,16 +100,26 @@ def test_real_workload_isolated_evidence_idempotence_and_official_score_unchange
         service.evidence(result["id"], "runtime.log")
 
 
-def test_grants_deny_generator_collection_login_execution_and_foreign_sources(diagnostic_campaign, monkeypatch):
+def test_retried_accented_question_returns_the_same_collection(diagnostic_campaign):
+    root, _ = diagnostic_campaign
+    request = request_for(root)
+    service = Diagnostics(root, request["diagnostics"], request)
+    question = "Pourquoi le débit mémoire baisse-t-il après l'étape de réduction ?"
+    result = service.collect("baseline-e1", "runtime", question, request_key="accents")
+    assert result["status"] == "complete", result
+    # The summary is written as UTF-8; reading it with the Windows code page broke retries.
+    assert service.collect("baseline-e1", "runtime", question, request_key="accents") == result
+
+
+def test_research_grants_allow_measured_sources_but_deny_login_and_foreign_sources(diagnostic_campaign, monkeypatch):
     root, _ = diagnostic_campaign
     generator = request_for(root, "generator")
     service = Diagnostics(root, generator["diagnostics"], generator)
     assert service.sources()["items"][0]["id"] == "baseline-e1"
-    with pytest.raises(DiagnosticFailure, match="read-only"):
-        service.collect("baseline-e1", "runtime", "Denied", request_key="no")
+    assert service.grant["can_collect"]
+    assert service.collect("baseline-e1", "runtime", "Measured control", request_key="control")["status"] == "complete"
     with pytest.raises(ValueError, match="outside"):
         service.collect("unmeasured-candidate", "runtime", "Denied")
-    service.grant["can_collect"] = True
     service.policy["require_allocation"] = True
     service.grant["allocation_id"] = "12345"
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
@@ -171,6 +186,9 @@ def test_mcp_real_stdio_tools_and_errors(diagnostic_campaign):
     from mcp.client.stdio import stdio_client
 
     root, _ = diagnostic_campaign
+    db = Registry(root / "registry.sqlite3")
+    db.set("search_closed:1", {"at": time.time()})
+    db.close()
     request = request_for(root, "generator")
     binding = DiagnosticsMCP.bind(root, request)
     service = Diagnostics(root, request["diagnostics"], request)

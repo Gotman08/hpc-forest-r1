@@ -37,6 +37,7 @@ CONTRACT_FIELDS = {
     "build_command", "test_command", "benchmark_command", "expected_result",
     "editable_paths", "target", "duration_minutes", "statement",
     "model", "reasoning_effort", "search", "generator_pool", "evolution",
+    "execution_validation",
 }
 
 
@@ -132,10 +133,14 @@ def validate_contract(value: dict) -> dict:
             require_current(value)
         except ForestError as exc:
             raise AppError(str(exc)) from exc
-        value = {"model": MODEL, "reasoning_effort": EFFORT, "search": {}, "generator_pool": [], "evolution": {}, **value}
+        value = {"model": MODEL, "reasoning_effort": EFFORT, "search": {}, "generator_pool": [], "evolution": {},
+                 "execution_validation": None, **value}
     if not isinstance(value, dict) or set(value) != CONTRACT_FIELDS:
         raise AppError("Le contrat contient des champs manquants ou non reconnus.")
     try:
+        from ..execution_validation import requirements
+
+        value["execution_validation"] = requirements(value["execution_validation"])
         require_identity(value)
         pool = generator_pool(value)
         value = {**value, "search": search_settings(value),
@@ -160,6 +165,8 @@ def validate_contract(value: dict) -> dict:
         raise AppError("La durée doit être comprise entre 1 et 1 440 minutes.")
     if not isinstance(value["target"], str) or value["target"] not in {"cpu", "gpu"}:
         raise AppError("Choisissez une cible CPU ou GPU sur ROMEO.")
+    if value["target"] != "cpu" and value["execution_validation"] is not None:
+        raise AppError("Ce contrôle de configuration et de parallélisme s'applique aux campagnes CPU.")
     paths = value["editable_paths"]
     if not isinstance(paths, list) or len(paths) > 100:
         raise AppError("Le périmètre modifiable doit être une liste de chemins.")

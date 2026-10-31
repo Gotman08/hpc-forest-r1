@@ -1,8 +1,13 @@
 import {api, escapeHTML as e} from "./helpers.mjs";
+import {validationFormValues, syncValidationControls} from "./validation.mjs";
 import {icon} from "./icons.mjs";
 import {searchFormValues, syncGeneratorControls} from "./search.mjs";
+import {setModelCatalog, effortSelection, modelHelp} from "./models.mjs";
+import {createMissionPoller} from "./mission-poll.mjs";
 import {shell, empty, projectView, prepareView, preparedView, missionView, trialPane,
   resultsView, historyView, settingsView, eventsView, remoteMissionView} from "./views.mjs";
+
+function syncFormControls(form) { syncGeneratorControls(form); syncValidationControls(form); }
 
 const app = document.querySelector("#app");
 const state = {info:null, projects:[], campaigns:[], project:null, campaign:null, prepared:null,
@@ -39,14 +44,16 @@ const campaignId = () => state.context?.kind==="campaign"?state.context.id:
 const selectProject = value => { state.project=value; remember("forest.project",value.id); context("project",value.id); };
 function effortOptions(model, wanted) {
   const field=document.querySelector("#effort-choice");
-  const values=state.info.models.find(m=>m.id===model)?.efforts||["max"];
+  const {values,value}=effortSelection(model,wanted,state.info.models);
   field.innerHTML=values.map(v=>'<option value="'+e(v)+'">'+e(v)+'</option>').join("");
-  field.value=values.includes(wanted)?wanted:"max";
+  field.value=value;
+  document.querySelector("#model-help").textContent=modelHelp(model,state.info);
 }
 
 async function catalog() {
   [state.info,state.projects,state.campaigns]=await Promise.all([
     api("/info"),api("/projects"),api("/campaigns")]);
+  setModelCatalog(state.info.models);
 }
 
 async function render() {
@@ -84,7 +91,7 @@ async function render() {
       if(!kind&&state.context?.kind==="mission") { kind="run"; id=state.context.id; }
       if(kind==="run"&&id) {
         const mission=await api("/missions/"+id); if(token!==navigation) return;
-        state.mission=mission; context("mission",id); name=mission.name; state.trial=null;
+        state.mission=mission; context("mission",id); name=mission.name; state.trial=null; state.zoom=1;
         state.campaign=mission.campaign_id?await api("/campaigns/"+mission.campaign_id):null;
         html=remoteMissionView(mission,state.campaign);
       } else if(kind==="prepared"&&id) {
@@ -136,7 +143,7 @@ async function render() {
       document.querySelector("#save-state").textContent="Brouillon restauré · à enregistrer";
       document.querySelector('[data-action="prepare"]').disabled=true;
     }
-    syncGeneratorControls(document.querySelector("#contract-form"));
+    syncFormControls(document.querySelector("#contract-form"));
     if(page==="project"&&!state.project) document.querySelector("#project-name").value=state.uploadName;
     document.title=(name?name+" · ":"")+"Forest — Espace de travail";
   } catch(error) {
@@ -145,6 +152,46 @@ async function render() {
       '<button class="button primary" data-action="retry">Réessayer</button>');
   }
 }
+
+function displayLiveMission(mission,campaign) {
+  const target=main(), board=target.querySelector(".forest-scroll");
+  const pagePosition=[window.scrollX,window.scrollY], boardPosition=[board?.scrollLeft||0,board?.scrollTop||0];
+  const focus=document.activeElement;
+  const focusSelector=focus?.id?"#"+CSS.escape(focus.id):
+    ["action","node"].filter(key=>focus?.dataset?.[key]).map(key=>
+      '[data-'+key+'="'+CSS.escape(focus.dataset[key])+'"]')[0];
+  const opened=[...target.querySelectorAll("details[open]")].map(el=>el.querySelector("summary")?.textContent);
+  const html=remoteMissionView(mission,campaign);
+  state.mission=mission; state.campaign=campaign;
+  // Keep the shell in place: no loading screen or scroll reset between observations.
+  target.innerHTML=html;
+  const canvas=target.querySelector(".forest-canvas"), zoom=target.querySelector("#zoom-value");
+  if(canvas) canvas.style.zoom=state.zoom;
+  if(zoom) zoom.textContent=Math.round(state.zoom*100)+" %";
+  const nextBoard=target.querySelector(".forest-scroll");
+  if(nextBoard) { nextBoard.scrollLeft=boardPosition[0]; nextBoard.scrollTop=boardPosition[1]; }
+  target.querySelectorAll("details").forEach(el=>{
+    if(opened.includes(el.querySelector("summary")?.textContent)) el.open=true;
+  });
+  if(focusSelector) document.querySelector(focusSelector)?.focus({preventScroll:true});
+  window.scrollTo(...pagePosition);
+}
+
+const pollMission=createMissionPoller({
+  current:()=>{
+    if(document.hidden) return null;
+    const route=location.hash, following=route.startsWith("#/mission/run/") ||
+      (route==="#/mission"&&state.context?.kind==="mission");
+    if(!following||state.busy||state.trial||!state.mission||state.mission.state==="completed"||
+      document.querySelector("#events-panel:not([hidden])")) return null;
+    const requested=route.startsWith("#/mission/run/")?route.split("/")[3]:state.context.id;
+    if(requested!==state.mission.id) return null;
+    return {id:requested,navigation,selection,route};
+  },
+  load:api,
+  display:displayLiveMission,
+  failed:error=>notify("Actualisation retardée. Les dernières données restent visibles. "+error.message,true),
+});
 
 async function operation(callback) {
   if(state.busy) return;
@@ -193,7 +240,7 @@ async function droppedFiles(transfer) {
 function formContract() {
   const form=document.querySelector("#contract-form");
   if(!form.reportValidity()) return null;
-  const data=searchFormValues(Object.fromEntries(new FormData(form)));
+  const data=validationFormValues(searchFormValues(Object.fromEntries(new FormData(form))));
   data.duration_minutes=Number(data.duration_minutes);
   data.editable_paths=data.editable_paths.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   return data;
@@ -294,7 +341,7 @@ app.addEventListener("click",event=>{
 app.addEventListener("submit",event=>{
   if(event.target.id!=="contract-form") return;
   event.preventDefault(); operation(async()=>{
-    if(await saveContract()) { main().innerHTML=prepareView(state.project,state.info); syncGeneratorControls(document.querySelector("#contract-form")); notify("Contrat sauvegardé."); }
+    if(await saveContract()) { main().innerHTML=prepareView(state.project,state.info); syncFormControls(document.querySelector("#contract-form")); notify("Contrat sauvegardé."); }
   });
 });
 app.addEventListener("input",event=>{
@@ -303,7 +350,7 @@ app.addEventListener("input",event=>{
   }
   if(event.target.closest("#contract-form")) {
     const form=document.querySelector("#contract-form");
-    syncGeneratorControls(form);
+    syncFormControls(form);
     state.dirty=true;
     state.drafts.set(state.project.id,{...Object.fromEntries(new FormData(form)),
       __checks:Object.fromEntries([...form.querySelectorAll('input[type="checkbox"]')].map(el=>[el.name,el.checked]))});
@@ -363,8 +410,8 @@ window.addEventListener("storage",event=>{
 document.querySelector(".skip-link").addEventListener("click",event=>{ event.preventDefault(); main()?.focus(); });
 window.addEventListener("beforeunload",event=>{ if(state.drafts.size) { event.preventDefault(); event.returnValue=""; } });
 render();
-setInterval(()=>{
-  const following=location.hash.startsWith("#/mission/run/") ||
-    (location.hash==="#/mission"&&state.context?.kind==="mission");
-  if(following&&!state.busy&&!state.trial&&state.mission?.state!=="completed") render();
-},10000);
+document.addEventListener("visibilitychange",()=>{
+  document.documentElement.classList.toggle("page-hidden",document.hidden);
+  if(!document.hidden) pollMission();
+});
+setInterval(pollMission,10000);

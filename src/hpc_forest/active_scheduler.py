@@ -54,13 +54,18 @@ def analyst_order(db, epoch):
     """Serve never-observed/least-recently observed trees before a new report."""
     current = state(db, epoch)
     positions = {identity: index for index, identity in enumerate(current["jobs"])}
-    return sorted(children(db, epoch), key=lambda child: positions.get(
-        current["analysts"].get(child["role"], {}).get("last_job"), -1))
+    return sorted(children(db, epoch), key=lambda child: (
+        not lifecycle.analysis_needed(db, epoch, child["role"]),
+        positions.get(current["analysts"].get(child["role"], {}).get("last_job"), -1)))
 
 
 def mother_due(db, epoch, cfg):
     """Batch ordinary reports; never delay a drained closure or idle recovery."""
     current = state(db, epoch)
+    reviewed = set(current.get("mother_evidence_ids", []))
+    if any(p.get("remaining", 0) and p["source_id"] not in reviewed
+           for p in current.get("lifecycle", {}).get("protections", {}).values()):
+        return True
     if current["mother_watermark"] == controls.report_watermark(current):
         return False
     if current.get("lifecycle", {}).get("closing"):
@@ -96,10 +101,14 @@ def run_research(controller, epoch, baseline, max_rounds=None):
             role = child["role"]
             if role in counts:
                 continue
-            controller.search.initialize(epoch_id, role, controller.config["seed"] + epoch_id * 101 + index)
+            seed_source = child.get("base_source_id") if child.get("kind") == "refinement" else None
+            controller.search.initialize(epoch_id, role, controller.config["seed"] + epoch_id * 101 + index,
+                                         root_source_id=seed_source)
             counts[role] = len(watermark(db, epoch_id, role))
             if child.get("kind") == "intermediate_integration":
                 limits[role] = 1  # One requested combination is one independently evaluated program.
+            elif child.get("kind") == "refinement":
+                limits[role] = child["refinement_trials"]
             elif max_rounds is not None:
                 limits[role] = counts[role] + max_rounds
 
@@ -198,6 +207,11 @@ def run_research(controller, epoch, baseline, max_rounds=None):
             if (role in running or role in exhausted or role in current["suspended"]
                     or role in limits and counts[role] >= limits[role]):
                 continue
+            if any(c.get("kind") == "refinement" and c.get("cost_role") == role
+                   and c["role"] not in exhausted and c["role"] not in current["suspended"]
+                   and counts.get(c["role"], 0) < limits.get(c["role"], 0)
+                   for c in children(db, epoch_id)):
+                continue  # Spend this family's follow-up on its explicitly selected lineage.
             if lifecycle.waiting_for_analysis(db, epoch_id, role):
                 # If no analyst fits, keep the final reserve; idle review records why.
                 continue

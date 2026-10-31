@@ -22,7 +22,7 @@ def execution_environment(inherited: dict[str, str]) -> dict[str, str]:
 
 
 def run(phase: str, trusted: Path, worktree: Path, build: Path, evaluation_phase="search"):
-    spec = json.loads((trusted / "project.json").read_text())
+    spec = json.loads((trusted / "project.json").read_text(encoding="utf8"))
     project = build / "project"
     env = {**execution_environment(dict(os.environ)), "FOREST_PHASE": evaluation_phase, "FOREST_PROJECT": str(project),
            "FOREST_ATTACHMENTS": str(trusted / "attachments")}

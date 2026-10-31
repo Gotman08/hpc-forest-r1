@@ -341,3 +341,25 @@ def test_retry_helper_preserves_nontransport_errors_and_bounds_wait():
     with pytest.raises(InfrastructureError):
         asyncio.run(codex_worker.retry_transfer(stalled, attempts=2, timeout=0.01, retry_delay=0))
     assert time.monotonic() - started < 1
+
+
+def test_interrupted_response_write_leaves_no_truncated_cache(fixture, monkeypatch):
+    channel, request, request_sha, calls, output = fixture
+    original, armed = codex_worker.Path.write_bytes, [True]
+
+    def interrupted(path, data):
+        if armed[0] and (path.name == "response.json" or path.name.startswith(".response.json.")):
+            armed[0] = False
+            original(path, data[: len(data) // 2])
+            raise OSError("Synthetic power loss while publishing the response")
+        return original(path, data)
+
+    monkeypatch.setattr(codex_worker.Path, "write_bytes", interrupted)
+    with pytest.raises(OSError, match="power loss"):
+        asyncio.run(worker(Transfer(channel), output).handle(request["nonce"] + ".request.json"))
+    assert not (output / request["nonce"] / "response.json").exists()
+    # The restart reports the charged request as interrupted instead of crashing on a partial cache.
+    assert asyncio.run(worker(Transfer(channel), output).handle(request["nonce"] + ".request.json"))
+    response = wait_response(channel, request, request_sha)
+    assert response["infrastructure_error"] and "not replayed" in response["error"]
+    assert calls == [request["nonce"]]

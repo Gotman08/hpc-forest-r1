@@ -369,6 +369,30 @@ def test_history_shows_one_entry_per_submitted_mission(client, unavailable):
     assert [(r["kind"], r["id"]) for r in records] == [("mission", mission["id"])]
 
 
+@pytest.mark.parametrize("preparation", [{}, {"prepared_id": None}])
+def test_history_preserves_synced_missions_without_local_preparation(client, preparation):
+    store = client.app.state.store
+    campaign = store.list("campaign")[0]
+    synced = store.create("mission", {"name": "Synchronized", "state": "completed",
+                                      "campaign_id": campaign["id"], **preparation})
+    launched = store.create("prepared", {"name": "Launched", "state": "prepared"})
+    waiting = store.create("prepared", {"name": "Waiting", "state": "prepared"})
+    local = store.create("mission", {"name": "Local", "state": "completed",
+                                     "prepared_id": launched["id"]})
+
+    response = client.get("/api/history")
+
+    assert response.status_code == 200
+    records = response.json()
+    assert len(records) == 3
+    assert {(r["kind"], r["id"]) for r in records} == {
+        ("mission", synced["id"]), ("mission", local["id"]), ("prepared", waiting["id"]),
+    }
+    assert store.get(synced["id"], "mission") == synced
+    assert store.get(campaign["id"], "campaign") == campaign
+    assert store.get(launched["id"], "prepared") == launched
+
+
 def test_api_malformed_contract_and_paths_are_errors_not_crashes(client):
     headers = {"X-Forest-Request": "1"}
     response = client.post("/api/projects", headers=headers, files={"files": ("main.cpp", b"code")},

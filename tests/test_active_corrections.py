@@ -12,7 +12,7 @@ from hpc_forest.active_analysis import source_page, validate
 from hpc_forest.active_contract import validate_decision
 from hpc_forest.active_scheduler import due
 from hpc_forest.active_snapshot import freeze
-from hpc_forest.active_state import apply, key, state
+from hpc_forest.active_state import apply, children, key, state
 from hpc_forest.controller import Controller
 from hpc_forest.core import BudgetExhausted, InfrastructureError
 
@@ -23,6 +23,15 @@ def corrected(campaign):  # noqa: F811 - imported pytest fixture
     campaign.db.set("config", campaign.config)
     life.initialize(campaign.db, 1)
     return campaign
+
+
+def descendant(c, source, index):
+    """Use a real independently seeded TreeQuest tree, not a fabricated admission."""
+    role = "T9"
+    c.search.initialize(1, role, 23, root_source_id=source.id)
+    child = trial(c, role, 8.1)
+    life.admitted(c.db, 1, role, child.id)
+    return child
 
 
 def grounded(snapshot, identity):
@@ -107,9 +116,11 @@ def test_stop_decision_cannot_ignore_late_completed_evidence(corrected, kind):
 
 
 def test_late_progress_reopens_suspended_tree_and_requires_code_review(corrected):
-    trial(corrected, "T1", 8)
+    for _ in range(3):
+        trial(corrected, "T1", 8)
     snapshot = freeze(corrected, 1)
-    apply(corrected.db, 1, "suspend", snapshot, decision(snapshot, action("suspend", "T1")))
+    receipt = apply(corrected.db, 1, "suspend", snapshot, decision(snapshot, action("suspend", "T1")))
+    assert receipt["actions"][0]["status"] == "applied"
     late = trial(corrected, "T1", 6)
     life.observe(corrected.db, 1, late.id)
     assert "T1" not in state(corrected.db, 1)["suspended"]
@@ -142,7 +153,7 @@ def test_protected_trials_are_finite_and_cannot_consume_final_reserve(corrected)
     life.observe(corrected.db, 1, good.id)
     assert life.protection_admissible(corrected.db, 1, "T1")
     for index in range(2):
-        life.admitted(corrected.db, 1, "T1", f"protected-{index}")
+        descendant(corrected, good, index)
     assert not life.protection_admissible(corrected.db, 1, "T1")
     current = state(corrected.db, 1)
     assert current["lifecycle"]["protections"]["T1"]["remaining"] == 0
@@ -198,7 +209,7 @@ def test_protection_envelope_and_noise_do_not_reset_on_restart(corrected):
     with corrected.db.connection:
         corrected.db.connection.execute("UPDATE trials SET result=? WHERE id=?", (json.dumps(result), one.id))
     life.observe(corrected.db, 1, one.id)
-    life.admitted(corrected.db, 1, "T1", "first-protected")
+    descendant(corrected, one, 0)
     previous = state(corrected.db, 1)["lifecycle"]
     new = trial(corrected, "T1", 7.5)
     life.observe(corrected.db, 1, new.id)
@@ -260,8 +271,8 @@ def test_ordinary_followups_end_progress_window_when_protection_envelope_is_spen
     current["lifecycle"]["protection_limit_seconds"] = 1  # No protected generation fits.
     corrected.db.set(key(1), current)
     for n in range(2):
-        life.admitted(corrected.db, 1, "T1", f"ordinary-{n}")
-        life.admitted(corrected.db, 1, "T1", f"ordinary-{n}")  # Durable admission is idempotent.
+        child = descendant(corrected, one, n)
+        life.admitted(corrected.db, 1, "T9", child.id)  # Durable admission is idempotent.
         later = trial(corrected, "T1", 8.1)
         life.observe(corrected.db, 1, later.id)
     item = state(corrected.db, 1)["lifecycle"]
@@ -270,3 +281,19 @@ def test_ordinary_followups_end_progress_window_when_protection_envelope_is_spen
     assert not life.analysis_needed(corrected.db, 1, "T1")
     assert not due(corrected.db, 1, "T1", corrected.config["forest"]["active"])
     assert len(corrected.db.rows("SELECT * FROM events WHERE kind='active_unprotected_followup'")) == 2
+
+
+def test_trees_created_by_one_decision_receive_distinct_roles(corrected):
+    one, two = trial(corrected, "T1", 6), trial(corrected, "T2", 7)
+    snapshot = freeze(corrected, 1)
+    request = validate_decision(decision(snapshot, action("refine", "T1", sources=[one.id]),
+                                         action("refine", "T2", sources=[two.id])),
+                                snapshot, {one.id, two.id})
+    receipt = apply(corrected.db, 1, "two-refinements", snapshot, request)
+    assert [a["status"] for a in receipt["actions"]] == ["applied", "applied"]
+    created = [a["created_tree"] for a in receipt["actions"]]
+    roles = [c["role"] for c in children(corrected.db, 1)]
+    assert len(set(created)) == 2 and len(roles) == len(set(roles))
+    # Each continuation imports only its own measured source, never the other tree's program.
+    imports = state(corrected.db, 1)["imports"]
+    assert imports[created[0]] == [one.id] and imports[created[1]] == [two.id]

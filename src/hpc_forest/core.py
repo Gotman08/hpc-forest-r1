@@ -245,6 +245,7 @@ class Outcome:
     reason: str = ""
     logs: list[str] = field(default_factory=list)
     cache_key: str | None = None
+    execution_validation: dict | None = None
 
 
 def local_target_id() -> str:

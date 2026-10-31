@@ -63,7 +63,9 @@ def test_nominal_rounds_are_distinct_from_the_conditional_assembly_limit(db):
     config["completion"]["initial_integration_rounds"] = 3
     db.set("config", config)
     decision = forecast(db, now=1404)
-    assert decision["integration_steps"] == 3
+    assert decision["integration_steps"] == 1
+    assert decision["nominal_integration_steps"] == 3
+    assert decision["optional_integration_seconds"] > 0
     assert decision["integration_step_limit"] == 16
     config["memory"]["assembly_rounds"] = 1
     db.set("config", config)
@@ -78,8 +80,11 @@ def test_latency_replay_uses_the_target_and_leaves_room_for_actual_finalization(
         added += 1
     # Replay repeats a measured fast node; it predicts time, never speedup or quality.
     assert added >= 10
-    actual_finalization = 489.18138098716736
-    assert 27 * 60 < elapsed + actual_finalization < 30 * 60
+    # Mandatory finalization still fits. Extra rounds now go through their own
+    # admission instead of charging all historical optional rounds to research.
+    final = forecast(db, now=1000 + elapsed)
+    assert elapsed + final["reserve_seconds"] <= 30 * 60
+    assert not assembly_admission(db, now=1000 + elapsed + final["final_g_seconds"])["can_start_round"]
 
 
 def test_measured_selection_and_whole_code_episodes_replace_initial_priors(db):
@@ -90,8 +95,9 @@ def test_measured_selection_and_whole_code_episodes_replace_initial_priors(db):
     db.set("memory_selection_call_counts", [3, 4, 3])
     decision = forecast(db, now=1404)
     assert decision["final_g_seconds"] == 152
-    assert decision["selection_seconds"] == 2 * 3 * 25
-    assert decision["integration_seconds"] == 2 * 152 + 150
+    assert decision["selection_seconds"] == 3 * 25
+    assert decision["integration_seconds"] == 152 + 75
+    assert decision["optional_integration_seconds"] == 152 + 75
 
 
 def test_optional_reads_preserve_code_and_confirmation_for_large_forests(db):

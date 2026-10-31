@@ -67,19 +67,37 @@ class Search:
             self.settings == DEFAULT and not self.pool
         ) else VERSION + ":" + digest({"search": self.settings, "generators": self.pool})[:20]
 
-    def initialize(self, epoch: int, role: str, seed: int) -> str:
+    def initialize(self, epoch: int, role: str, seed: int, *, root_source_id: str | None = None) -> str:
         tree_id = f"e{epoch}:{role}"
         existing = self.db.one("SELECT version FROM trees WHERE id=?", (tree_id,))
         if existing:
             if existing["version"] != self.version:
                 raise InfrastructureError("Search policy/version changed; create a new campaign")
+            if root_source_id is not None and self.db.get("search_root:" + tree_id) != root_source_id:
+                raise InfrastructureError("An initialized refinement root cannot change")
             return tree_id
-        blob = pack(self.algo.init_tree(), np.random.RandomState(seed).get_state())
+        state = self.algo.init_tree()
+        if root_source_id is not None:
+            if self.binary:
+                raise InfrastructureError("A measured refinement root requires a TreeQuest policy")
+            source = self.db.one("SELECT mission,result FROM trials WHERE id=? AND epoch=? AND state='completed'",
+                                 (root_source_id, epoch))
+            mission, result = (json.loads(source[k]) for k in ("mission", "result")) if source else ({}, {})
+            if not result.get("correct") or result.get("score") is None or not result.get("commit"):
+                raise InfrastructureError("Refinement root must be an evaluated correct program")
+            # Supply the initial program to a NEW independent AB-MCTS tree. No
+            # ask/tell is replaced and no reward is copied into the source tree.
+            state.tree.root.state = {"experiment_id": root_source_id, "commit": result["commit"],
+                                     "depth": mission["depth"], "seeded_root": True}
+        blob = pack(state, np.random.RandomState(seed).get_state())
         with self.db.connection:
             self.db.connection.execute(
                 "INSERT INTO trees(id,epoch,role,checkpoint,sha256,version) VALUES(?,?,?,?,?,?)",
                 (tree_id, epoch, role, blob, hashlib.sha256(blob).hexdigest(), self.version),
             )
+            if root_source_id is not None:
+                self.db.connection.execute("INSERT INTO metadata(key,value) VALUES(?,?)",
+                                           ("search_root:" + tree_id, canonical(root_source_id)))
         return tree_id
 
     def _tree(self, tree_id: str):
@@ -108,17 +126,21 @@ class Search:
                 node_id = node.state["experiment_id"] if node.state else row["id"]
                 parent_id = (node.parent.state["experiment_id"] if node.parent
                              and node.parent.state else row["id"] if node.parent else None)
+                seeded = bool(node.state and node.state.get("seeded_root"))
+                depth = node.state.get("depth", node.depth) if node.state else node.depth
                 item = {"id": node_id, "label": labels.get(node_id, row["role"]),
-                        "parent": parent_id, "depth": node.depth, "score": node.score,
+                        "parent": parent_id, "depth": depth, "score": None if seeded else node.score,
                         "child_count": len(node.children)}
+                if seeded:
+                    item.update(seeded_root=True, local_depth=0)
                 if node.state:
                     item.update(generator=node.state.get("generator", {}),
                                 action=node.state.get("search_action", ""))
                 if self.binary and node.state:
                     item.update(side=node.state["side"], pruned=node.state["pruned"])
                 nodes.append(item)
-                scored += int(node.state is not None and node.score is not None)
-                max_depth = max(max_depth, node.depth)
+                scored += int(node.state is not None and node.score is not None and not seeded)
+                max_depth = max(max_depth, depth)
                 max_children = max(max_children, len(node.children))
             tree = {"role": row["role"], "nodes": nodes}
             if self.binary:

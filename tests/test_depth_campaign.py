@@ -165,7 +165,7 @@ def test_depth_payload_must_embed_the_authorized_plan(tmp_path, smoke, depth_pla
 @pytest.mark.parametrize("key,value", [
     ("expires_at", time.time() + 600), ("remote_payload", "/another/payload.tar.gz"),
     ("channel", "/scratch_p/nimarano/hpc-forest-r1-depth-" + "b" * 32 + "/results-123/mailbox"),
-])
+], ids=["expires_at", "remote_payload", "channel"])
 def test_depth_receipt_covers_duration_payload_and_channel(tmp_path, smoke, depth_plan, key, value):
     path, receipt = write_receipt(tmp_path, smoke, depth_plan)
     receipt[key] = value

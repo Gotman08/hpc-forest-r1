@@ -49,11 +49,11 @@ COLLECTORS = {
         "https://docs.nvidia.com/nsight-compute/NsightComputeCli/index.html"),
     "compiler": Collector((), ("Linux", "Darwin"), "Intercepted compiler invocations, optimization reports and intermediate files",
         "Compiler remarks, not time measurements",
-        "PATH wrappers cannot intercept absolute compiler paths or cached objects. Coverage is explicit. Remarks are not causal proof.",
+        "PATH wrappers cannot intercept absolute compiler paths or cached objects. CUDA-kernel diagnostics also capture dynamic NVRTC output without changing its options. Coverage is explicit; remarks are not causal proof.",
         "https://gcc.gnu.org/onlinedocs/gcc/Developer-Options.html"),
     "disassembly": Collector(("objdump",), (), "Binary machine instructions, symbols, source and line mapping",
         "Addresses/instructions, not dynamic costs",
-        "Source mapping requires debug information; optimized code can map ambiguously.",
+        "CUDA-kernel diagnostics use cuobjdump on captured NVRTC CUBIN, not the host launcher. Source mapping requires debug information; optimized code can map ambiguously.",
         "https://sourceware.org/binutils/docs/binutils/objdump.html"),
     "scorep": Collector(("scorep", "scorep-info"), ("Linux",), "Instrumented MPI/OpenMP/hybrid profile or trace",
         "Native CUBE/OTF2 units and event definitions",
@@ -70,6 +70,7 @@ PROBES = {
     "perf": ("--version",), "hpcrun": ("--version",), "hpcstruct": ("--version",),
     "hpcprof": ("--version",), "nsys": ("--version",), "ncu": ("--version",),
     "objdump": ("--version",), "scorep": ("--version",), "scorep-info": ("config-summary",),
+    "cuobjdump": ("--version",), "nvdisasm": ("--version",),
     "scalasca": ("--version",), "nvidia-smi": ("--query-gpu=name,driver_version,compute_cap", "--format=csv"),
 }
 DETAIL_PROBES = {
@@ -111,13 +112,59 @@ def options_for(collector, options):
     return options
 
 
+def launch_parts(workload):
+    """Separate a recognized MPI launcher from its rank command, including scripts.
+
+    A program/bundle path occurring as an argument is not a command boundary.
+    Unknown launcher syntax needs an adapter rather than guessed instrumentation.
+    """
+    launchers = {"srun", "mpirun", "mpiexec", "mpiexec.hydra", "orterun"}
+    if not workload:
+        raise ValueError("Empty diagnostic workload")
+    if Path(workload[0]).name not in launchers:
+        if any(Path(arg).name in launchers for arg in workload[1:]):
+            raise ValueError("Wrapped MPI launcher requires an explicit workload adapter")
+        return [], workload
+    if ":" in workload:
+        raise ValueError("MPMD launcher requires an explicit workload adapter")
+    valued = {"-n", "-np", "--np", "--ntasks", "-N", "--nodes", "-c", "--cpus-per-task",
+              "--ntasks-per-node", "--gpus-per-task", "--gpus-per-node", "--cpu-bind", "--gpu-bind",
+              "--mpi", "--map-by", "--bind-to", "--rank-by", "--host", "-host", "--hostfile",
+              "-hostfile", "--machinefile", "-machinefile", "--wdir", "-wdir", "--chdir", "-D",
+              "--export", "-x", "--kill-on-bad-exit"}
+    flags = {"--overcommit", "--exclusive", "--overlap", "--unbuffered", "--label", "-l",
+             "--tag-output", "--timestamp-output", "--report-bindings", "--oversubscribe",
+             "--use-hwthread-cpus", "--allow-run-as-root"}
+    index = 1
+    while index < len(workload):
+        arg = workload[index]
+        if arg == "--":
+            index += 1
+            break
+        if not arg.startswith("-"):
+            break
+        option, equal, value = arg.partition("=")
+        if option in flags and not equal:
+            index += 1
+        elif option in valued and equal and value:
+            index += 1
+        elif option in valued and not equal and index + 1 < len(workload):
+            index += 2
+        elif re.fullmatch(r"-(?:np|n|N|c)\d+", arg):
+            index += 1
+        else:
+            raise ValueError("Unsupported MPI launcher option; an explicit workload adapter is required")
+    if index >= len(workload):
+        raise ValueError("MPI launcher has no rank command")
+    return workload[:index], workload[index:]
+
+
 def collect(collector, options, workload, binary, output, run, tools):
     """Run typed commands using an injected bounded executor. No arbitrary CLI flags."""
     options = options_for(collector, options)
     app = list(workload)
-    # Per-rank instrumentation belongs AFTER the existing launcher and its options.
-    index = next((i for i, arg in enumerate(app) if Path(arg).resolve() == binary.resolve()), 0)
-    launcher, rank = app[:index], app[index:]
+    # Instrument the whole wrapper, or each rank after a recognized MPI launcher.
+    launcher, rank = launch_parts(app) if collector in {"hpctoolkit", "nsys", "ncu"} else ([], app)
     def command(name, args, *, env=None):
         return run([tools.get(args[0], args[0]), *map(str, args[1:])], name, env=env)
     def per_rank(prefix):

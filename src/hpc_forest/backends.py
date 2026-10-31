@@ -83,7 +83,14 @@ class RecipeBackend:
 
 class CodexBackend:
     def generate(self, mission: Mission, context: dict, config: dict, root: Path) -> Generated:
-        from .model_policy import mission_identity
+        from .model_policy import DSH_MODEL, mission_identity, provider
+        from .model_runtime import (
+            environment,
+            overrides,
+            structured_output_args,
+            structured_output_instructions,
+            validate_structured_output,
+        )
 
         selected = mission_identity(config, mission)
         executable = shutil.which(config["codex"]["executable"])
@@ -92,6 +99,8 @@ class CodexBackend:
         logs = root / "logs" / mission.id
         logs.mkdir(parents=True, exist_ok=True)
         response = logs / "agent-result.json"
+        schema_path = root / "trusted" / "result-schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf8")) if selected["model"] == DSH_MODEL else {}
         prompt = (
             f"You are a bounded HPC experiment worker for role {mission.role}.\n"
             f"Purpose: {role_goal(mission.role, context)}.\n"
@@ -105,6 +114,7 @@ class CodexBackend:
             f"Mission: {json.dumps(mission.__dict__, ensure_ascii=False)}\n"
             f"DATA_CONTEXT_BEGIN\n{json.dumps(context, ensure_ascii=False)[:32000]}\nDATA_CONTEXT_END\n"
         )
+        prompt += structured_output_instructions(selected["model"], schema)
         (logs / "prompt.txt").write_text(prompt, encoding="utf-8")
         args = [
             executable,
@@ -115,8 +125,7 @@ class CodexBackend:
             "--color",
             "never",
             "--ephemeral",
-            "--output-schema",
-            str(root / "trusted" / "result-schema.json"),
+            *structured_output_args(selected["model"], schema_path),
             "--output-last-message",
             str(response),
             "-C",
@@ -124,6 +133,10 @@ class CodexBackend:
         ]
         args += ["--model", selected["model"], "--config",
                  "model_reasoning_effort=" + json.dumps(selected["reasoning_effort"])]
+        if selected["model"] == DSH_MODEL:
+            args += ["--ignore-user-config", "--strict-config"]
+        for key, value in overrides(selected["model"], config["codex"].get("dsh_romeo")).items():
+            args += ["--config", key + "=" + json.dumps(value)]
         args += ["-"]
         result = run_process(
             args,
@@ -131,6 +144,7 @@ class CodexBackend:
             logs / "codex.jsonl",
             time_left(generation_deadline(context, config["budget"]["generation_seconds"])),
             stdin=prompt,
+            env=environment(selected["model"], config["codex"].get("dsh_romeo")),
         )
         usage_events = []
         for line in Path(result.log).read_text(encoding="utf-8", errors="replace").splitlines():
@@ -151,15 +165,18 @@ class CodexBackend:
             {
                 "events": usage_events,
                 "requested_model": selected["model"],
+                "provider": provider(selected["model"]),
                 "reasoning_effort_requested": selected["reasoning_effort"],
                 "cached_tokens_included_in_input": True,
             },
         )
         if result.returncode or result.timed_out:
             generated.error = "Codex execution failed or timed out; inspect codex.jsonl"
+            generated.infrastructure_error = True
             return generated
         try:
             data = json.loads(response.read_text(encoding="utf-8"))
+            validate_structured_output(selected["model"], data, schema)
             mission.hypothesis = str(data["hypothesis"])[:3000]
             mission.transformations = {"retained": data["transformations"]}
             kept = data["sources_kept"]

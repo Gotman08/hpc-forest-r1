@@ -353,6 +353,68 @@ def test_assembly_repair_resumes_next_turn_of_same_mother_without_relaunch(tmp_p
         assert controller.status()["final_g_confirmation"]["status"] == "confirmed"
 
 
+def test_rejected_assembly_json_keeps_native_chain_for_admitted_repair(tmp_path, monkeypatch, need_compiler):
+    _, controller, fixture = native_campaign(tmp_path, monkeypatch, 1, harness=True)
+    original_process = fixture.process
+    rejected = []
+
+    def process(argv, output, log, timeout, **kwargs):
+        result = original_process(argv, output, log, timeout, **kwargs)
+        request = json.loads((output / "request.json").read_text(encoding="utf-8"))
+        if request.get("meta_role") == "mother-final-assembly" and not rejected:
+            rejected.append(request)
+            path = output / "agent-result.json"
+            value = json.loads(path.read_text(encoding="utf-8"))
+            value["forbidden_extra_property"] = "must remain rejected"
+            atomic_json(path, value)
+        return result
+
+    monkeypatch.setattr(codex_process, "run_process", process)
+    with controller:
+        state = controller.run()
+        assert state["postprocess"]["status"] == "complete" and len(rejected) == 1
+        calls = [r for r in fixture.calls if r.get("meta_role") == "mother-final-assembly"]
+        assert len(calls) == 2
+        assert [r["conversation"]["turn"] for r in calls] == [1, 2]
+        assert len({r["nonce"] for r in calls}) == 2
+        assert calls[0]["conversation"]["thread_id"] == calls[1]["conversation"]["thread_id"]
+        assert state["costs"]["tokens_used"] == 12
+        controller.confirm()
+        assert controller.status()["final_g_confirmation"]["status"] == "confirmed"
+
+
+@pytest.mark.parametrize("fault", ["transport", "unknown", "tool_error", "forbidden_tool", "failed_turn", "wrong_thread"])
+def test_assembly_continuity_recovery_does_not_hide_other_failures(tmp_path, fault):
+    start = request_for(first_turn())
+    original = complete_turn(start, "1" * 64, tmp_path / "first")
+    request = {**start, "conversation": next_turn(original["conversation"]),
+               "meta_role": "mother-final-assembly"}
+    output = tmp_path / "rejected"
+    output.mkdir()
+    response = {"data": None, "error": "Schema rejected", "infrastructure_error": False,
+                "rejection": {"reason": "invalid_structured_output"}, "usage": {}}
+    terminal = "turn.completed"
+    thread = request["conversation"]["thread_id"]
+    if fault == "transport":
+        response["infrastructure_error"] = True
+    elif fault == "unknown":
+        response.pop("rejection")
+    elif fault == "tool_error":
+        response["usage"]["tool_runtime_errors"] = ["failure"]
+    elif fault == "forbidden_tool":
+        response["usage"]["forbidden_tool_events"] = ["exec"]
+    elif fault == "failed_turn":
+        terminal = "turn.failed"
+    else:
+        thread = str(uuid.uuid4())
+    (output / "codex.jsonl").write_text("\n".join(map(json.dumps, [
+        {"type": "thread.started", "thread_id": thread}, {"type": terminal}])), encoding="utf-8")
+    result = run_turn(request, "2" * 64, output, lambda: response)
+    assert result.get("conversation") is None and result.get("recovery") is None
+    with pytest.raises(InfrastructureError, match="matching completed"):
+        run_turn(request, "3" * 64, tmp_path / "retry", lambda: pytest.fail("Do not replay"))
+
+
 def test_new_version_cannot_reinterpret_frozen_v5_forest_contract(monkeypatch):
     from test_depth_campaign import load_tool
 

@@ -18,10 +18,11 @@ from hpc_forest.independent_budget import forecast_independent
 corrected = corrected_fixture
 
 
-def record(identity, parent=None, role="T1", score=.7):
+def record(identity, parent=None, role="T1", score=.7, correct=True):
     text = "void run() { " + identity + "(); }\n"
     return {"id": identity, "kind": "trial", "mission": {"role": role, "parent_id": parent},
-            "outcome": {"commit": identity, "score": score}, "source_files": {"src/x.cpp": text}}
+            "outcome": {"commit": identity, "score": score, "correct": correct},
+            "source_files": {"src/x.cpp": text}}
 
 
 def cite(r):
@@ -45,6 +46,15 @@ def test_tested_requires_a_changed_measured_child_of_the_hypothesis_source():
     broken["records"][1]["outcome"]["score"] = None
     with pytest.raises(InfrastructureError):
         validate_review(hypothesis, valid, broken)
+
+
+def test_an_incorrect_child_cannot_test_a_hypothesis():
+    before, after = record("a"), record("b", "a", score=0.0, correct=False)
+    hypothesis = {"tree": "T1", "evidence_ids": ["a"]}
+    review = {"disposition": "tested", "basis": "measured_comparison", "evidence_ids": ["a", "b"],
+              "source_citations": [cite(before), cite(after)]}
+    with pytest.raises(InfrastructureError, match="measured parent-child comparison"):
+        validate_review(hypothesis, review, {"epoch": 1, "records": [before, after]})
 
 
 def test_rejection_needs_bounded_code_evidence_and_cannot_relabel_an_opinion_as_test():

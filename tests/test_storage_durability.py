@@ -9,7 +9,7 @@ from hpc_forest.core import FileLock, ForestError, InfrastructureError, atomic_j
 from hpc_forest.maintenance import migrate_config
 from hpc_forest.registry import Registry
 from hpc_forest.storage.backups import backup_application, restore_application, verify_backup
-from hpc_forest.storage.files import atomic_path
+from hpc_forest.storage.files import atomic_path, extended_path, plain_path
 from hpc_forest.storage.sqlite import backup_database
 from hpc_forest.webapp.store import Store
 
@@ -118,6 +118,37 @@ def test_backup_restore_verifies_bytes_preserves_data_and_quarantines_submission
     with pytest.raises(ForestError):
         restore_application(backup, tmp_path / "corrupt-restore")
     assert not (tmp_path / "corrupt-restore").exists()
+
+
+def test_backup_keeps_files_beyond_max_path_and_relocates_extended_views(tmp_path):
+    source = tmp_path / "app"
+    store = Store(source)
+    # The application records views installed beyond MAX_PATH with the \\?\ prefix.
+    view = extended_path(source / "missions" / ("m" * 32) / ("view-" + "v" * 32))
+    deep = view.joinpath(*[f"nested-evidence-{i:02d}" for i in range(12)], "evidence.json")
+    deep.parent.mkdir(parents=True)
+    deep.write_bytes(b"{}")
+    assert len(str(plain_path(deep))) > 260
+    campaign = store.create("campaign", {"source_root": str(view)})
+    backup, restored = tmp_path / "backup", tmp_path / "restored"
+    receipt = backup_application(source, backup)
+    relative = plain_path(deep).relative_to(source.resolve()).as_posix()
+    assert relative in receipt["files"] and receipt["external_campaigns"] == []
+    restore_application(backup, restored)
+    assert (extended_path(restored) / relative).read_bytes() == b"{}"
+    moved = Store(restored).get(campaign["id"])["source_root"]
+    assert plain_path(moved) == restored.resolve() / plain_path(view).relative_to(source.resolve())
+    assert moved == str(extended_path(plain_path(moved)))
+
+
+def test_restore_keeps_the_state_saved_by_an_earlier_quarantine(tmp_path):
+    source = tmp_path / "app"
+    mission = Store(source).create("mission", {"state": "recovery_required", "previous_state": "submitting"})
+    backup_application(source, tmp_path / "backup")
+    receipt = restore_application(tmp_path / "backup", tmp_path / "restored")
+    restored = Store(tmp_path / "restored").get(mission["id"])
+    assert receipt["quarantined_missions"] == [mission["id"]]
+    assert restored["state"] == "recovery_required" and restored["previous_state"] == "submitting"
 
 
 def test_explicit_config_migration_does_not_modify_source(tmp_path, config):

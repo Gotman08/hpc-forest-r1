@@ -21,7 +21,14 @@ from .diagnostics_mcp import INSTRUCTIONS as DIAGNOSTIC_INSTRUCTIONS
 from .diagnostics_mcp import DiagnosticsMCP
 from .documentation_mcp import DOCUMENTATION_INSTRUCTIONS, DOCUMENTATION_TOOLS, DocumentationMCP
 from .model_mcp import DISABLED_MODEL_TOOLS, RomeoMCP
-from .model_policy import require_identity, require_request_identity
+from .model_policy import DSH_MODEL, require_identity, require_request_identity
+from .model_runtime import environment as model_environment
+from .model_runtime import overrides as provider_overrides
+from .model_runtime import (
+    structured_output_args,
+    structured_output_instructions,
+    validate_structured_output,
+)
 from .model_skills import consume_report, usage_trace, verify_binding
 from .support.budgets import FINISH_STARTED, OBSERVE_TOKENS, time_left
 
@@ -98,7 +105,8 @@ def wire_schema(schema: dict) -> dict:
 def command_for(request: dict, output: Path, executable: str = "codex", *,
                 romeo_mcp: RomeoMCP | None = None,
                 documentation_mcp: DocumentationMCP | None = None,
-                diagnostics_mcp: DiagnosticsMCP | None = None) -> list[str]:
+                diagnostics_mcp: DiagnosticsMCP | None = None,
+                dsh_settings: dict | None = None) -> list[str]:
     require_identity(request)
     executable = shutil.which(executable)
     if not executable:
@@ -115,6 +123,7 @@ def command_for(request: dict, output: Path, executable: str = "codex", *,
         system += DOCUMENTATION_INSTRUCTIONS
     if diagnostics_mcp is not None:
         system += DIAGNOSTIC_INSTRUCTIONS
+    system += structured_output_instructions(request["model"], request["schema"])
     (output / "instructions.txt").write_text(system, encoding="utf8")
     atomic_json(output / "output-schema.json", wire_schema(request["schema"]))
     persistent = request.get("conversation") is not None
@@ -126,7 +135,10 @@ def command_for(request: dict, output: Path, executable: str = "codex", *,
     # Resume has its own schema, model and config options. Pass them directly to
     # that subcommand so the planning schema cannot survive into code assembly.
     args += ["--ignore-user-config", "--strict-config", "--skip-git-repo-check", "--json",
-             "--model", request["model"], "--output-schema", str(output / "output-schema.json"),
+             "--model", request["model"],
+             *structured_output_args(request["model"], output / "output-schema.json",
+                                     tools_enabled=any(m is not None for m in
+                                         (romeo_mcp, documentation_mcp, diagnostics_mcp))),
              "--output-last-message", str(output / "agent-result.json")]
     if not persistent:
         args.append("--ephemeral")
@@ -136,7 +148,7 @@ def command_for(request: dict, output: Path, executable: str = "codex", *,
         "project_doc_max_bytes": 0,
         "skills.max_context_tokens": 1,
         "approval_policy": "never",
-        "forced_login_method": "chatgpt",
+        **provider_overrides(request["model"], dsh_settings),
         "web_search": "disabled",
         "features.skip_host_skill_discovery": True,
         "features.code_mode_host": any(m is not None for m in (romeo_mcp, documentation_mcp, diagnostics_mcp)),
@@ -258,18 +270,30 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
 def run_codex(request: dict, request_sha: str, output: Path, dependency_receipt: Path,
               required_jobs: set[str], executable="codex", *, romeo_mcp: RomeoMCP | None = None,
               documentation_mcp: DocumentationMCP | None = None,
-              diagnostics_mcp: DiagnosticsMCP | None = None) -> dict:
+              diagnostics_mcp: DiagnosticsMCP | None = None,
+              dsh_settings: dict | None = None) -> dict:
     gate = check_dependencies(dependency_receipt, required_jobs)
     if gate.get("schema") == "forest-app-authorization-v1":
         if request.get("session_id") != gate.get("session_id"):
             raise InfrastructureError("Request differs from the authorized application mission")
         require_request_identity(request, {"model": gate["next_model"],
             "reasoning_effort": gate["reasoning_effort"], "generator_pool": gate.get("generator_pool", [])})
+        if dsh_settings != gate.get("dsh_romeo"):
+            raise InfrastructureError("dsh-romeo connection differs from the authorized mission")
     if "active_control" in request:
         from .active_contract import validate_request
 
         validate_request(request)
         romeo_mcp = documentation_mcp = None  # Only the separately scoped diagnostic service is allowed.
+    if request.get("model") == DSH_MODEL and request.get("meta_role") == "mother-plan-review":
+        # The critique uses its persisted planning context. Keep this bounded
+        # report tool-free so ROMEO can enforce its original JSON schema.
+        romeo_mcp = documentation_mcp = None
+    if request.get("meta_role") == "mother-plan-repair":
+        turn = request.get("conversation") or {}
+        if turn.get("phase") != "plan-review" or turn.get("turn") != 1 or request.get("diagnostics") is not None:
+            raise InfrastructureError("Plan format repair requires the first native continuation without tools")
+        romeo_mcp = documentation_mcp = None
     if request.get("diagnostics") is not None:
         if diagnostics_mcp is None:
             raise InfrastructureError("The controller requested diagnostics but the native worker did not bind them")
@@ -307,15 +331,19 @@ def run_codex(request: dict, request_sha: str, output: Path, dependency_receipt:
         )
     def invoke():
         return _invoke(request, request_sha, output, executable, timeout, observe_only,
-                       romeo_mcp, documentation_mcp, diagnostics_mcp)
+                       romeo_mcp, documentation_mcp, diagnostics_mcp, dsh_settings)
     if request.get("conversation") is not None:
         return run_turn(request, request_sha, output, invoke)
     return invoke()
 
 
 def _invoke(request, request_sha, output, executable, timeout, observe_only,
-            romeo_mcp=None, documentation_mcp=None, diagnostics_mcp=None):
+            romeo_mcp=None, documentation_mcp=None, diagnostics_mcp=None, dsh_settings=None):
+    from .model_policy import provider
+
     options = {"romeo_mcp": romeo_mcp}
+    if dsh_settings is not None:
+        options["dsh_settings"] = dsh_settings
     if documentation_mcp is not None:
         options["documentation_mcp"] = documentation_mcp
     if diagnostics_mcp is not None:
@@ -323,7 +351,8 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
     argv = command_for(request, output, executable, **options)
     atomic_json(output / "invocation.json", {
         "argv": argv, "model": request["model"], "reasoning_effort": request["reasoning_effort"],
-        "request_sha256": request_sha, "hosted_inference": True,
+        "request_sha256": request_sha, "hosted_inference": provider(request["model"]) == "openai",
+        "provider": provider(request["model"]),
         "source_execution_allowed": romeo_mcp is not None or bool(diagnostics_mcp and diagnostics_mcp.can_collect),
         "local_source_execution_allowed": False,
         "diagnostic_execution_allowed": bool(diagnostics_mcp and diagnostics_mcp.can_collect),
@@ -340,17 +369,19 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
     })
     atomic_json(output / "request.json", request)
     result = run_process(argv, output, output / "codex.jsonl", timeout,
-                         env={"OPENAI_API_KEY": "", "CODEX_API_KEY": ""},
+                         env=model_environment(request["model"], dsh_settings),
                          stdin=request["messages"][1]["content"])
     usage, tools = usage_from_events(Path(result.log), observe_only=observe_only,
                                     allow_romeo_mcp=romeo_mcp is not None,
                                     allow_documentation=documentation_mcp is not None,
                                     diagnostic_tools=diagnostics_mcp.tools if diagnostics_mcp is not None else (),
                                     allow_empty_agent_wait=request.get("active_control", {}).get("kind") == "mother")
-    usage.update(model_requested=request["model"], reasoning_effort_requested=request["reasoning_effort"])
+    usage.update(model_requested=request["model"], reasoning_effort_requested=request["reasoning_effort"],
+                 provider=provider(request["model"]))
     error = None
     infra = False
     data = None
+    rejection = None
     reported, report_error = None, None
     if result.returncode or result.timed_out or usage.get("turn_failure_messages"):
         output_limit = usage.get("turn_failure_messages") == [
@@ -367,13 +398,17 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
         error, infra = "Codex attempted a tool call outside the authorized MCP access", True
     else:
         try:
-            data = bounded_json(output / "agent-result.json")
-            data, reported = consume_report(data, request.get("model_skills"))
+            proposal = bounded_json(output / "agent-result.json", allow_json_fence=request["model"] == DSH_MODEL)
+            if request["model"] == DSH_MODEL:
+                validate_structured_output(request["model"], proposal, request["schema"])
+            data, reported = consume_report(proposal, request.get("model_skills"))
         except CandidateRejected as exc:
             report_error = str(exc)
             error = f"Codex returned an invalid project skills report: {exc}"
         except (OSError, ValueError, InfrastructureError) as exc:
             error = f"Codex returned no valid structured proposal: {exc}"
+            if isinstance(exc, ValueError):
+                rejection = {"reason": "invalid_structured_output"}
     trace = usage_trace(request, request_sha, usage,
                         sha256((output / "instructions.txt").read_bytes()),
                         reported=reported, report_error=report_error)
@@ -382,6 +417,8 @@ def _invoke(request, request_sha, output, executable, timeout, observe_only,
         atomic_json(output / "skills-usage.json", trace)
     response = response_envelope(request, request_sha, data=data, usage=usage,
                                  error=error, infrastructure_error=infra)
+    if rejection is not None:
+        response["rejection"] = rejection
     atomic_json(output / "response.json", response)
     return response
 

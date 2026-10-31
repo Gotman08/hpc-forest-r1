@@ -36,6 +36,10 @@ def proposal_messages(worktree: Path, mission: Mission, context: dict, *, skills
         "Automatic observations include measured baseline/parent results and the original "
         "measured outcome of duplicates. A duplicate has no new reward; its earlier compiler "
         "or correctness diagnostic still describes that program."
+        " Keep the experiment aligned with the assigned objective; explain any deviation. "
+        "After a numerical failure, isolate the failing change before combining it with "
+        "another arithmetic or accumulation-order transformation. Preserve a correct "
+        "control variant and distinguish correctness repair from performance tuning."
     )
     schema = json.loads(json.dumps(SOURCE_SCHEMA))
     if context.get("exploration_context"):
@@ -57,6 +61,14 @@ def proposal_messages(worktree: Path, mission: Mission, context: dict, *, skills
             "and state its mechanism, expected observation and stop condition in your hypothesis "
             "and notes. Do not repeat an unchanged candidate. Analyst advice remains a hypothesis; "
             "do not claim a performance improvement before measurement."
+        )
+    if context.get("post_integration_refinement"):
+        system += (
+            " This reserved turn refines the measured integrated base. Inspect its exact "
+            "source and granted GPU diagnostics, reusing existing reports. Test one "
+            "controlled remaining interaction or parameter on the combined program, "
+            "rather than relying on the ranking of its standalone components. "
+            "Do not retry unavailable tools; retain time for writing the candidate."
         )
     kept_schema = schema["properties"]["sources_kept"]
     kept_schema["uniqueItems"] = True

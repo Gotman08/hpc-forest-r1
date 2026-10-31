@@ -3,17 +3,33 @@ from .core import InfrastructureError
 
 MODEL = "gpt-6-luna"
 EFFORT = "max"
-MODELS = {"gpt-6-luna": "GPT-6 Luna", "gpt-6.1-sol": "GPT-6.1 Sol", "gpt-6-astra": "GPT-6 Astra"}
+DSH_MODEL = "dsh-deepseek-v4.1-flash-1017-1m"
+MODELS = {
+    "gpt-6-luna": "GPT-6 Luna", "gpt-6.1-sol": "GPT-6.1 Sol", "gpt-6-astra": "GPT-6 Astra",
+    "gpt-6.1-terra": "GPT-6.1 Terra", "gpt-6-sol": "GPT-6 Sol",
+    "gpt-5.6-sol": "GPT-5.6 Sol", "gpt-5.6-terra": "GPT-5.6 Terra", "gpt-5.6-luna": "GPT-5.6 Luna",
+    "gpt-daybreak-blue-latest": "GPT Daybreak Blue",
+    DSH_MODEL: "DeepSeek V4.1 Flash 1017 · dsh-romeo",
+}
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
 
 def efforts(model: str) -> tuple[str, ...]:
-    # Native Codex catalogue verified on ROMEO; Ultra is absent for Luna.
-    return EFFORTS + (("ultra",) if model in {"gpt-6.1-sol", "gpt-6-astra"} else ())
+    # Codex catalogue and dsh-romeo launcher checked on 2026-10-29.
+    if model == DSH_MODEL:
+        return ("none", "low", "high", "max")
+    if model not in MODELS:
+        return ()
+    return EFFORTS + (() if model in {"gpt-6-luna", "gpt-5.6-luna"} else ("ultra",))
+
+
+def provider(model: str) -> str:
+    return "dsh-romeo" if model == DSH_MODEL else "openai"
 
 
 def catalog() -> list[dict]:
-    return [{"id": key, "label": label, "efforts": list(efforts(key))} for key, label in MODELS.items()]
+    return [{"id": key, "label": label, "efforts": list(efforts(key)),
+             "provider": provider(key), "default_effort": EFFORT} for key, label in MODELS.items()]
 
 
 def require_identity(value: dict) -> None:
@@ -32,7 +48,7 @@ def generator_pool(settings: dict) -> list[dict]:
     primary = identity(settings)
     pool = settings.get("generator_pool", [])
     if not isinstance(pool, list) or (pool and not 2 <= len(pool) <= len(MODELS)):
-        raise InfrastructureError("generator_pool must be empty or contain two to three model identities")
+        raise InfrastructureError(f"generator_pool must be empty or contain two to {len(MODELS)} model identities")
     if any(not isinstance(p, dict) or set(p) != {"model", "reasoning_effort"} for p in pool):
         raise InfrastructureError("Invalid generator_pool identity")
     selected = [identity(p) for p in pool] if pool else [primary]

@@ -13,9 +13,10 @@ thèmes, avec des durées claires sur des étiquettes noires.
 L’en-tête garde uniquement ce bouton ; le modèle et la cible restent visibles
 dans le contrat et les détails de mission.
 
-Le contrôleur et le client Codex authentifié par OAuth tournent dans l'allocation
-SLURM. L'inférence reste hébergée par OpenAI : les poids ne sont pas installés sur
-ROMEO. Après soumission, le PC affiche le suivi sans relayer les appels au modèle.
+Le contrôleur et le client Codex tournent dans l'allocation SLURM. Les modèles
+OpenAI utilisent la connexion ChatGPT distante ; DeepSeek utilise la passerelle
+dsh-romeo et ses GPU déjà alloués sur ROMEO. Après soumission, le PC affiche le
+suivi sans relayer les appels au modèle.
 
 ## Démarrer
 
@@ -65,11 +66,88 @@ Le défaut reste **GPT-6 Luna · max**.
 | GPT-6 Luna | low, medium, high, xhigh, max |
 | GPT-6.1 Sol | low, medium, high, xhigh, max, ultra |
 | GPT-6 Astra | low, medium, high, xhigh, max, ultra |
+| GPT-6.1 Terra | low, medium, high, xhigh, max, ultra |
+| GPT-6 Sol | low, medium, high, xhigh, max, ultra |
+| GPT-5.6 Sol / Terra | low, medium, high, xhigh, max, ultra |
+| GPT-5.6 Luna | low, medium, high, xhigh, max |
+| GPT Daybreak Blue | low, medium, high, xhigh, max, ultra |
+| DeepSeek V4.1 Flash 1017 · dsh-romeo | none, low, high, max |
 
-Ce catalogue correspond au client Codex de ROMEO vérifié le 25 octobre 2026.
-Le choix s'applique à Mother, aux générateurs, aux analystes et aux intégrations.
-Il reste figé dans la mission. Le changer nécessite une nouvelle préparation.
-Les campagnes historiques conservent leur modèle réel.
+Les choix OpenAI suivent le catalogue local Codex consulté le 29 octobre 2026.
+La disponibilité réelle est vérifiée dans le profil distant lors du lancement.
+Les efforts DeepSeek suivent le [lanceur dsh-romeo](https://github.com/wolf75222/dsh-romeo/blob/main/bin/dsh-romeo) ;
+`none` désactive sa réflexion. Les menus proposent les efforts propres au modèle.
+Le choix principal s'applique à Mother, aux analystes et aux intégrations.
+L'option de mélange permet aussi d'ajouter des générateurs OpenAI et DeepSeek,
+chacun avec son effort. Ces choix restent figés dans la mission ; les modifier
+nécessite une nouvelle préparation. Les campagnes historiques gardent leur modèle réel.
+
+### dsh-romeo : DeepSeek sur ROMEO
+
+Forest utilise le [fournisseur compatible Codex de dsh-romeo](https://github.com/wolf75222/dsh-romeo/blob/main/docs/clients.md)
+via l'API Responses. Les conversations persistantes, sorties structurées,
+contrôles et outils autorisés de Forest conservent leur chemin habituel.
+Il n'est pas nécessaire d'installer DeepSeek Harness dans le job Forest.
+Le modèle servi est `dsh-deepseek-v4.1-flash-1017-1m`.
+
+Sur le serveur ROMEO actuel, imposer un schéma JSON dans l'API peut empêcher
+DeepSeek d'appeler les outils MCP. Forest transmet donc le schéma dans les
+consignes du modèle et valide chaque réponse localement avec JSON Schema,
+y compris les champs obligatoires, types, valeurs autorisées et bornes.
+Une réponse invalide n'est pas acceptée comme proposition.
+
+1. Installer et configurer dsh-romeo selon sa documentation. Démarrer son modèle
+   séparément lorsque vous souhaitez allouer ses GPU. Forest ne lance ni
+   `dsh-romeo --launch`, ni `--stop`, ni une allocation d'inférence implicite.
+2. Sur ROMEO, relever l'adresse de la passerelle déjà active et enregistrer sa
+   clé dans un fichier privé, accessible depuis le nœud de calcul :
+
+   ```sh
+   /apps/romeotools/romeollmtool/romeollmtool gateway status
+   umask 077
+   mkdir -p ~/.config/forest
+   /apps/romeotools/romeollmtool/romeollmtool gateway show-key > ~/.config/forest/romeo-llm.key
+   chmod 600 ~/.config/forest/romeo-llm.key
+   ```
+
+3. Ajouter au `romeo.json` de l'application cette section, en remplaçant les
+   valeurs par l'adresse et le chemin absolu distants réels :
+
+   ```json
+   "dsh_romeo": {
+     "base_url": "http://HOTE_PASSERELLE_ROMEO:PORT/v1",
+     "api_key_file": "/home/VOTRE_COMPTE/.config/forest/romeo-llm.key"
+   }
+   ```
+
+   L'hôte doit être joignable depuis les nœuds de calcul. `127.0.0.1:11318`
+   désigne le tunnel du PC et ne convient pas au job autonome. Pour la passerelle
+   rapide, utiliser le nom du nœud login qui l'héberge et son port configuré
+   (11320 par défaut). Garder cette passerelle et le modèle actifs jusqu'à la
+   finalisation de Forest. La clé elle-même ne doit jamais figurer dans le JSON.
+4. Dans **Préparation → Modèle**, choisir **DeepSeek V4.1 Flash 1017 · dsh-romeo**,
+   puis son effort. Enregistrer, préparer un nouveau dossier et lancer la mission.
+   **Paramètres** indique si la connexion dsh-romeo est configurée. Au lancement,
+   Forest vérifie `/v1/models` avec la clé distante. Une connexion indisponible
+   reste un échec d'infrastructure, sans score et sans changement de fournisseur.
+
+Une mission exclusivement DeepSeek ne demande pas de connexion ChatGPT.
+Un mélange avec OpenAI vérifie les deux accès. L'URL et le chemin du fichier de
+clé sont figés dans la mission ; la clé est lue uniquement au moment de l'appel
+et transmise dans l'environnement du processus Codex, jamais dans ses arguments.
+
+Pour le backend CLI local, utiliser [configs/dsh-romeo.toml](../configs/dsh-romeo.toml)
+et l'environnement exporté par `dsh-romeo --env` (`DSH_ROMEO_BASE_URL`,
+`ROMEO_LLM_KEY`) dans le même terminal que Forest. Le tunnel reste requis pour
+ce mode local. Sous Windows, dsh-romeo s'utilise dans un environnement Linux
+compatible ; l'application Forest native peut utiliser directement la
+configuration distante ci-dessus.
+
+La compatibilité de Forest est testée avec une passerelle HTTP locale synthétique
+et des invocations Codex simulées. Le client local Codex 0.165.0-alpha.1.2 a aussi
+été vérifié contre une API Responses synthétique : transmission des quatre efforts,
+réponse structurée et reprise dans la même conversation. Aucun résultat d'inférence
+DeepSeek réelle ou de campagne HPC n'est revendiqué par ces tests.
 
 ## Configuration ROMEO
 
@@ -80,8 +158,9 @@ Il ne contient aucun jeton OAuth.
 
 Les runtimes doivent déjà contenir les dépendances du moteur et le client Codex
 pour l'architecture cible. Installer et compiler sur les nœuds de calcul, jamais
-sur le login. La CLI officielle vérifie la connexion ChatGPT au démarrage du job ;
-les identifiants restent dans le profil privé distant.
+sur le login. Pour les modèles OpenAI, la CLI officielle vérifie la connexion
+ChatGPT au démarrage du job ; les identifiants restent dans le profil privé distant.
+DeepSeek utilise la connexion dsh-romeo décrite ci-dessus.
 
 Le profil validé est **CPU x86_64, GCC 14.2.0**, deux cœurs et 8 Gio : un cœur
 pour le contrôleur et les programmes, l'autre pour le client du modèle. Les
@@ -186,6 +265,37 @@ est désactivé pour éviter de présenter un export partiel comme complet.
 
 L'application personnelle contrôle l'hôte, l'origine des écritures et les tailles
 des requêtes. Elle n'est pas conçue pour l'exposition publique ou plusieurs utilisateurs.
+
+## Configurer la validation de l'exécution
+
+Le formulaire de préparation propose **Configuration et validation**. Un contrat
+optionnel fixe les CPU réservés, les processeurs physiques, le nombre maximal de
+threads matériels par cœur et le placement. Il distingue cette allocation du
+nombre de threads qui doivent réellement calculer. Le contrat actuel prend en
+charge un nœud CPU ; MPI multi-nœuds et GPU nécessitent un autre adaptateur.
+
+Par exemple, une allocation peut réserver 192 cœurs sur deux processeurs et
+exiger 32 threads de calcul. `execution_validation.required_threads` exprime
+cette exigence, indépendamment de `cpus_per_task`. Les valeurs ne sont pas liées
+à un problème particulier. Le mode `not_required` vérifie les ressources sans
+imposer le parallélisme ; `gnu_openmp_required` exige une équipe GNU OpenMP
+observée avec la taille, le placement et le travail CPU demandés.
+
+Les exigences sont figées avant la campagne et reprises dans la configuration
+distante. Une exécution instrumentée séparée observe les équipes, leur affinité
+et leur temps CPU hors synchronisations interceptées. Les mesures officielles
+s'exécutent sans cette instrumentation. Les boucles combinées et les sections
+utilisent des points d'entrée distincts de la [bibliothèque GNU OpenMP](https://gnu.googlesource.com/gcc/+/trunk/libgomp/loop.c),
+également couverts par la sonde. Un point d'entrée explicitement non pris en
+charge reste sans score. Le temps CPU seul ne prouve pas qu'une instruction
+contribue au résultat : les travaux artificiels doivent être exclus par revue
+des sources. La justesse continue d'être contrôlée par les tests protégés.
+
+Les fiches de mission, d'essai et de résultat affichent séparément les exigences,
+l'allocation observée et la preuve du programme. Les campagnes antérieures sans
+contrat restent « parallélisme non vérifié ». L'original séquentiel peut servir
+de référence ; il ne peut pas devenir le gagnant d'une campagne qui exige du
+calcul parallèle. Une autre configuration exige une nouvelle campagne.
 
 ## Vérifier
 

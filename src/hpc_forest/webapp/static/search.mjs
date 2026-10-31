@@ -33,7 +33,8 @@ export function searchFormValues(data) {
   const generator_pool=[];
   if(data.mix_generators) {
     generator_pool.push({model:data.model,reasoning_effort:data.reasoning_effort});
-    for(const model of ["gpt-6-luna","gpt-6.1-sol","gpt-6-astra"]) {
+    for(const key of Object.keys(data).filter(key=>key.startsWith("generator_")&&!key.startsWith("generator_effort_"))) {
+      const model=key.slice("generator_".length);
       if(model!==data.model&&data["generator_"+model]) generator_pool.push({model,reasoning_effort:data["generator_effort_"+model]});
     }
     if(generator_pool.length<2) throw new Error("Choisissez au moins un autre modèle pour activer le mélange.");

@@ -17,7 +17,7 @@ from pathlib import Path
 from ..codex_mailbox import initialize_channel
 from ..codex_worker import Worker
 from ..core import FileLock, InfrastructureError, atomic_json, file_digest
-from ..model_policy import generator_pool
+from ..model_runtime import authenticate
 from ..request_pool import RequestPool
 from .runner_support import (
     SharedFiles,
@@ -64,19 +64,20 @@ def control(root: Path):
         phase(root, "failed", **done)
         return 1
     finally:
-        launch = json.loads((root / "launch.json").read_text())
+        launch = json.loads((root / "launch.json").read_text(encoding="utf8"))
         atomic_json(root / "campaign/DONE.json", done)
         atomic_json(root / "campaign/mailbox/DONE.json", {**done, "session_id": launch["session_id"]})
 
 
 async def work(root: Path):
-    launch = json.loads((root / "launch.json").read_text())
+    launch = json.loads((root / "launch.json").read_text(encoding="utf8"))
     output = root / "worker"
     with FileLock(output / "worker.lock"):
         worker = Worker(SharedFiles(root), str(root / "campaign/mailbox"), launch["session_id"],
                         output, root / "authorization.json", {launch["id"]},
                         executable=launch["codex"], model=launch["model"], effort=launch["effort"],
                         generators=launch.get("generator_pool"),
+                        dsh_settings=launch.get("dsh_romeo"),
                         documentation=True, diagnostics_root=root / "campaign",
                         defer_diagnostics=True)
         await worker.hello()
@@ -99,27 +100,26 @@ async def work(root: Path):
 def supervise(root: Path):
     from ..controller import create_workspace
 
-    launch = json.loads((root / "launch.json").read_text())
+    launch = json.loads((root / "launch.json").read_text(encoding="utf8"))
     cpus = sorted(os.sched_getaffinity(0))
-    if (not os.environ.get("SLURM_JOB_ID", "").isdigit() or len(cpus) < 2
+    if launch.get("execution_validation"):
+        from ..execution_validation import allocation_evidence
+
+        observation = allocation_evidence(launch["execution_validation"])
+        atomic_json(root / "allocation-validation.json", observation)
+        if observation["status"] != "passed":
+            raise InfrastructureError("The allocation does not satisfy the frozen execution contract")
+    minimum_cpus = 1 if launch.get("execution_validation") else 2
+    if (not os.environ.get("SLURM_JOB_ID", "").isdigit() or len(cpus) < minimum_cpus
             or platform.machine() != launch["architecture"]):
         raise InfrastructureError("The expected ROMEO compute allocation is required")
     for name, digest in launch["engine_files"].items():
         if file_digest(root / "engine" / name) != digest:
             raise InfrastructureError("Frozen engine changed")
-    # Authentication is verified by the official CLI; never read or export OAuth tokens.
-    auth = subprocess.run([launch["codex"], "login", "status"], capture_output=True, text=True, timeout=30)
-    if auth.returncode or "Logged in using ChatGPT" not in auth.stdout + auth.stderr:
-        raise InfrastructureError("ROMEO ChatGPT authentication is unavailable; sign in again")
-    catalog_path = Path(os.environ["CODEX_HOME"]) / "models_cache.json"
-    if catalog_path.is_file():
-        catalog = json.loads(catalog_path.read_text())
-        for selected in generator_pool({"model": launch["model"], "reasoning_effort": launch["effort"],
-                                        "generator_pool": launch.get("generator_pool", [])}):
-            entry = next((m for m in catalog.get("models", []) if m.get("slug") == selected["model"]), None)
-            if not entry or selected["reasoning_effort"] not in {e["effort"] for e in entry.get("supported_reasoning_levels", [])}:
-                raise InfrastructureError("A selected model/effort is absent from the ROMEO Codex catalogue")
-    phase(root, "preparing", model=launch["model"], effort=launch["effort"], authentication="ChatGPT")
+    auth = authenticate(launch["codex"], {"model": launch["model"], "reasoning_effort": launch["effort"],
+                        "generator_pool": launch.get("generator_pool", [])},
+                        dsh_settings=launch.get("dsh_romeo"), check_catalog=True)
+    phase(root, "preparing", model=launch["model"], effort=launch["effort"], **auth)
     config = prepare_project(root, launch)
     from hpc_forest.search.policy import make_algorithm, settings
 
@@ -131,6 +131,7 @@ def supervise(root: Path):
         "schema": "forest-app-authorization-v1", "mission_id": launch["id"],
         "session_id": launch["session_id"], "next_model": launch["model"], "reasoning_effort": launch["effort"],
         "generator_pool": launch.get("generator_pool", []),
+        **({"dsh_romeo": launch["dsh_romeo"]} if "dsh_romeo" in launch else {}),
         "manifest_sha256": file_digest(root / "launch.json"), "expires_at": time.time() + launch["allocation_seconds"],
         "completion": {"policy": "finish-started", "token_policy": "observe-only"},
     })
@@ -146,7 +147,11 @@ def supervise(root: Path):
     snapshot.start()
     deadline = time.monotonic() + launch["allocation_seconds"] - 90
     try:
-        for name, cpu in (("worker", cpus[-1]), ("controller", cpus[0])):
+        placements = (("worker", cpus[-1]), ("controller", cpus[0]))
+        if launch.get("execution_validation"):
+            placements = (("worker", ",".join(map(str, cpus))),
+                          ("controller", ",".join(map(str, cpus))))
+        for name, cpu in placements:
             stream = (root / (name + ".log")).open("ab")
             streams.append(stream)
             processes.append(subprocess.Popen(

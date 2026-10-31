@@ -30,6 +30,13 @@ le contenu brut des exceptions du connecteur. Un programme peut lui-même écrir
 des secrets : les journaux, sauvegardes et archives brutes restent privés et ne
 doivent pas être publiés sans examen.
 
+Pour dsh-romeo, le bundle conserve uniquement l'adresse de la passerelle et le
+chemin d'un fichier privé distant contenant sa clé. Cette clé est lue à l'appel
+et passée dans l'environnement du client Codex ; elle ne figure ni dans ses
+arguments ni dans les contrats. Le contrôleur ne reçoit pas cette clé par
+l'environnement du worker. Comme le profil OAuth, le fichier reste accessible
+aux programmes exécutés sous le même compte : ce mode suppose un code de confiance.
+
 Les checkpoints locaux TreeQuest utilisent pickle et sont exécutables à la
 lecture. Ne reprendre que ses propres campagnes de confiance. L'application
 consulte SQLite en lecture seule sans charger ces checkpoints. Le rapport d'une

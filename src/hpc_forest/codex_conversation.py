@@ -27,6 +27,26 @@ def recoverable_output_limit(request, response, events):
             and terminal[0]["error"].get("message") == OUTPUT_LIMIT)
 
 
+def recoverable_structured_rejection(request, response, events):
+    """Keep a completed native turn even when its decision fails local validation."""
+    terminal = [e for e in events if e.get("type") in {"turn.failed", "turn.completed"}]
+    usage = response.get("usage") or {}
+    turn = request["conversation"]
+    eligible = (request.get("active_control", {}).get("kind") == "mother"
+                and turn["phase"] == "steering") or (
+                    request.get("meta_role") == "mother-preparation"
+                    and turn["phase"] == "planning" and turn["turn"] == 0) or (
+                        request.get("meta_role") == "mother-final-assembly"
+                        and turn["phase"] == "assembly")
+    return (eligible
+            and response.get("error") is not None and not response.get("infrastructure_error")
+            and response.get("data") is None
+            and response.get("rejection") == {"reason": "invalid_structured_output"}
+            and not usage.get("turn_failure_messages")
+            and not usage.get("forbidden_tool_events") and not usage.get("tool_runtime_errors")
+            and len(terminal) == 1 and terminal[0].get("type") == "turn.completed")
+
+
 def _thread_id(value) -> bool:
     try:
         return isinstance(value, str) and str(uuid.UUID(value)) == value
@@ -123,8 +143,10 @@ def run_turn(request: dict, request_sha: str, output: Path, invoke) -> dict:
                     continue
                 if isinstance(event, dict):
                     events.append(event)
-            recoverable = recoverable_output_limit(request, response, events)
-            if (not response.get("error") and not response.get("infrastructure_error")) or recoverable:
+            recovery_reason = ("model_output_limit" if recoverable_output_limit(request, response, events) else
+                               "invalid_structured_output" if recoverable_structured_rejection(request, response, events)
+                               else None)
+            if (not response.get("error") and not response.get("infrastructure_error")) or recovery_reason:
                 threads = {e.get("thread_id") for e in events if e.get("type") == "thread.started"}
                 try:
                     if len(threads) != 1 or not _thread_id(next(iter(threads))):
@@ -134,11 +156,12 @@ def run_turn(request: dict, request_sha: str, output: Path, invoke) -> dict:
                     response["conversation"] = receipt
                     verify_receipt(request, request_sha, response)
                     state.update(receipt, status="complete")
-                    if recoverable:
+                    if recovery_reason:
                         # A completed native turn is not an accepted proposal.
                         # The next call uses a new nonce in this same thread.
-                        state["last_outcome"] = "incomplete_output"
-                        response["recovery"] = {"reason": "model_output_limit",
+                        state["last_outcome"] = ("incomplete_output" if recovery_reason == "model_output_limit"
+                                                 else "rejected_output")
+                        response["recovery"] = {"reason": recovery_reason,
                                                 "continuation": "same_native_thread"}
                 except InfrastructureError as exc:
                     # Generation already finished: retain its measured token usage.

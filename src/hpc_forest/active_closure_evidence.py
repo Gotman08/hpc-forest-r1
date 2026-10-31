@@ -82,7 +82,9 @@ def measured_comparison(hypothesis, review, snapshot):
         # named by the hypothesis, not an unrelated measurement in the same tree.
         if parent not in references or parent not in anchors or identity == parent:
             continue
+        # An incorrect child scores 0 without measuring the mechanism: it tests nothing.
         if (outcome.get("commit") and outcome["commit"] != before.get("commit")
+                and outcome.get("correct") is True
                 and all(type(v.get("score")) in (int, float) and math.isfinite(v["score"])
                         for v in (before, outcome))):
             return {parent, identity}

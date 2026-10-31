@@ -9,7 +9,7 @@ from .core import ForestError, InfrastructureError
 from .observer_contract import READ, REFS, TEXT, empty_read, obj, schema_for
 from .support.validation import require_integer
 
-VERSION = "hpc-forest-active-v5-batched-exploration"
+VERSION = "hpc-forest-active-v7-lineage-refinement"
 MODES = ("off", "local", "steering", "sharing", "full")
 DEFAULT = {"mode": "off", "analysis_every": 3, "analysis_calls": 3,
            "steering_calls": 3, "control_workers": 1, "mother_every_reports": 2, "surprise_gain": 0.25,
@@ -69,6 +69,13 @@ controller to end research and proceed to final G and independent confirmation.
 Respect each tree's unavailable_reason: continue/resume cannot reopen an
 exhausted tree or bypass an intermediate integration's one-trial limit.
 continue only supplies advice; use resume to reactivate a suspended available tree.
+refine targets an existing tree and ONE correct measured source_id from that tree.
+It opens a bounded independent AB-MCTS continuation rooted in that exact program,
+inheriting the objective. Explain one discriminating next experiment in rationale
+and stop_condition; omit subject/objective. The controller preserves the actual
+search parent and never overrides an AB-MCTS selection. Prefer this action when
+a promising program has no descendants or unrelated trials consumed the family's
+time. Do not repeatedly open a continuation from the same source.
 Choose ideas yourself; do not rewrite an existing tree's subject or objective.
 Keep a useful slower source only with a specific hypothesis and stop condition.
 Never change tests, target, compiler, permissions, budget, rewards or source code
@@ -93,6 +100,16 @@ of progress; a new tree needs time for both measurement and analyst review.
 Use the exploration counts and archived sources to identify repeated approaches.
 branch needs a concrete, distinct code hypothesis; a request to drain, wait,
 review evidence or prepare closure is not a new research objective.
+One incorrect program or one slower integration does not exhaust its source
+families. Let admitted work finish and review its results before declaring a
+family exhausted. Allow a bounded isolated
+repair and distinguish a numerical failure from a performance regression. Compare
+the actual code to the assigned objective: a different mechanism does not test
+that objective. Before abandoning a correct promising family, use diagnostic
+evidence on its optimized program and test a distinct parameter or compatible
+combination when time permits. Do not spend all remaining work on launch settings
+solely because one combination was slower. Optional final rounds are admitted
+separately; the reserve protects one final program and independent confirmation.
 """
 GUARDED_MOTHER_SYSTEM = """
 With closure_guard enabled, close first REQUESTS closure: admissions drain, then
@@ -107,7 +124,7 @@ disposition (tested/rejected/budget), evidence_ids and reason. 'tested' needs a
 measured trial; 'budget' is checked by the controller. 'rejected' must explain why
 the proposed experiment is not useful, not merely that its source was slower.
 Each review includes basis and source_citations. A measured_comparison names both
-the hypothesis's source and its directly measured changed child in the same tree,
+the hypothesis's source and its directly measured, correct changed child in the same tree,
 with exact source SHA-256 and at most 40 lines per citation for both programs.
 An arbitrary older trial does not test a new hypothesis. source_or_contract is
 only for rejected hypotheses: cite the precise source facts conflicting with the
@@ -123,7 +140,7 @@ an analyst's opinion never replaces independent correctness and confirmation.
 """
 
 ACTION = obj({
-    "kind": {"type": "string", "enum": ["continue", "suspend", "resume", "branch", "share", "integrate", "close"]},
+    "kind": {"type": "string", "enum": ["continue", "suspend", "resume", "branch", "share", "integrate", "close", "refine"]},
     "tree": TEXT, "source_ids": REFS, "evidence_ids": REFS,
     "subject": TEXT, "objective": TEXT, "rationale": TEXT, "stop_condition": TEXT,
 })
@@ -189,8 +206,8 @@ def decision_schema(final_call=False, payload=None):
             fields.pop("tree")
         elif payload is not None:
             fields["tree"] = {"type": "string", "enum": sorted(payload["trees"])}
-        if kind in {"branch", "integrate", "share"}:
-            lower, upper = {"branch": (1, 1), "integrate": (2, 4), "share": (1, 24)}[kind]
+        if kind in {"branch", "integrate", "share", "refine"}:
+            lower, upper = {"branch": (1, 1), "integrate": (2, 4), "share": (1, 24), "refine": (1, 1)}[kind]
             fields["source_ids"] = {**fields["source_ids"], "minItems": lower, "maxItems": upper}
         else:
             fields.pop("source_ids")
@@ -317,7 +334,7 @@ def validate_decision(data, snapshot, visible_ids, *, final_call=False, history=
         defaults = {"subject": "", "objective": ""} if kind not in {"branch", "integrate"} else {}
         if kind in {"branch", "integrate", "close"}:
             defaults["tree"] = ""
-        if kind not in {"branch", "integrate", "share"}:
+        if kind not in {"branch", "integrate", "share", "refine"}:
             defaults["source_ids"] = []
         action = {**defaults, **supplied}
         if not isinstance(action, dict) or set(action) != set(ACTION["properties"]):
@@ -334,7 +351,7 @@ def validate_decision(data, snapshot, visible_ids, *, final_call=False, history=
                     or len(set(refs)) != len(refs)):
                 raise InfrastructureError("Mother action cites unavailable evidence")
         kind = action["kind"]
-        if kind in {"continue", "suspend", "resume", "share"} and action["tree"] not in roles:
+        if kind in {"continue", "suspend", "resume", "share", "refine"} and action["tree"] not in roles:
             raise InfrastructureError("Mother action targets an unknown tree")
         if kind in {"branch", "integrate"}:
             lower, upper = (1, 1) if kind == "branch" else (2, 4)
@@ -343,11 +360,13 @@ def validate_decision(data, snapshot, visible_ids, *, final_call=False, history=
                 raise InfrastructureError("A new experiment needs sources, objective and stop condition")
         if kind == "share" and not action["source_ids"]:
             raise InfrastructureError("An evidence import must identify its sources")
+        if kind == "refine" and (len(action["source_ids"]) != 1 or not action["stop_condition"].strip()):
+            raise InfrastructureError("A refinement needs one measured source and a stop condition")
         if kind in {"branch", "integrate", "close"} and action["tree"]:
             raise InfrastructureError("The controller assigns new tree identities")
         if kind not in {"branch", "integrate"} and (action["subject"] or action["objective"]):
             raise InfrastructureError("Existing tree objectives are immutable")
-        if kind not in {"branch", "integrate", "share"} and action["source_ids"]:
+        if kind not in {"branch", "integrate", "share", "refine"} and action["source_ids"]:
             raise InfrastructureError("This action does not accept source imports")
         if review is not None:
             action["hypothesis_review"] = review

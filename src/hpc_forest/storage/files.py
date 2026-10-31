@@ -9,6 +9,28 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
+def extended_path(path: Path) -> Path:
+    """Address files beyond Windows' legacy MAX_PATH; other platforms are unchanged."""
+    if os.name != "nt":
+        return Path(path)
+    absolute = str(Path(path).absolute())
+    if absolute.startswith("\\\\?\\"):
+        return Path(absolute)
+    if absolute.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + absolute[2:])
+    return Path("\\\\?\\" + absolute)
+
+
+def plain_path(path) -> Path:
+    """The drive or UNC form of a path, without the Win32 extended-length prefix."""
+    value = str(path)
+    if value.startswith("\\\\?\\UNC\\"):
+        return Path("\\\\" + value[8:])
+    if value.startswith("\\\\?\\"):
+        return Path(value[4:])
+    return Path(value)
+
+
 def sync_directory(directory: Path) -> None:
     """Persist a rename on POSIX; Windows provides atomic replace but no dir fsync."""
     if os.name != "nt":

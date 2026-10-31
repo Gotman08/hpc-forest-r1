@@ -64,7 +64,8 @@ def sha256(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def bounded_json(path: Path, maximum: int = MAX_RESPONSE_BYTES) -> dict:
+def bounded_json(path: Path, maximum: int = MAX_RESPONSE_BYTES, *, allow_json_fence: bool = False) -> dict:
+    """Read a bounded object; only native model output may opt into one JSON fence."""
     for attempt in range(len(_FILE_READ_RETRY_DELAYS) + 1):
         if path.is_symlink() or not path.is_file():
             raise InfrastructureError("Mailbox entry is not a regular file")
@@ -78,7 +79,17 @@ def bounded_json(path: Path, maximum: int = MAX_RESPONSE_BYTES) -> dict:
             time.sleep(_FILE_READ_RETRY_DELAYS[attempt])
     if len(raw) > maximum:
         raise InfrastructureError("Mailbox entry exceeds its size limit")
-    data = json.loads(raw)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        if not allow_json_fence:
+            raise
+        # Keep the complete response and its original bytes as evidence. Accept
+        # only a single enclosing JSON block, never prose or extracted fragments.
+        fenced = re.fullmatch(r"```json[ \t]*\r?\n([\s\S]*)\r?\n```", raw.decode("utf-8").strip())
+        if fenced is None:
+            raise
+        data = json.loads(fenced.group(1))
     if not isinstance(data, dict):
         raise InfrastructureError("Mailbox JSON must be an object")
     return data
@@ -278,7 +289,9 @@ class CodexMailboxBackend:
         request = make_request(mission, context, config)
         from .diagnostics_contract import authorize
 
-        authorize(root, request, config=config)
+        refinement = context.get("post_integration_refinement")
+        authorize(root, request, config=config, refinement=bool(refinement),
+                  source_ids=refinement["source_ids"] if refinement else None)
         selected = mission_identity(config, mission)
         logs = root / "logs" / mission.id
         atomic_json(logs / "codex-request.json", request)
@@ -314,7 +327,16 @@ class CodexMailboxBackend:
         if not unlimited_tokens(config) and tokens > TOKEN_CEILING:
             generated.error = "Observed usage exceeded the reserved token ceiling"
             generated.infrastructure_error = True
-        if generated.error:
+        rejected_assembly = (
+            generated.error and not generated.infrastructure_error
+            and request.get("meta_role") == "mother-final-assembly"
+            and request.get("conversation", {}).get("phase") == "assembly"
+            and response.get("data") is None
+            and response.get("rejection") == {"reason": "invalid_structured_output"}
+            and response.get("recovery") == {"reason": "invalid_structured_output",
+                                             "continuation": "same_native_thread"}
+        )
+        if generated.error and not rejected_assembly:
             return generated
         if request.get("conversation") is not None:
             from .registry import Registry
@@ -325,7 +347,7 @@ class CodexMailboxBackend:
                 try:
                     db.set(f"mother_conversation:{mission.epoch}", receipt)
                     # Selection and memory reads advance the same conversation but are not code.
-                    if not context.get("memory", {}).get("enabled"):
+                    if not generated.error and not context.get("memory", {}).get("enabled"):
                         db.set(f"mother_plan:final_synthesis:{mission.epoch}", {
                             "status": "complete", "phase": "assembly", "final_synthesis": True,
                             "budget_phase": "postprocess", "request_sha256": request_sha,
@@ -336,9 +358,15 @@ class CodexMailboxBackend:
                     db.close()
                 generated.usage["conversation"] = receipt
                 generated.usage["mother_assembly"] = True
+                if rejected_assembly:
+                    generated.usage["rejected_assembly_continuation"] = response["recovery"]
             except InfrastructureError as exc:
                 generated.error, generated.infrastructure_error = str(exc), True
                 return generated
+        if generated.error:
+            # Preserve the completed native chain, never accept the rejected files.
+            # An already-admitted harness repair uses a fresh nonce and next turn.
+            return generated
         try:
             data = response["data"]
             if context.get("assembly_selection"):

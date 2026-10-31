@@ -15,7 +15,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from . import diagnostic_collectors as adapters
-from . import diagnostic_compiler
+from . import diagnostic_compiler, diagnostic_cuda
 from .core import (
     FileLock,
     InfrastructureError,
@@ -332,31 +332,41 @@ class Diagnostics:
         binary = build / ("solution.exe" if os.name == "nt" else "solution")
         if self.config.get("app_protocol"):
             binary = build / "project" / self.config["app_protocol"]["binary"]
+        # Reuse the frozen research inputs. A diagnostic is a separate execution,
+        # not a new protocol phase, and must never expose confirmation inputs.
         variables = {"python": sys.executable, "trusted": str(trusted), "worktree": str(worktree),
-                     "build": str(build), "binary": str(binary), "phase": "diagnostic"}
+                     "build": str(build), "binary": str(binary), "phase": "search"}
         run, records = self._executor(directory, deadline, worktree)
         mode = collector if collector in {"compiler", "scorep", "scalasca"} else (
             "symbols" if collector in {"perf-record", "hpctoolkit", "nsys", "ncu", "disassembly"} else "capture")
         environment, coverage = diagnostic_compiler.prepare(directory / "compiler", self.config, mode, run)
+        cuda_environment = (diagnostic_cuda.prepare(directory / "cuda-capture", run)
+                            if diagnostic_cuda.applicable(self.config, collector) else {})
+        environment.update(cuda_environment)
         if collector in {"scorep", "scalasca"}:
             environment["FOREST_DIAGNOSTIC_SCOREP"] = shutil.which("scorep")
         build_runner, build_records = self._executor(directory, deadline, worktree, environment)
         build_runner(expand_command(self.config["protocol"]["build"], **variables), "build")
         if not binary.is_file() or binary.is_symlink():
             raise DiagnosticFailure("build_failed", "Diagnostic build produced no regular executable")
-        compiler_records = [json.loads(p.read_text()) for p in (directory / "compiler/records").glob("*.json")]
+        compiler_records = [json.loads(p.read_text(encoding="utf8")) for p in (directory / "compiler/records").glob("*.json")]
         coverage["invocations"] = compiler_records
         coverage["status"] = "observed_invocations" if compiler_records else "no_invocations_intercepted"
         coverage["complete"] = False  # A PATH wrapper cannot prove it saw every compiler.
         coverage["requested_mode"] = mode
         atomic_json(directory / "compiler-coverage.json", coverage)
-        if collector in {"compiler", "scorep", "scalasca"} and not compiler_records:
+        if collector in {"compiler", "scorep", "scalasca"} and not compiler_records and not cuda_environment:
             raise DiagnosticFailure("unavailable", "Compiler interception saw no invocation; no instrumentation can be claimed")
-        if collector == "compiler" and not any(r["diagnostic_flags"] for r in compiler_records):
+        if collector == "compiler" and not cuda_environment and not any(r["diagnostic_flags"] for r in compiler_records):
             raise DiagnosticFailure("unavailable", "No supported source compilation emitted optimization reports")
         if collector in {"scorep", "scalasca"} and not any(r["scorep_instrumented"] for r in compiler_records):
             raise DiagnosticFailure("unavailable", "Score-P did not instrument this build")
-        checked = run(expand_command(self.config["protocol"]["check"], **variables), "diagnostic-check")
+        checked = run(expand_command(self.config["protocol"]["check"], **variables), "diagnostic-check", env=cuda_environment)
+        if cuda_environment:
+            coverage = diagnostic_cuda.evidence(directory / "cuda-capture")
+            atomic_json(directory / "cuda-compiler-coverage.json", coverage)
+            if not coverage["binaries"]:
+                raise DiagnosticFailure("unavailable", "No native NVRTC CUBIN captured from the diagnostic workload")
         try:
             check_data = json.loads(Path(checked["log"]).read_text(encoding="utf8"))
             valid = (check_data["correct"] is True and type(check_data["cases"]) is int and check_data["cases"] > 0)
@@ -367,7 +377,7 @@ class Diagnostics:
         command = expand_command(self.config["protocol"]["benchmark"], **variables)
         cwd = worktree
         if self.config.get("app_protocol"):
-            spec = json.loads((trusted / "project.json").read_text())
+            spec = json.loads((trusted / "project.json").read_text(encoding="utf8"))
             command = shlex.split(spec["contract"]["benchmark_command"])
             if any(any(c in arg for c in "|;&<>`$\n") for arg in command):
                 raise DiagnosticFailure("unavailable", "Profiler adapter requires a direct executable command; compound shell workloads need a new adapter")
@@ -377,8 +387,27 @@ class Diagnostics:
             "binary_sha256": file_digest(binary), "source": source, "variables": variables,
             "build_argv": expand_command(self.config["protocol"]["build"], **variables),
             "workload_argv": command, "instrumentation": mode,
+            "execution_kind": "diagnostic", "input_phase": "search",
             "diagnostic_check": "passed", "official_score": None})
         return binary, command, cwd, records + build_records
+
+    def _target_denial(self, collector):
+        """Reuse only a recognized profiler permission fact on the same target/tool."""
+        executable = shutil.which("ncu") if collector == "ncu" else None
+        if not executable:
+            return None
+        tool_hash = file_digest(Path(executable))
+        for path in sorted((self.directory / "collections").glob("*/summary.json")):
+            value = json.loads(path.read_text(encoding="utf8"))
+            fact = value.get("target_permission_denied", {})
+            if (value.get("collector") == collector and value.get("status") == "permission_denied"
+                    and fact.get("code") == "ERR_NVGPUCTRPERM" and fact.get("tool_sha256") == tool_hash
+                    and value.get("host") == self.grant["hostname"]
+                    and value.get("allocation_id") == self.grant["allocation_id"]
+                    and value.get("protocol_id") == self.grant["protocol_id"]
+                    and value.get("architecture") == self.grant["machine"]):
+                return value
+        return None
 
     def collect(self, source_id, collector, question, options=None, request_key=None):
         source = self.source(source_id)
@@ -393,7 +422,7 @@ class Diagnostics:
         directory = self.directory / "collections" / identity
         with FileLock(self.directory / "locks" / (self.grant["nonce"] + ".lock")):
             if directory.exists():
-                record = json.loads((directory / "summary.json").read_text())
+                record = json.loads((directory / "summary.json").read_text(encoding="utf8"))
                 if (record["source_id"], record["collector"], record["question"], record["options"]) != (
                         source_id, collector, question, options):
                     raise ValueError("Diagnostic request key reused for different arguments")
@@ -412,11 +441,19 @@ class Diagnostics:
                        "scope": adapter.scope, "units": adapter.units, "limitations": [adapter.limitations],
                        "hypotheses": [], "missing": [], "observations": []}
             atomic_json(directory / "summary.json", summary)
+            def reuse_denial():
+                previous = self._target_denial(collector)
+                if previous is None:
+                    return False
+                summary.update(status="permission_denied", error=previous["error"],
+                    target_permission_denied=previous["target_permission_denied"],
+                    reused_target_capability_from=previous.get("reused_target_capability_from", previous["id"]))
+                summary["missing"].append({"measurement": collector, "reason": summary["error"]})
+                return True
+
             def perform(deadline):
-                capability = self.capabilities()["collectors"][collector]
-                atomic_json(directory / "capabilities.json", capability)
-                if capability["availability"] != "probe_required":
-                    raise DiagnosticFailure("unavailable", capability["availability"] + ": " + ",".join(capability["missing_executables"]))
+                if reuse_denial():
+                    return  # Another collector may have established the fact while this one waited.
                 probe, _ = self._executor(directory, deadline, directory)
                 for tool in adapter.tools:
                     executable = shutil.which(tool)
@@ -430,7 +467,11 @@ class Diagnostics:
                 if shutil.which("objdump"):
                     run([shutil.which("objdump"), "-p", str(binary)], "linked-libraries", optional=True)
                 tools = {tool: shutil.which(tool) for tool in adapter.tools}
-                adapters.collect(collector, options, workload, binary, directory, run, tools)
+                if collector == "disassembly" and diagnostic_cuda.applicable(self.config, collector):
+                    coverage = json.loads((directory / "cuda-compiler-coverage.json").read_text(encoding="utf8"))
+                    diagnostic_cuda.disassemble(coverage, directory, run)
+                else:
+                    adapters.collect(collector, options, workload, binary, directory, run, tools)
                 summary["observations"] = [{"command": r["argv"], "wall_seconds": r["seconds"],
                     "unit": "seconds", "meaning": "diagnostic command elapsed including profiler overhead"} for r in records
                     if not r["optional"]]
@@ -449,16 +490,73 @@ class Diagnostics:
                         summary["missing"].append({"measurement": pattern, "reason": "No native evidence produced"})
                 summary["status"] = "partial" if summary["missing"] else "complete"
             try:
-                self._locked(perform)
+                # Missing executables and known target permissions cannot improve
+                # by waiting behind an official GPU evaluation.
+                capability = self.capabilities()["collectors"][collector]
+                atomic_json(directory / "capabilities.json", capability)
+                if capability["availability"] != "probe_required":
+                    raise DiagnosticFailure("unavailable", capability["availability"] + ": " + ",".join(capability["missing_executables"]))
+                if not reuse_denial():
+                    self._locked(perform)
             except (OSError, ValueError, InfrastructureError, DiagnosticFailure) as exc:
                 summary.update(status=getattr(exc, "status", "collector_failed"), error=str(exc))
                 summary["missing"].append({"measurement": collector, "reason": str(exc)})
+                if collector == "ncu" and summary["status"] == "permission_denied":
+                    log, executable = directory / "ncu-profile.log", shutil.which("ncu")
+                    if executable and log.is_file() and not log.is_symlink():
+                        with log.open("rb") as stream:
+                            stream.seek(max(0, log.stat().st_size - 12000))
+                            denied = b"ERR_NVGPUCTRPERM" in stream.read(12000)
+                        if denied:
+                            summary["target_permission_denied"] = {"code": "ERR_NVGPUCTRPERM",
+                                "tool_sha256": file_digest(Path(executable))}
             finally:
                 verify_protected(self.root / "trusted", self.grant["manifest"])
                 summary["finished_at"] = time.time()
                 atomic_json(directory / "summary.json", summary)
                 self._manifest(directory)
             return summary
+
+    def survey(self, source_id, question, request_key):
+        """Account for every adapter on an optimized source within the same grant.
+
+        Reuse completed evidence for the exact commit, never baseline evidence
+        for a different program. Failed/absent collectors remain explicit rows.
+        Each new collection keeps its own native files and ordinary cost limits.
+        """
+        self.execution_allowed()
+        source = self.source(source_id)
+        identifier(request_key)
+        if len(request_key) > 35:
+            raise ValueError("Survey request_key exceeds 35 characters")
+        if not isinstance(question, str) or not question.strip() or len(question) > 4000:
+            raise ValueError("A bounded diagnostic question is required")
+        previous = {}
+        for path in sorted((self.directory / "collections").glob("*/summary.json")):
+            value = json.loads(path.read_text(encoding="utf8"))
+            if (value["source_id"] in self.grant["sources"]
+                    and value["source"]["commit"] == source["commit"]
+                    and value["status"] in {"complete", "partial"}):
+                previous[value["collector"]] = value
+        rows = []
+        # Dynamic GPU trace first; then compiler/code evidence and counters.
+        order = ("nsys", "compiler", "disassembly", "ncu", "runtime", "perf-stat",
+                 "perf-record", "hpctoolkit", "scorep", "scalasca")
+        for collector in order:
+            reused = collector in previous
+            try:
+                value = previous[collector] if reused else self.collect(
+                    source_id, collector, question, request_key=request_key + "-" + collector)
+                row = {k: value[k] for k in ("id", "source_id", "collector", "status", "score")}
+                row.update(error=value.get("error"), reused=reused,
+                           reused_target_capability_from=value.get("reused_target_capability_from"))
+            except (DiagnosticFailure, InfrastructureError, OSError, ValueError) as exc:
+                row = {"collector": collector, "source_id": source_id, "score": None,
+                       "status": getattr(exc, "status", "collector_failed"), "error": str(exc)}
+            rows.append(row)
+        return {"source_id": source_id, "commit": source["commit"], "collectors": rows,
+                "score": None, "status": "complete" if all(r["status"] == "complete" for r in rows) else "partial",
+                "instruction": "Read native artifacts for successful tools. Missing/denied tools supply no measurements."}
 
     def _manifest(self, directory):
         artifacts = []
@@ -472,7 +570,7 @@ class Diagnostics:
     def summaries(self, offset=0, limit=40):
         items = []
         for path in sorted((self.directory / "collections").glob("*/summary.json")):
-            record = json.loads(path.read_text())
+            record = json.loads(path.read_text(encoding="utf8"))
             if (record["source_id"] in self.grant["sources"]
                     and record["source"]["commit"] == self.grant["sources"][record["source_id"]]["commit"]):
                 items.append({k: record[k] for k in ("id", "source_id", "collector", "question", "status", "created_at")})
@@ -482,7 +580,7 @@ class Diagnostics:
         identifier(evidence_id)
         directory = self.directory / "collections" / evidence_id
         if directory.is_dir():
-            summary = json.loads((directory / "summary.json").read_text())
+            summary = json.loads((directory / "summary.json").read_text(encoding="utf8"))
             if self.source(summary["source_id"])["commit"] != summary["source"]["commit"]:
                 raise ValueError("Evidence is from another source version")
         else:
@@ -490,7 +588,7 @@ class Diagnostics:
             # Probe IDs are not secrets, but restrict them to this campaign's actual files.
             if not directory.is_dir():
                 raise ValueError("Unknown diagnostic evidence")
-        manifest = json.loads((directory / "artifacts.json").read_text())["items"]
+        manifest = json.loads((directory / "artifacts.json").read_text(encoding="utf8"))["items"]
         return directory, manifest
 
     def _artifact(self, evidence_id, artifact):

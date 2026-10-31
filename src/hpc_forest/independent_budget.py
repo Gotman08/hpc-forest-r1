@@ -10,6 +10,14 @@ from .forest import pairwise_mother, research_roles
 from .support.budgets import mandatory_final_g
 
 
+def required_assembly_rounds(config):
+    from .active_contract import enabled, settings
+    from .memory.contract import settings as memory_settings
+
+    protected = guided(config) and enabled(config, "full") and settings(config)["closure_guards"]
+    return min(2, memory_settings(config)["assembly_rounds"]) if protected else 1
+
+
 def forecast_independent(db, roles=(), *, now=None):
     config, epoch = db.get("config"), db.get("current_epoch")
     history = db.get("timing_samples", {})
@@ -22,6 +30,10 @@ def forecast_independent(db, roles=(), *, now=None):
         values = history.get(stage)
         return median(values[-5:]) if values else default
 
+    from .active_state import children
+
+    inherited = {c["role"]: c["cost_role"] for c in children(db, epoch) if c.get("cost_role")}
+
     baseline = typical("evaluation_work:baseline", typical("baseline", 1.0))
     measured_evaluations = [v for key, values in history.items()
                             if key.startswith("evaluation_work:T") for v in values[-5:]]
@@ -30,12 +42,13 @@ def forecast_independent(db, roles=(), *, now=None):
     def evaluation(role):
         if role.startswith("@"):
             return 0.0  # Analyst and steering calls never evaluate a program.
-        return typical("evaluation_work:" + role, generic_evaluation)
+        return typical("evaluation_work:" + role,
+                       typical("evaluation_work:" + inherited.get(role, ""), generic_evaluation))
 
     def generation(role):
         # Whole mission wall times used to contain the wait for every other tree.
         # New observations time the worker itself and the exclusive evaluator separately.
-        return typical("generation:" + role, bootstrap)
+        return typical("generation:" + role, typical("generation:" + inherited.get(role, ""), bootstrap))
 
     def confirmation_cost(role):
         work = baseline if role == "baseline" else evaluation(role)
@@ -65,18 +78,26 @@ def forecast_independent(db, roles=(), *, now=None):
         from .integration_policy import limits
 
         bounds = limits(config, len(research_roles(db)))
-        integration_steps = min(bounds["rounds"], settings.get("initial_integration_rounds", 2))
+        nominal_steps = min(bounds["rounds"], settings.get("initial_integration_rounds", 2))
+        # Guarded active search protects one measured assembly and one targeted
+        # refinement of that combined program. Additional rounds stay optional.
+        integration_steps = min(bounds["rounds"], required_assembly_rounds(config))
         # Limits permit retries and pagination; they are not expected work. A code
         # generation sample already includes that mission's reads and repairs.
         call_seconds = typical("memory_selection", settings.get("initial_selection_seconds", 30))
         counts = db.get("memory_selection_call_counts", [])
         calls = median(counts[-5:]) if counts else settings.get("initial_selection_calls", 2)
         calls = min(bounds["selection_calls_per_round"], max(1, calls))
-        selection_seconds = integration_steps * calls * call_seconds
+        # A protected refinement reuses the measured integrated program and its
+        # sources; budget one decision, not another full discovery/read cycle.
+        selection_seconds = (calls + integration_steps - 1) * call_seconds
         integration = integration_steps * final_g + selection_seconds
         integration_source = "memory-guided-typical-selection+code+evaluation"
         selection_estimate = {"selection_call_seconds": call_seconds,
             "selection_calls_per_round": calls,
+            "nominal_integration_steps": nominal_steps,
+            "protected_refinement_rounds": integration_steps - 1,
+            "optional_integration_seconds": max(0, nominal_steps - integration_steps) * (final_g + calls * call_seconds),
             "integration_step_limit": bounds["rounds"],
             "selection_call_limit": bounds["selection_calls_per_round"],
             "code_call_limit": bounds["code_calls_per_round"]}
@@ -144,6 +165,10 @@ def assembly_admission(db, *, now=None):
     finish = safety * (estimate["final_g_seconds"] + estimate["confirmation_seconds"]
                        + estimate["archive_seconds"]) + 10
     call = estimate["selection_call_seconds"]
+    completed = len(db.get(f"postprocess:{db.get('current_epoch')}", {}).get("steps", []))
+    future = max(0, required_assembly_rounds(db.get("config")) - completed - 1)
+    future_seconds = safety * future * (estimate["final_g_seconds"] + call)
+    finish += future_seconds
     read_required = finish + safety * 2 * call  # This read, then a selection decision.
     # A new round needs one decision. Additional reads are admitted separately;
     # reserving their nominal count here would reject a round that must_decide
@@ -151,6 +176,7 @@ def assembly_admission(db, *, now=None):
     round_required = finish + safety * call
     nominal_round = finish + safety * estimate["selection_calls_per_round"] * call
     return {"remaining_seconds": remaining, "finish_seconds": finish,
+            "protected_future_refinement_seconds": future_seconds,
             "read_required_seconds": read_required, "round_required_seconds": round_required,
             "nominal_round_required_seconds": nominal_round,
             "can_read": remaining is None or remaining >= read_required,

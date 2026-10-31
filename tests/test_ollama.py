@@ -111,6 +111,15 @@ def test_real_http_adapter_pins_digest_records_usage_and_applies_source(tmp_path
     assert (tmp_path / "logs" / "trial" / "ollama-response.json").is_file()
 
 
+def test_unlimited_tokens_keep_the_configured_context_window(tmp_path, finish_started_config, server):
+    mission, config = mission_and_config(tmp_path, finish_started_config, server)
+    result = OllamaBackend().generate(mission, {"deadline": time.time() + 20}, config, tmp_path)
+    assert result.error is None
+    options = server["requests"][0]["options"]
+    assert options["num_predict"] == -1
+    assert options["num_ctx"] == config["ollama"]["context_tokens"]
+
+
 def test_http_failure_preserves_server_diagnostic_and_does_not_replay(server):
     server["http_status"] = 500
     server["response"] = {"error": "inference runner rejected response"}

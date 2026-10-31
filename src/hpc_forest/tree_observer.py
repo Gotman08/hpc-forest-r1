@@ -145,7 +145,8 @@ def _summary(root, manifest, states):
                        "elapsed_seconds": sum(c.get("elapsed_seconds", 0) for c in calls)}}
     save(root / "report.json", value)
     lines = ["# Analystes Forest — observation après confirmation", "",
-             "Modèle : GPT-6 Luna, effort max. Ces avis ne modifient pas la recherche.", "",
+             f"Modèle : {manifest['model']}, effort {manifest['reasoning_effort']}. "
+             "Ces avis ne modifient pas la recherche.", "",
              "Les constats cités restent des interprétations du modèle, à vérifier dans les preuves.",
              f"Appels revendiqués : {len(calls)} ; tokens connus : {sum(exact)} ; "
              f"appels de consommation inconnue : {len(calls) - len(exact)}.", ""]

@@ -28,7 +28,9 @@ def test_live_loop_branches_integrates_closes_and_confirms(tmp_path, monkeypatch
     if corrected:
         # This pipeline exercises closure when protected work no longer fits;
         # the complementary two-experiment continuation is covered directly.
-        cfg["forest"]["active"]["progress_budget_fraction"] = 0.001
+        # A per-progress window must also be unaffordable on fast Linux fixtures;
+        # .001 allowed several real compilations and no longer means exhausted.
+        cfg["forest"]["active"]["progress_budget_fraction"] = 0.000001
     if control_fault:
         cfg["forest"]["active"]["steering_calls"] = 2
     cfg["memory"] = {"mode": "active", "context_characters": 64000}
@@ -120,6 +122,13 @@ def test_live_loop_branches_integrates_closes_and_confirms(tmp_path, monkeypatch
                 assert turn is None  # Intermediate G is not final Mother assembly.
                 assert payload["context_as_data"]["intermediate_integration"]["decision_id"]
         (output / "agent-result.json").write_text(json.dumps(value), encoding="utf8")
+        if (control_fault == "invalid_json" and not injected
+                and request.get("active_control", {}).get("kind") == "mother"):
+            (output / "agent-result.json").write_text('{"decisions": [', encoding="utf8")
+            injected.append(True)
+        if control_fault == "planning_json" and request.get("meta_role") == "mother-preparation":
+            (output / "agent-result.json").write_text('{"children": [', encoding="utf8")
+            injected.append(True)
         events = [
             {"type": "thread.started", "thread_id": thread},
             {"type": "turn.completed", "usage": {"input_tokens": 2 * ((turn or {}).get("turn", 0) + 1),
@@ -179,7 +188,7 @@ def test_live_loop_branches_integrates_closes_and_confirms(tmp_path, monkeypatch
         assert (root / "report" / "active-control.csv").is_file()
 
 
-@pytest.mark.parametrize("fault", ["output_limit", "empty_wait", "idle_review"])
+@pytest.mark.parametrize("fault", ["output_limit", "empty_wait", "idle_review", "invalid_json", "planning_json"])
 def test_known_control_failure_recovers_through_real_treequest_and_confirmation(tmp_path, monkeypatch, need_compiler, fault):
     test_live_loop_branches_integrates_closes_and_confirms(
         tmp_path, monkeypatch, need_compiler, False, True, control_fault=fault)

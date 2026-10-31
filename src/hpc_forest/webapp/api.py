@@ -259,8 +259,11 @@ def create_app(data_dir: Path, campaign_roots: list[Path] | None = None,
     @app.get("/api/history")
     def history():
         running = store.list("mission")
-        launched = {r["prepared_id"] for r in running}
-        records = [r for r in campaigns.list() if not r.get("mission_id")] + [public_mission(r) for r in running]
+        launched = {r["prepared_id"] for r in running if r.get("prepared_id")}
+        linked_campaigns = {r["campaign_id"] for r in running if r.get("campaign_id")}
+        records = [r for r in campaigns.list()
+                   if not r.get("mission_id") and r["id"] not in linked_campaigns]
+        records += [public_mission(r) for r in running]
         records += [r for r in store.list("prepared") if r["id"] not in launched]
         records += [{"id": p["id"], "name": p["name"], "kind": "project",
                      "state": project_view(p)["state"], "created": p["created"],

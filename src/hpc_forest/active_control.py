@@ -83,10 +83,54 @@ def report_watermark(current):
                    if life.get("closing") else None})
 
 
+def refresh_queued(controller, job):
+    """Refresh unclaimed work, preserving already published snapshots and reads."""
+    if job["calls"]:
+        return
+    dossier = snapshot(controller, job)
+    current = state(controller.db, job["epoch"])
+    known = {identity for tree in dossier["trees"].values() for identity in tree["completed_ids"]}
+    actual = set(watermark(controller.db, job["epoch"], job["role"]))
+    old_reports = {r: a.get("report_id") for r, a in dossier["reports_as_interpretations"].items()}
+    new_reports = {r: a.get("report_id") for r, a in current["analysts"].items()
+                   if job["role"] is None or r == job["role"]}
+    if known == actual and dossier["plan_revision"] == current["revision"] and old_reports == new_reports:
+        return
+    old_id = job["snapshot_id"]
+    directory = controller.root / "logs" / job["id"]
+    atomic_json(directory / ("snapshot-queued-" + old_id + ".json"), dossier)
+    dossier = freeze(controller, job["epoch"], job["role"])
+    initial = view(dossier, {"operation": "catalog", "offset": 0})
+    job.update(snapshot_id=dossier["snapshot_id"], history=[{"view": initial}],
+               coverage={"reads": [], "total_records": len(dossier["records"])})
+    exposed = {item["id"] for item in initial["items"]} | {
+        item["id"] for tree in dossier["trees"].values() for item in tree["measured_examples"]}
+    for name in ("code_packet", "closure_code_packet"):
+        if name in dossier:
+            exposed.update(dossier[name]["selected_ids"])
+            job["coverage"].setdefault("provided_sources", []).extend(
+                {k: v for k, v in page.items() if k != "text"} for page in dossier[name]["sources"])
+    exposed.update(entry["id"] for entry in dossier.get("diverse_measured_sources", {}).get("entries", [])
+                   if any(record["id"] == entry["id"] for record in dossier["records"]))
+    job["visible_ids"] = sorted(exposed)
+    atomic_json(directory / "snapshot.json", dossier)
+    if job["kind"] == "analyst":
+        current["analysts"][job["role"]]["watermark"] = watermark(controller.db, job["epoch"], job["role"])
+    else:
+        current["mother_evidence_ids"] = watermark(controller.db, job["epoch"])
+        current["mother_watermark"] = report_watermark(current)
+        current["mother_reports"] = {r: a.get("report_id") for r, a in current["analysts"].items()}
+    controller.db.set(key(job["epoch"]), current)
+    save(controller, job)
+    controller.db.event("active_snapshot_refreshed", {"job_id": job["id"], "previous_snapshot_id": old_id,
+        "snapshot_id": job["snapshot_id"], "new_evidence_ids": sorted(actual - known)})
+
+
 def begin_call(controller, job):
     """Claim before publishing, once per native call; every read needs admission."""
     db, role = controller.db, job["budget_role"]
     admit(db, [role])
+    refresh_queued(controller, job)
     slot = db.reserve("search", role)
     dossier = snapshot(controller, job)
     number = len(job["calls"]) + 1
@@ -172,11 +216,12 @@ def finish_call(controller, job, response, finished):
         if response.get("error") or response.get("infrastructure_error"):
             if (job["kind"] == "mother" and not response.get("infrastructure_error")
                     and response.get("data") is None
-                    and response.get("recovery") == {"reason": "model_output_limit",
-                                                    "continuation": "same_native_thread"}):
+                    and response.get("recovery") in (
+                        {"reason": "model_output_limit", "continuation": "same_native_thread"},
+                        {"reason": "invalid_structured_output", "continuation": "same_native_thread"})):
                 call["recovery"] = response["recovery"]
-                rejected_data = {"terminal_failure": "model_output_limit",
-                    "recovery_instruction": "The previous turn ended without a complete proposal. "
+                rejected_data = {"terminal_failure": response["recovery"]["reason"],
+                    "recovery_instruction": "The previous turn ended without an acceptable proposal. "
                         "Return a compact schema-valid decision in this same conversation. "
                         "Use only visible evidence; no tools, waiting or delegation. No action was applied."}
             raise InfrastructureError(response.get("error") or "Active model infrastructure failure")

@@ -32,6 +32,8 @@ from .diagnostics_mcp import DiagnosticsMCP
 from .documentation_mcp import DocumentationMCP
 from .model_mcp import RomeoMCP, load_server
 from .model_policy import generator_pool, require_request_identity
+from .model_runtime import authenticate
+from .storage.files import atomic_bytes
 from .support.budgets import FINISH_STARTED, expired
 
 HEARTBEAT_INTERVAL_SECONDS = 10
@@ -183,11 +185,12 @@ class Worker:
                  dependency_receipt: Path | None, required_jobs: set[str],
                  transport_smoke=False, executable="codex", *, defer_diagnostics=False,
                  model_mcp_config: Path | None = None, documentation=False, model=MODEL, effort=EFFORT,
-                 generators=None, diagnostics_root: Path | None = None):
+                 generators=None, diagnostics_root: Path | None = None, dsh_settings: dict | None = None):
         selected = {"model": model, "reasoning_effort": effort, "generator_pool": generators or []}
         pool = generator_pool(selected)
         self.generators = pool if generators else []
         self.model, self.effort = model, effort
+        self.dsh_settings = dsh_settings
         validate_remote_channel(channel)
         self.transfer, self.channel, self.session_id = transfer, channel, session_id
         self.output, self.dependency_receipt, self.required_jobs = output, dependency_receipt, required_jobs
@@ -309,6 +312,8 @@ class Worker:
             if self.dependency_receipt is None:
                 raise InfrastructureError("A verified DeepSeek dependency receipt is required")
             gate = check_dependencies(self.dependency_receipt, self.required_jobs)
+            if gate.get("schema") == "forest-app-authorization-v1" and self.dsh_settings != gate.get("dsh_romeo"):
+                raise InfrastructureError("dsh-romeo connection differs from the authorized mission")
             if self.generators and generator_pool({"model": gate.get("next_model"),
                     "reasoning_effort": gate.get("reasoning_effort"),
                     "generator_pool": gate.get("generator_pool", [])}) != self.generators:
@@ -319,12 +324,11 @@ class Worker:
                 raise InfrastructureError("Codex is unavailable on this PC")
             version = await asyncio.to_thread(subprocess.run, [self.executable, "--version"],
                 capture_output=True, text=True, timeout=30, check=True)
-            auth = await asyncio.to_thread(subprocess.run, [self.executable, "login", "status"],
-                capture_output=True, text=True, timeout=30, check=True)
-            if "Logged in using ChatGPT" not in auth.stdout + auth.stderr:
-                raise InfrastructureError("This experiment requires the existing ChatGPT authentication")
+            auth = await asyncio.to_thread(authenticate, self.executable,
+                {"model": self.model, "reasoning_effort": self.effort, "generator_pool": self.generators},
+                dsh_settings=self.dsh_settings)
             native = {"codex_executable": self.executable, "codex_cli_version": version.stdout.strip(),
-                      "authentication": "existing-local-ChatGPT", "weight_digest_available": False,
+                      **auth,
                       "model_mcp": self.romeo_mcp.receipt() if self.romeo_mcp is not None else None,
                       "documentation_mcp": self.documentation_mcp.receipt() if self.documentation_mcp is not None else None}
             native["diagnostics_mcp"] = {"server": "hpc_diagnostics", "binding": "per-controller-request"} \
@@ -448,6 +452,8 @@ class Worker:
             try:
                 arguments = (request, request_sha, local, self.dependency_receipt, self.required_jobs, self.executable)
                 options = {"romeo_mcp": self.romeo_mcp} if self.romeo_mcp is not None else {}
+                if self.dsh_settings is not None:
+                    options["dsh_settings"] = self.dsh_settings
                 if self.documentation_mcp is not None:
                     options["documentation_mcp"] = self.documentation_mcp
                 if request.get("diagnostics"):
@@ -465,8 +471,9 @@ class Worker:
                     infrastructure_error=True,
                     usage=unavailable_usage(request))
         # Keep byte-identical results for interrupted uploads; a later run only resends them.
+        # Publish atomically: a worker killed mid-write must not leave a truncated cache.
         raw = json_bytes(response)
-        response_file.write_bytes(raw)
+        atomic_bytes(response_file, raw)
         atomic_json(local / "response-ready.json", {"sha256": sha256(raw), "bytes": len(raw)})
         try:
             for source, suffix in ((response_file, "response.json"),

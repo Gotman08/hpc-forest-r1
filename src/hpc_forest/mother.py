@@ -11,6 +11,7 @@ from .adaptive_budget import record_timing
 from .codex_conversation import first_turn, verify_receipt
 from .core import BudgetExhausted, InfrastructureError, Mission, atomic_json, digest
 from .forest import assignment, forest_plan, model_selected, persistent_mother, research_roles
+from .model_policy import generator_pool
 from .model_skills import bind
 from .support.budgets import (
     FINISH_STARTED,
@@ -267,7 +268,8 @@ def plan_for(controller, mission, context: dict, phase: str) -> dict:
                 "remaining_seconds": max(0, controller.db.get("deadline") - time.time())
                     if controller.db.get("deadline") else None,
                 "research_workers": "N chosen by Mother; dynamic trees share these N slots",
-                "all_roles": "GPT-6 Luna, reasoning max", "fresh_memory_per_program": True}
+                "control_identity": {key: settings[key] for key in ("model", "reasoning_effort")},
+                "research_generators": generator_pool(settings), "fresh_memory_per_program": True}
             request["messages"][1]["content"] = json.dumps(payload, ensure_ascii=False)
     if context.get("deadline_policy") == FINISH_STARTED:
         request.update(deadline_policy=FINISH_STARTED,
@@ -347,6 +349,11 @@ def plan_for(controller, mission, context: dict, phase: str) -> dict:
     record_timing(controller.db, "mother", time.time() - started)
     controller.db.event("mother_usage", result)
     atomic_json(journal / "result.json", result)
+    if persistent and phase == "preparation":
+        from .mother_plan_repair import repair_plan
+
+        result = repair_plan(controller, mission.epoch, request, result)
+        controller.db.set(key, result)
     return result
 
 

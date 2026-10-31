@@ -11,8 +11,8 @@ from pathlib import Path
 from .core import ForestError, InfrastructureError, atomic_json, digest, file_digest
 from .registry import Registry
 
-VERSION = "hpc-forest-diagnostics-v1"
-DEFAULTS = {"enabled": False, "require_allocation": True, "max_collections": 6,
+VERSION = "hpc-forest-diagnostics-v3-refinement-profiling"
+DEFAULTS = {"enabled": False, "require_allocation": True, "max_collections": 12,
             "collection_seconds": 120, "request_seconds": 300, "max_bytes": 268435456}
 
 
@@ -61,11 +61,13 @@ def owned(root: Path, name: str) -> Path:
     return result
 
 
-def authorize(root: Path, request: dict, *, source_ids=None, collect=None, config=None) -> dict | None:
+def authorize(root: Path, request: dict, *, source_ids=None, collect=None, config=None,
+              refinement=False) -> dict | None:
     """Freeze measured sources and permissions before publishing a native request.
 
-    Generators can read evidence. Mother and analysts can collect on measured
-    sources. Closing research also closes collection; assembly only reads.
+    Research generators, Mother and analysts can collect on frozen measured
+    sources. Assembly reads by default; an explicitly reserved refinement may
+    collect on its measured inputs while preserving code and confirmation time.
     """
     if config is not None and not settings(config)["enabled"]:
         return None
@@ -77,7 +79,7 @@ def authorize(root: Path, request: dict, *, source_ids=None, collect=None, confi
             return None
         epoch = db.get("current_epoch")
         sources = {}
-        for row in db.rows("SELECT * FROM evaluations WHERE epoch=? AND phase='search'", (epoch,)):
+        for row in db.rows("SELECT * FROM evaluations WHERE epoch=? AND phase IN ('search','postprocess')", (epoch,)):
             result = json.loads(row["payload"])
             if not result.get("commit") or (source_ids is not None and row["experiment_id"] not in source_ids):
                 continue
@@ -85,9 +87,23 @@ def authorize(root: Path, request: dict, *, source_ids=None, collect=None, confi
                 "tree_hash": result.get("tree_hash"), "official_correct": result.get("correct"),
                 "official_binary_sha256": result.get("binary_sha256"), "evaluation_id": row["id"]}
         role = request.get("meta_role", "generator")
-        allowed = role.startswith("mother-") or role in {"active-analyst", "active-mother"}
+        allowed = role.startswith("mother-") or role in {"active-analyst", "active-mother", "generator"}
         closed = (request.get("budget_phase") == "postprocess"
                   or db.get(f"search_closed:{epoch}") is not None)
+        refinement_seconds = 0.0
+        if refinement and request.get("budget_phase") == "postprocess":
+            from .independent_budget import assembly_admission, required_assembly_rounds
+
+            post = db.get(f"postprocess:{epoch}", {})
+            steps = post.get("steps", [])
+            budget = assembly_admission(db)
+            if (required_assembly_rounds(config) > 1 and any(s.get("outcome", {}).get("correct") for s in steps)
+                    and source_ids and budget["remaining_seconds"] is not None):
+                refinement_seconds = min(45.0, max(0, budget["remaining_seconds"] - budget["finish_seconds"]))
+        if refinement_seconds > 0:
+            policy = {**policy, "request_seconds": min(policy["request_seconds"], refinement_seconds),
+                      "collection_seconds": min(policy["collection_seconds"], refinement_seconds)}
+            closed = False
         if collect is not None:
             allowed = allowed and collect
         grant = {"version": VERSION, "nonce": identifier(request["nonce"]),
@@ -95,6 +111,7 @@ def authorize(root: Path, request: dict, *, source_ids=None, collect=None, confi
                  "role": role, "epoch": epoch, "protocol_id": db.get("protocol_id"),
                  "manifest": db.get("manifest"), "config_sha256": file_digest(root / "trusted/config.json"),
                  "sources": sources, "policy": policy, "can_collect": allowed and not closed,
+                 "reserved_refinement_seconds": refinement_seconds,
                  "created_at": time.time(), "expires_at": min(
                      time.time() + policy["request_seconds"], request.get("expires_at") or float("inf"),
                      db.get("deadline") or float("inf")),

@@ -105,8 +105,9 @@ configuration CI ne constitue pas un reçu d’exécution.
 Pour lancer une recherche, configurez votre compte ROMEO à l’aide du
 [guide de l’application](docs/APPLICATION.md#configuration-romeo) et du
 [profil d’exemple](docs/romeo.example.json). Les identifiants restent dans votre
-profil privé. Le contrôleur tourne dans l’allocation SLURM ; l’inférence est
-hébergée par OpenAI. Après soumission, la recherche peut continuer PC éteint.
+profil privé. Le contrôleur tourne dans l’allocation SLURM ; l’inférence utilise
+OpenAI ou la passerelle dsh-romeo déjà active sur ROMEO. Après soumission,
+la recherche peut continuer PC éteint.
 
 ## Périmètre et validation
 
@@ -128,6 +129,10 @@ validé est personnel et local ; consultez la [sécurité](docs/SECURITY.md) pou
 les frontières d’exécution et les conditions d’exposition.
 
 ## Documentation
+
+Forest propose les modèles OpenAI et **DeepSeek V4.1 Flash via dsh-romeo**, avec
+un effort adapté à chaque modèle. Pour connecter la passerelle ROMEO existante,
+suivre le [guide dsh-romeo](docs/APPLICATION.md#dsh-romeo--deepseek-sur-romeo).
 
 | Pour… | Lire… |
 |---|---|

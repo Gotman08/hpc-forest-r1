@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {escapeHTML, seconds, speedup, finite, routeFor} from "../src/hpc_forest/webapp/static/helpers.mjs";
 import {layoutTree, forestMarkup} from "../src/hpc_forest/webapp/static/graph.mjs";
-import {missionView, resultsView, trialPane} from "../src/hpc_forest/webapp/static/views.mjs";
+import {missionView, resultsView, trialPane, preparedView} from "../src/hpc_forest/webapp/static/views.mjs";
+import {modelFields,effortSelection,requiresDsh} from "../src/hpc_forest/webapp/static/models.mjs";
 import {searchControls,searchFormValues,searchSummary} from "../src/hpc_forest/webapp/static/search.mjs";
 import {historyPage} from "../src/hpc_forest/webapp/static/history.mjs";
 import {timeComparison,trialOutcomes,outcomeChart} from "../src/hpc_forest/webapp/static/result-charts.mjs";
@@ -155,4 +156,38 @@ test("Retired TabPFN has no controls; historical evidence remains readable",()=>
   assert(!result.includes("<script>"));
   assert(searchSummary({search_diagnostics:{policy:"ab-mcts-a",trees:[],models:[]},
     advisor:{enabled:true,calls:0}}).includes("Aucun avis émis"));
+});
+
+const deepseek="dsh-deepseek-v4.1-flash-1017-1m";
+const newModels=[
+  {id:"gpt-6.1-terra",label:"GPT-6.1 Terra",efforts:["low","high","max","ultra"],provider:"openai",default_effort:"max"},
+  {id:deepseek,label:"DeepSeek · ROMEO",efforts:["none","low","high","max"],provider:"dsh-romeo",default_effort:"max"}
+];
+test("Model controls use provider-specific efforts and preserve compatible selections",()=>{
+  assert.equal(effortSelection(deepseek,"ultra",newModels).value,"max");
+  assert.equal(effortSelection(deepseek,"none",newModels).value,"none");
+  assert.equal(effortSelection("gpt-6.1-terra","high",newModels).value,"high");
+  const html=modelFields({model:deepseek,reasoning_effort:"none"},{models:newModels});
+  assert(html.includes('optgroup label="ROMEO · dsh-romeo"'));
+  assert(html.includes('value="none" selected'));
+  assert(!html.includes('value="ultra"'));
+  assert(html.includes("dsh_romeo.base_url"));
+});
+test("New models participate in the generator pool without a hardcoded list",()=>{
+  const data=searchFormValues({model:deepseek,reasoning_effort:"none",mix_generators:"on",
+    "generator_gpt-6.1-terra":"on","generator_effort_gpt-6.1-terra":"ultra"});
+  assert.deepEqual(data.generator_pool,[{model:deepseek,reasoning_effort:"none"},
+    {model:"gpt-6.1-terra",reasoning_effort:"ultra"}]);
+  assert(!("generator_gpt-6.1-terra" in data));
+  assert(requiresDsh(data,newModels));
+  assert(requiresDsh({...data,model:"gpt-6.1-terra"},newModels));
+});
+test("Prepared DeepSeek mission requires the gateway configuration before launch",()=>{
+  const contract={model:deepseek,reasoning_effort:"high",generator_pool:[]};
+  const mission={id:"one",name:"Fixture",project_id:"project",target:"cpu",contract:{...contract,contract}};
+  const info={models:newModels,submission_enabled:true,connection:{targets:["cpu"]}};
+  assert(preparedView(mission,info).includes('data-action="launch" disabled'));
+  assert(preparedView(mission,info).includes("Configurez la connexion dsh-romeo"));
+  info.connection.dsh_romeo_configured=true;
+  assert(!preparedView(mission,info).includes('data-action="launch" disabled'));
 });

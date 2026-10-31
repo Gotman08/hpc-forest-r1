@@ -21,6 +21,8 @@ def git(repo: Path, *args: str, binary: bool = False):
             check=True,
             text=not binary,
             encoding=None if binary else "utf-8",
+            # Imported sources may be Latin-1; file contents are read with binary=True.
+            errors=None if binary else "replace",
             timeout=120,
         )
         return result.stdout if binary else result.stdout.strip()

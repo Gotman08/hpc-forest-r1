@@ -24,6 +24,14 @@ from .core import (
     run_process,
     verify_protected,
 )
+from .execution_validation import (
+    allocation_evidence,
+    build_probe,
+    environment,
+    probe_environment,
+    read_probe,
+    requirements,
+)
 from .gitops import ensure_clean, git
 from .support.budgets import expired, time_left
 
@@ -37,6 +45,13 @@ def create_evaluator(root, config, manifest, protocol_id, deadline=None):
 
 
 def target_identity(config: dict) -> dict:
+    validation = None
+    if config.get("execution_validation"):
+        # Observation time belongs to the audit receipt, not the frozen target.
+        # Keep the allocation, affinity, topology and requirements in its identity.
+        validation = {key: value for key, value in
+                      allocation_evidence(config["execution_validation"]).items()
+                      if key != "observed_at"}
     return {
         "target": config["target_id"],
         "hostname": socket.gethostname(),
@@ -57,6 +72,7 @@ def target_identity(config: dict) -> dict:
             }
         ),
         "environment": config["protocol"]["environment"],
+        **({"execution_validation": validation} if validation is not None else {}),
     }
 
 
@@ -167,6 +183,7 @@ class Evaluator:
         build = self.root / "builds" / f"e{epoch}" / experiment / phase / attempt
         build.mkdir(parents=True, exist_ok=True)
         variables = self._variables(worktree, build, phase)
+        variables["_baseline_reference"] = experiment == f"baseline-e{epoch}"
         built = self._run("build", variables, logs / "build.log", build=True)
         outcome.logs.append(built.log)
         if built.returncode == 70:
@@ -214,6 +231,9 @@ class Evaluator:
             outcome.status, outcome.correct, outcome.score = "incorrect", False, 0.0
             return outcome, variables, logs
         outcome.correct = True
+        self._execution_check(outcome, variables, logs)
+        if outcome.correct is not True:
+            return outcome, variables, logs
         for i in range(self.protocol["warmups"] if warmups else 0):
             result = self._run("benchmark", variables, logs / f"warmup-{i}.log")
             outcome.logs.append(result.log)
@@ -225,6 +245,55 @@ class Evaluator:
                 outcome.status, outcome.correct, outcome.score = "runtime_failed", False, 0.0
                 return outcome, variables, logs
         return outcome, variables, logs
+
+    def _execution_check(self, outcome: Outcome, variables: dict, logs: Path):
+        """Observe the actual workload separately from official performance samples."""
+        contract = requirements(self.config.get("execution_validation"))
+        if contract is None:
+            return
+        allocation = allocation_evidence(contract)
+        if allocation["status"] != "passed":
+            raise InfrastructureError("Execution allocation mismatch: " + "; ".join(allocation["reasons"]))
+        evidence = {"allocation": allocation, "parallelism": {"status": "not_required"}}
+        outcome.execution_validation = evidence
+        destination = logs / "execution-validation.json"
+        if variables.get("_baseline_reference"):
+            evidence["parallelism"] = {"status": "reference_only",
+                                       "reason": "Unchanged original; not eligible as a parallel winner"}
+        elif contract["parallelism"] == "gnu_openmp_required":
+            library = build_probe(logs)
+            binary, trace = Path(variables["binary"]), logs / "parallel-probe.jsonl"
+            env = probe_environment(binary, library, trace,
+                                    self.protocol["environment"] | environment(contract))
+            command = self.protocol.get("parallel_probe", self.protocol["benchmark"])
+            limit = self._timeout()
+            result = run_process(expand_command(command, **variables), Path(variables["worktree"]),
+                                 logs / "parallel-workload.log", limit, env)
+            outcome.logs.append(result.log)
+            if result.timed_out and self.deadline is not None and limit < self.protocol["timeout_seconds"]:
+                outcome.status, outcome.correct, outcome.score = "cancelled_budget", None, None
+                outcome.reason = "Campaign deadline exhausted during parallelism observation"
+                evidence["parallelism"] = {"status": "not_verified", "reason": outcome.reason}
+                from .core import atomic_json
+
+                atomic_json(destination, evidence)
+                return
+            if result.returncode == 70:
+                raise InfrastructureError("Parallelism observer failed; no candidate score")
+            if result.returncode or result.timed_out:
+                outcome.status, outcome.correct, outcome.score = "incorrect", False, 0.0
+                outcome.reason = "Parallel validation workload failed or timed out"
+                evidence["parallelism"] = {"status": "failed", "reason": outcome.reason}
+            else:
+                evidence["parallelism"] = read_probe(contract, trace, allocation, binary,
+                                                      outcome.binary_sha256, logs / "parallelism.json")
+                if evidence["parallelism"]["status"] != "passed":
+                    outcome.status, outcome.correct, outcome.score = "incorrect", False, 0.0
+                    outcome.reason = "Required GNU OpenMP team, CPU work or placement not observed"
+        from .core import atomic_json
+
+        atomic_json(destination, evidence)
+        outcome.logs.append(str(destination))
 
     def _prepare(self, experiment: str, epoch: int, worktree: Path, commit: str, phase: str,
                  *, warmups: bool = True):

@@ -81,6 +81,24 @@ RESULT_SCHEMA = {
 }
 
 
+def select_confirmed_program(valid: list[dict], baseline_id: str, config: dict):
+    """Promote only a measured program satisfying the frozen execution contract."""
+    reference = next((r for r in valid if r["experiment_id"] == baseline_id), None)
+    if reference is None:
+        raise ForestError("Reference confirmation failed; no candidate can be promoted")
+    strict = (config.get("execution_validation") or {}).get("parallelism") == "gnu_openmp_required"
+    eligible = [r for r in valid if r["experiment_id"] != baseline_id
+                and (r["outcome"].get("execution_validation") or {}).get(
+                    "parallelism", {}).get("status") == "passed"] if strict else valid
+    if not eligible:
+        raise ForestError("No confirmed program satisfies the required parallel execution contract")
+    winner = min(eligible, key=lambda r: r["outcome"]["mean_seconds"])
+    improvement = 1 - winner["outcome"]["mean_seconds"] / reference["outcome"]["mean_seconds"]
+    if improvement < config["minimum_gain"] and not strict:
+        winner, improvement = reference, 0.0
+    return reference, winner, improvement
+
+
 def create_workspace(
     destination: Path,
     config: dict | None = None,
@@ -258,7 +276,10 @@ class Controller:
     def _initialize_trees(self, epoch: int) -> None:
         roles = ["U"] if self.config["method"] == "U" else [*research_roles(self.db, epoch), "G"]
         for index, role in enumerate(roles):
-            self.search.initialize(epoch, role, self.config["seed"] + epoch * 101 + index)
+            child = assignment(self.db, role, epoch) if model_selected(self.config) else None
+            source = child.get("base_source_id") if child and child.get("kind") == "refinement" else None
+            self.search.initialize(epoch, role, self.config["seed"] + epoch * 101 + index,
+                                   root_source_id=source)
 
     def _baseline(self, epoch: dict) -> dict:
         existing = self.db.one(
@@ -893,15 +914,12 @@ class Controller:
                 post = self.db.get(f"postprocess:{epoch['id']}", {})
                 if post.get("outcome", {}).get("correct") is False:
                     valid = [r for r in valid if r["experiment_id"] != post.get("mission_id")]
-            reference = next((r for r in valid if r["experiment_id"] == baseline_id), None)
-            if reference is None:
+            try:
+                reference, winner, improvement = select_confirmed_program(valid, baseline_id, self.config)
+            except ForestError:
                 self.db.set("status", "confirmation_failed")
-                raise ForestError("Reference confirmation failed; no candidate can be promoted")
-            winner = min(valid, key=lambda r: r["outcome"]["mean_seconds"])
+                raise
             t0 = reference["outcome"]["mean_seconds"]
-            improvement = 1 - winner["outcome"]["mean_seconds"] / t0
-            if improvement < self.config["minimum_gain"]:
-                winner, improvement = reference, 0.0
             best = {
                 "experiment_id": winner["experiment_id"],
                 "commit": winner["outcome"]["commit"],
@@ -912,6 +930,7 @@ class Controller:
                 "protocol_id": self.db.get("protocol_id"),
                 "evaluation_digest": digest(winner["outcome"]),
                 "is_baseline": winner["experiment_id"] == baseline_id,
+                "execution_validation": winner["outcome"].get("execution_validation"),
             }
             self.db.set("best_confirmed", best)
             self.db.set("status", "confirmed")

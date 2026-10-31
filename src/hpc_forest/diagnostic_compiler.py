@@ -86,7 +86,7 @@ def prepare(directory, config, mode, run):
 
 def main():
     name, *arguments = sys.argv[1:]
-    compiler = json.loads(Path(os.environ["FOREST_DIAGNOSTIC_COMPILERS"]).read_text())[name]
+    compiler = json.loads(Path(os.environ["FOREST_DIAGNOSTIC_COMPILERS"]).read_text(encoding="utf8"))[name]
     mode = os.environ["FOREST_DIAGNOSTIC_MODE"]
     # Compiler discovery and configure probes must not gain compilation-only flags.
     compiles = any(Path(arg).suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".cu", ".f", ".f90"}

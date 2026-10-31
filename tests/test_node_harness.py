@@ -155,6 +155,8 @@ def test_development_target_wait_honors_the_deadline(episode):
 
 def test_precheck_build_failure_does_not_wait_for_target_lock(episode):
     mission, _, config, root = episode
+    # Protocol 1 compiles before waiting; protocol 2 waits for calm (test_protocol_v2).
+    config["protocol"]["version"] = 1
     (Path(mission.worktree) / "src/main.py").write_text("RESULT =\n", encoding="utf8")
     commit = initialize_source(Path(mission.worktree), tmp_path := root / "probe-broken")
     evaluator = Evaluator(

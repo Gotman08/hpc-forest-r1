@@ -18,6 +18,14 @@ UID pourrait accéder à d'autres fichiers ou processus, y compris au profil
 OAuth. Une offre pour plusieurs clients ou dépôts hostiles exige une séparation
 de comptes/identités et un isolement supplémentaire vérifié.
 
+Le protocole d'évaluation 2 ne stocke plus les réponses de confirmation : graines
+tirées au moment de la confirmation, sorties de contrat recalculées par la
+référence protégée. Sous le même UID, sans bac à sable, l'agent peut encore lire
+les entrées et la référence et recalculer ces réponses : la mesure empêche la
+lecture directe des réponses attendues, pas une triche délibérée en plusieurs
+étapes. Pour un projet de l'application, la confirmation reste la commande de
+test fournie et ses données.
+
 Les variables contenant jetons, clés, mots de passe et agents SSH sont retirées
 avant les commandes du protocole d'application. Cela réduit leur propagation
 accidentelle sans isoler le système de fichiers. Les commandes shell sont celles

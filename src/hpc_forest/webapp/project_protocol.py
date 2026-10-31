@@ -44,11 +44,16 @@ def run(phase: str, trusted: Path, worktree: Path, build: Path, evaluation_phase
         command = spec["contract"]["build_command"]
     else:
         command = spec["contract"]["test_command" if phase == "check" else "benchmark_command"]
+    # Each timed run keeps its own output, so the evaluator can compare it with the
+    # reference's; the cumulative log remains for diagnosis.
+    run_log = build / (phase + "-run.log")
     started = time.perf_counter()
-    with (build / (phase + "-output.log")).open("ab") as output:
+    with run_log.open("wb") as output:
         result = subprocess.run(["bash", "-euc", command], cwd=project, env=env,
                                 stdout=output, stderr=subprocess.STDOUT, check=False)
     elapsed = time.perf_counter() - started
+    with (build / (phase + "-output.log")).open("ab") as history:
+        history.write(run_log.read_bytes())
     if result.returncode:
         print((build / (phase + "-output.log")).read_text(errors="replace")[-12000:], file=sys.stderr)
         return 1
@@ -75,7 +80,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     try:
         sys.exit(run(args.phase, args.trusted, args.worktree, args.build, args.evaluation_phase))
-    except (OSError, ValueError) as exc:
+    except ValueError as exc:  # The candidate broke the protected project rules.
         print(str(exc), file=sys.stderr)
         sys.exit(1)
+    except OSError as exc:  # Storage or tooling failed: not the candidate's fault.
+        print(str(exc), file=sys.stderr)
+        sys.exit(70)
 

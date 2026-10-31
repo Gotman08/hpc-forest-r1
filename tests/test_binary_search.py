@@ -314,6 +314,10 @@ def test_final_confirmation_can_retain_an_ancestor_better_than_last_pair(db, tmp
                     a["mean_seconds"] for a in db.archive(epoch) if a["id"] == c["id"]))
                 for c in candidates}
     controller.evaluator.confirm = confirm
+    # Protocol 2 promotes after a fresh interleaved series of winner and reference.
+    controller.evaluator.remeasure = lambda reference, winner, epoch: {
+        "reference_times": [10.0] * 3, "winner_times": [0.5] * 3, "winner_status": "valid",
+        "winner_reason": "", "output_verification": "verified"}
     best = controller.confirm()
     assert best["experiment_id"] == archived[0]["id"]
     assert best["mean_seconds"] == 0.5 and not best["is_baseline"]

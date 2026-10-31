@@ -69,8 +69,50 @@ def test_timed_out_sanitizer_cannot_silently_validate_a_candidate(tmp_path):
     (tmp_path / "stdin.data").write_bytes(b"")
     stalled = {"name": "bounded probe", "files": [], "stdin": "stdin.data",
                "argv": ["-c", "import time; time.sleep(60)"]}
-    with pytest.raises(RuntimeError, match="correctness remains unverified"):
+    # Protocol 2: the candidate's own stalled program is its fault (exit 1, score 0),
+    # never an infrastructure failure (exit 70) that would stop the search.
+    with pytest.raises(c.ContractError, match="correctness remains unverified") as caught:
         c.probe_sanitizer(sys.executable, stalled, timeout=0.02, resources=tmp_path)
+    assert caught.value.diagnostic["code"] == "sanitizer_timeout"
+
+
+def test_verify_checks_a_timed_output_with_the_contract_comparison(tmp_path):
+    if not shutil.which("gcc"):
+        pytest.skip("gcc is unavailable")
+    root = official(tmp_path)
+    (root / "echo.c").write_text(
+        "#include <stdio.h>\nint main(void){int c;while((c=getchar())!=EOF)putchar(c);return 0;}\n"
+    )
+    trusted = Path(c.prepare(contract(), root, tmp_path / "prepared", probe_timeout=5)["validation"])
+    tool = [sys.executable, str(trusted / "contract_tool.py"), "verify"]
+    good, wrong = tmp_path / "good.out", tmp_path / "wrong.out"
+    good.write_bytes(b"abc\n")
+    wrong.write_bytes(b"abd\n")
+    assert subprocess.run([*tool, str(good), str(tmp_path)], capture_output=True).returncode == 0
+    result = subprocess.run([*tool, str(wrong), str(tmp_path)], capture_output=True, text=True)
+    assert result.returncode == 1 and json.loads(result.stdout)["correct"] is False
+
+
+def test_confirmation_outputs_are_recomputed_never_stored(tmp_path):
+    if not shutil.which("gcc"):
+        pytest.skip("gcc is unavailable")
+    root = official(tmp_path)
+    (root / "echo.c").write_text(
+        "#include <stdio.h>\nint main(void){int c;while((c=getchar())!=EOF)putchar(c);return 0;}\n"
+    )
+    hidden = {**contract(), "confirmation_cases": [case("held-out", {"text": "held out\n"})]}
+    trusted = Path(c.prepare(hidden, root, tmp_path / "prepared", probe_timeout=5)["validation"])
+    resolved = json.loads((trusted / "contract.json").read_text(encoding="utf-8"))
+    assert "expected" not in resolved["confirmation"][0]
+    assert all("expected" in item for item in resolved["search"])
+    reference = trusted / resolved["reference_binary"]
+    tool = [sys.executable, str(trusted / "contract_tool.py"), "check"]
+    assert subprocess.run([*tool, str(reference), "confirmation"], capture_output=True).returncode == 0
+    wrong = tmp_path / ("wrong" + reference.suffix)
+    source = tmp_path / "wrong.c"
+    source.write_text('#include <stdio.h>\nint main(void){puts("different");return 0;}\n')
+    subprocess.run(["gcc", str(source), "-o", str(wrong)], check=True)
+    assert subprocess.run([*tool, str(wrong), "confirmation"], capture_output=True).returncode == 1
 
 
 def test_text_and_numeric_binary_comparison():

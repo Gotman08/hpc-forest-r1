@@ -1,8 +1,21 @@
 """Controller-owned full-matrix oracle, independent from the C kernel."""
 
 import json
+import os
 import subprocess
 import sys
+
+SEEDS = "FOREST_CONFIRMATION_SEEDS"
+
+
+def confirmation_cases():
+    """Sizes are public; seeds drawn by the controller at confirmation are not.
+
+    Without drawn seeds (protocol 1), the historical fixed cases apply.
+    """
+    drawn = os.environ.get(SEEDS)
+    seeds = [int(value) for value in drawn.split(",")] if drawn else [99, 103, 107, 109]
+    return list(zip([2, 5, 19, 37], seeds, strict=True))
 
 
 def expected(n, seed):
@@ -15,7 +28,9 @@ def main():
     binary, phase = sys.argv[1:3]
     cases = [(1, 0), (3, 7), (17, 19), (33, 23)]
     if phase == "confirmation":
-        cases = [(2, 99), (5, 103), (19, 107), (37, 109)]
+        cases = confirmation_cases()
+    # The candidate never sees the drawn seeds in its own environment.
+    env = {key: value for key, value in os.environ.items() if key != SEEDS}
     try:
         for n, seed in cases:
             for repeats in [1, 2]:
@@ -25,6 +40,7 @@ def main():
                     text=True,
                     timeout=10,
                     check=True,
+                    env=env,
                 )
                 output = json.loads(process.stdout)
                 oracle = expected(n, seed)
@@ -37,7 +53,8 @@ def main():
     except (ValueError, KeyError, subprocess.SubprocessError, OSError) as exc:
         print(json.dumps({"correct": False, "cases": 0, "reason": str(exc)}))
         return 1
-    print(json.dumps({"correct": True, "cases": len(cases) * 2, "phase": phase}))
+    print(json.dumps({"correct": True, "cases": len(cases) * 2, "phase": phase,
+                      "seeds": [seed for _, seed in cases]}))
     return 0
 
 

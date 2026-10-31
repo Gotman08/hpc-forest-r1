@@ -24,6 +24,8 @@ from .support.budgets import (
     finish_started,
     unlimited_tokens,
 )
+from .support.protocol import CURRENT as PROTOCOL_VERSION
+from .support.protocol import SUPPORTED as SUPPORTED_PROTOCOLS
 from .support.validation import require_finite_number, require_integer
 
 DEFAULT = {
@@ -46,10 +48,15 @@ DEFAULT = {
         "max_depth": 0,  # Zero disables only the depth cap.
         "generation_seconds": 180,
         "infrastructure_retries": 1,
+        # Protocol 2: consecutive infrastructure failures that stop the search.
+        "infrastructure_breaker": 3,
         "confirmation_seconds": 180,
     },
     "schedule": {"cycles": None, "trials_per_role_per_cycle": 2, "integrations_per_cycle": 2},
     "protocol": {
+        # New campaigns use evaluation protocol 2; a frozen configuration
+        # without a version keeps the historical protocol 1.
+        "version": PROTOCOL_VERSION,
         "build": ["{python}", "{trusted}/build.py", "{worktree}", "{build}"],
         "check": ["{python}", "{trusted}/check.py", "{binary}", "{phase}"],
         "benchmark": ["{binary}", "256", "17", "4"],
@@ -238,6 +245,9 @@ def validate(c: dict) -> None:
         if name == "infrastructure_retries":
             require_integer(value, name, maximum=3)
             continue
+        if name == "infrastructure_breaker":
+            require_integer(value, "budget.infrastructure_breaker", minimum=1)
+            continue
         if name == "max_depth":
             continue
         if require_finite_number(value, f"budget.{name}") <= 0:
@@ -266,6 +276,12 @@ def validate(c: dict) -> None:
             raise ForestError(f"protocol.{name} must be positive")
     for name in ["repetitions", "confirmation_repetitions", "warmups"]:
         require_integer(c["protocol"][name], f"protocol.{name}", minimum=0 if name == "warmups" else 1)
+    if c["protocol"].get("version", 1) not in SUPPORTED_PROTOCOLS or type(c["protocol"].get("version", 1)) is not int:
+        raise ForestError("protocol.version must be 1 or 2")
+    verify = c["protocol"].get("benchmark_verify")
+    if verify is not None and (not isinstance(verify, list) or not verify
+                               or not all(isinstance(a, str) for a in verify)):
+        raise ForestError("protocol.benchmark_verify must be a nonempty argument array")
     for name in ["cycles", "trials_per_role_per_cycle", "integrations_per_cycle"]:
         if name == "cycles" and c["schedule"][name] is None:
             if c["method"] == "H-enumeration":

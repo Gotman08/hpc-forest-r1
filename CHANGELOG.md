@@ -2,6 +2,12 @@
 
 ## À venir
 
+- Protocole d'évaluation 2 pour les nouvelles campagnes : fautes du candidat
+  notées 0 et distinguées des pannes, disjoncteur à 3 pannes consécutives,
+  sorties chronométrées vérifiées, médiane et borne bootstrap après une
+  remesure entrelacée, compilations dans le calme, binaire compilé depuis le
+  commit et confirmation sans réponses stockées. Les campagnes existantes
+  gardent le protocole 1. Voir [l'architecture](docs/ARCHITECTURE.md).
 - Checkout public limité au produit, à ses exemples et à sa documentation ;
   campagnes, résultats et journaux conservés localement et ignorés par Git.
 - Démarrage sans données préchargées vérifié et clonage léger documenté.

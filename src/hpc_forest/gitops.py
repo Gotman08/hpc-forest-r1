@@ -81,7 +81,12 @@ def worktree_tree_hash(worktree: Path) -> str:
         git(worktree, "reset", "--quiet", "HEAD", "--", "src")
 
 
+def worktree_changed(worktree: Path, commit: str) -> bool:
+    """A moved HEAD or any status entry; a failing Git command still raises."""
+    return git(worktree, "rev-parse", "HEAD") != commit or bool(git(worktree, "status", "--porcelain"))
+
+
 def ensure_clean(worktree: Path, commit: str) -> None:
-    if git(worktree, "rev-parse", "HEAD") != commit or git(worktree, "status", "--porcelain"):
+    if worktree_changed(worktree, commit):
         raise InfrastructureError("Evaluation requires an unchanged exact commit")
 

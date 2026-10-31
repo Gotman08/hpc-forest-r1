@@ -50,6 +50,8 @@ def test_fast_tree_continues_after_its_score_and_all_admitted_work_drains(
     models = UnevenModels(fail_fast=failure == "generation")
     controller.backend = models
     controller.config["harness"]["enabled"] = False
+    # Protocol 2 stops at its breaker; a breaker of 1 keeps this drain-after-failure case.
+    controller.config["budget"]["infrastructure_breaker"] = 1
     original = controller._complete_generation
     settled, finalized, progress = [], [], []
     if failure == "setup":

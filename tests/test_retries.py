@@ -13,13 +13,13 @@ def test_transient_infrastructure_retry_preserves_both_logs_and_one_observation(
     real = Evaluator._run
     failed = False
 
-    def transient(self, name, variables, log, build=False):
+    def transient(self, name, variables, log, build=False, **kwargs):
         nonlocal failed
         if name == "build" and "baseline-e" not in str(log) and not failed:
             failed = True
             log.write_text("temporary compiler service failure", encoding="utf-8")
             return ProcessResult(["contract-fixture"], 70, 0.001, False, str(log))
-        return real(self, name, variables, log, build)
+        return real(self, name, variables, log, build, **kwargs)
 
     monkeypatch.setattr(Evaluator, "_run", transient)
     config["roles"] = ["A"]

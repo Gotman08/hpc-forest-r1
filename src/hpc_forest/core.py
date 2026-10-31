@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -130,19 +131,22 @@ def run_process(
     timeout: float | None,
     env: dict[str, str] | None = None,
     stdin: str | None = None,
+    stderr_log: Path | None = None,
 ) -> ProcessResult:
+    """Run with a watchdog; stderr joins the log unless stderr_log keeps stdout alone."""
     if timeout is not None and timeout <= 0:
         raise BudgetExhausted("Wall-clock deadline reached")
     log.parent.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
     expired = threading.Event()
     try:
-        with log.open("wb") as out:
+        with log.open("wb") as out, (
+                stderr_log.open("wb") if stderr_log is not None else contextlib.nullcontext()) as err:
             process = subprocess.Popen(
                 argv,
                 cwd=cwd,
                 stdout=out,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.STDOUT if err is None else err,
                 stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                 env={**os.environ, **(env or {})},
                 start_new_session=os.name != "nt",
@@ -246,6 +250,10 @@ class Outcome:
     logs: list[str] = field(default_factory=list)
     cache_key: str | None = None
     execution_validation: dict | None = None
+    # Protocol 2: decision statistic and the check of every timed output.
+    median_seconds: float | None = None
+    output_sha256: str | None = None
+    output_verification: str | None = None
 
 
 def local_target_id() -> str:

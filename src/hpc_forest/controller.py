@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from importlib.resources import files
 from pathlib import Path
+from statistics import median
 
 from hpc_forest.search import Search
 from hpc_forest.search.binary import SearchExhausted, enabled
@@ -65,6 +66,8 @@ from .support.budgets import (
     time_driven,
     unlimited_tokens,
 )
+from .support.gains import gain, gain_lower_bound
+from .support.protocol import v2 as v2_protocol
 from .support.sources import committed_source_snapshot
 from .toolchain import compiler_identity
 
@@ -81,6 +84,11 @@ RESULT_SCHEMA = {
 }
 
 
+def reference_seconds(outcome: dict) -> float:
+    """Protocol 2 measures against the reference median; protocol 1 against its mean."""
+    return outcome.get("median_seconds") or outcome["mean_seconds"]
+
+
 def select_confirmed_program(valid: list[dict], baseline_id: str, config: dict):
     """Promote only a measured program satisfying the frozen execution contract."""
     reference = next((r for r in valid if r["experiment_id"] == baseline_id), None)
@@ -92,11 +100,15 @@ def select_confirmed_program(valid: list[dict], baseline_id: str, config: dict):
                     "parallelism", {}).get("status") == "passed"] if strict else valid
     if not eligible:
         raise ForestError("No confirmed program satisfies the required parallel execution contract")
-    winner = min(eligible, key=lambda r: r["outcome"]["mean_seconds"])
-    improvement = 1 - winner["outcome"]["mean_seconds"] / reference["outcome"]["mean_seconds"]
+    winner = min(eligible, key=lambda r: reference_seconds(r["outcome"]))
+    improvement = 1 - reference_seconds(winner["outcome"]) / reference_seconds(reference["outcome"])
     if improvement < config["minimum_gain"] and not strict:
         winner, improvement = reference, 0.0
     return reference, winner, improvement
+
+
+def strict_parallel(config: dict) -> bool:
+    return (config.get("execution_validation") or {}).get("parallelism") == "gnu_openmp_required"
 
 
 def create_workspace(
@@ -585,7 +597,8 @@ class Controller:
                     mission.epoch,
                     Path(mission.worktree),
                     commit,
-                    baseline["mean_seconds"],
+                    reference_seconds(baseline),
+                    reference_output=baseline.get("output_sha256"),
                 )
                 record_evaluation_timing(self.db, mission.role, self.evaluator)
                 return outcome
@@ -661,9 +674,25 @@ class Controller:
         record_timing(self.db, "mission:" + mission.role,
                       time.time() - row["created"] + mission.selection.get("seconds", 0))
         if outcome.status == "infrastructure_error" and not bounded_generation_abort:
-            fatal = "infrastructure_error"
+            fatal = self.infrastructure_failure() or fatal
+        elif outcome.status != "infrastructure_error":
+            self.infrastructure_recovered()
         print(f"{mission.role} {mission.id}: {outcome.status}", flush=True)
         return fatal
+
+    def infrastructure_recovered(self) -> None:
+        if self.db.get("infrastructure_streak", 0):
+            self.db.set("infrastructure_streak", 0)
+
+    def infrastructure_failure(self) -> str | None:
+        """Protocol 1 stops at the first failure; protocol 2 after consecutive ones."""
+        if not v2_protocol(self.config):
+            return "infrastructure_error"
+        streak = self.db.get("infrastructure_streak", 0) + 1
+        limit = self.config["budget"].get("infrastructure_breaker", 3)
+        self.db.set("infrastructure_streak", streak)
+        self.db.event("infrastructure_streak", {"consecutive": streak, "breaker": limit})
+        return "infrastructure_error" if streak >= limit else None
 
     def run(self, max_batches: int | None = None, *, on_progress=None) -> dict:
         self.on_progress = on_progress
@@ -916,6 +945,9 @@ class Controller:
                     valid = [r for r in valid if r["experiment_id"] != post.get("mission_id")]
             try:
                 reference, winner, improvement = select_confirmed_program(valid, baseline_id, self.config)
+                remeasured = None
+                if v2_protocol(self.config) and winner["experiment_id"] != baseline_id:
+                    winner, improvement, remeasured = self._remeasured(epoch, candidates, reference, winner)
             except ForestError:
                 self.db.set("status", "confirmation_failed")
                 raise
@@ -932,6 +964,16 @@ class Controller:
                 "is_baseline": winner["experiment_id"] == baseline_id,
                 "execution_validation": winner["outcome"].get("execution_validation"),
             }
+            if v2_protocol(self.config):
+                fresh = remeasured if remeasured and winner["experiment_id"] != baseline_id else None
+                best.update(
+                    statistic="median",
+                    median_seconds=median(fresh["winner_times"]) if fresh else reference_seconds(winner["outcome"]),
+                    reference_median_seconds=(median(fresh["reference_times"]) if fresh
+                                              else reference_seconds(reference["outcome"])),
+                    improvement_lower_bound=fresh["lower_bound"] if fresh else None,
+                    remeasurement=remeasured,
+                )
             self.db.set("best_confirmed", best)
             self.db.set("status", "confirmed")
             finished_key = f"confirmation_finished:{epoch['id']}"
@@ -945,6 +987,30 @@ class Controller:
                 best["commit"],
             )
             return best
+
+    def _remeasured(self, epoch: dict, candidates: list[dict], reference: dict, winner: dict):
+        """Protocol 2: promote only when a fresh interleaved series bounds the gain.
+
+        The series and its decision are durable, so a resumed confirmation reuses them.
+        """
+        key = f"confirmation_remeasure:{epoch['id']}"
+        record = self.db.get(key)
+        if record is None or record.get("winner") != winner["experiment_id"]:
+            plan = {candidate["id"]: candidate for candidate in candidates}
+            record = {"winner": winner["experiment_id"], **self.evaluator.remeasure(
+                plan[reference["experiment_id"]], plan[winner["experiment_id"]], epoch["id"])}
+            if record["winner_times"]:
+                record.update(gain=gain(record["reference_times"], record["winner_times"]),
+                              lower_bound=gain_lower_bound(record["reference_times"], record["winner_times"],
+                                                           seed=self.config["seed"] + epoch["id"]))
+            self.db.set(key, record)
+        if not record["winner_times"]:
+            if strict_parallel(self.config):
+                raise ForestError("The parallel winner failed its fresh measurement; nothing can be promoted")
+            return reference, 0.0, record
+        if record["lower_bound"] < self.config["minimum_gain"] and not strict_parallel(self.config):
+            return reference, 0.0, record
+        return winner, record["gain"], record
 
     def new_epoch(self) -> dict:
         with FileLock(self.root / "campaign.lock"):

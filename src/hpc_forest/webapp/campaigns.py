@@ -137,8 +137,9 @@ class Campaigns:
         if best and (best.get("epoch") != epoch
                      or best.get("protocol_id") != m.get("protocol_id")):
             best = None
-        reference = number(best.get("reference_seconds")) if best else None
-        optimized = number(best.get("mean_seconds")) if best else None
+        # Protocol 2 records its decision statistic (medians) beside the historical means.
+        reference = number(best.get("reference_median_seconds", best.get("reference_seconds"))) if best else None
+        optimized = number(best.get("median_seconds", best.get("mean_seconds"))) if best else None
         confirmed = bool(reference and optimized and reference > 0 and optimized > 0)
         if not confirmed:
             best, reference, optimized = None, None, None

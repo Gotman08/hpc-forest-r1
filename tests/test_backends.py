@@ -121,13 +121,14 @@ def test_missing_infrastructure_does_not_become_an_incorrect_solution(
 
     real = Evaluator.evaluate
 
-    def unavailable(self, experiment, *args):
+    def unavailable(self, experiment, *args, **kwargs):
         if experiment.startswith("baseline"):
-            return real(self, experiment, *args)
+            return real(self, experiment, *args, **kwargs)
         raise InfrastructureError("simulated unavailable measurement target")
 
     monkeypatch.setattr(Evaluator, "evaluate", unavailable)
     config["roles"] = ["A"]
+    config["budget"]["infrastructure_breaker"] = 1  # Protocol 2 stops at its breaker: here the first failure.
     root = create_workspace(tmp_path / "infrastructure", config)
     with Controller(root) as controller:
         state = controller.run()

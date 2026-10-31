@@ -20,7 +20,7 @@ from hpc_forest.search.policy import settings as search_settings
 from ..compatibility import require_current
 from ..config import load_config, validate
 from ..core import InfrastructureError, atomic_json, file_digest
-from ..evaluator import Evaluator
+from ..evaluator import MAX_VERIFIED_OUTPUT, Evaluator
 from ..evolution_archive import settings as evolution_settings
 from ..gitops import git
 from ..model_policy import generator_pool, require_identity
@@ -223,6 +223,15 @@ def prepare_project(root: Path, launch: dict) -> dict:
 
 
 class ProjectEvaluator(Evaluator):
+    RUNNER_OWNED_BENCHMARK = True  # project_protocol.py exits 70 only for its own failures.
+
+    def _sample_output(self, item, index):
+        # The protected runner keeps the program's own output of the last timed run.
+        path = Path(item[1]["build"]) / "benchmark-run.log"
+        if not path.is_file() or path.stat().st_size > MAX_VERIFIED_OUTPUT:
+            return None
+        return path.read_bytes()
+
     def _variables(self, worktree, build, phase):
         result = super()._variables(worktree, build, phase)
         result["binary"] = str(build / "project" / self.config["app_protocol"]["binary"])

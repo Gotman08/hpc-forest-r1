@@ -550,7 +550,14 @@ def probe_sanitizer(binary, case, timeout=30, resources=None):
                     },
                 )
             except subprocess.TimeoutExpired as exc:
-                raise RuntimeError("Sanitizer probe timed out; correctness remains unverified") from exc
+                # The candidate's own program did not finish: its fault, never an
+                # infrastructure failure that would stop the search.
+                raise ContractError(
+                    "sanitizer_timeout",
+                    case["name"],
+                    "Sanitizer probe timed out; correctness remains unverified",
+                    timeout_seconds=timeout,
+                ) from exc
         stderr_text = result.stderr.decode(errors="replace")
         if (
             result.returncode
@@ -733,6 +740,15 @@ def prepare(contract, official, root, *, evidence_text="", probe_timeout=60):
     }
     slowest = max(seconds for _, seconds in cache.values())
     resolved["case_timeout_seconds"] = min(300, max(15, slowest * 4 + 5))
+    # Confirmation outputs are never stored: the protected reference program
+    # recomputes them when a confirmation is checked.
+    search_inputs = {c["input_fingerprint"] for c in resolved["search"]} | {resolved["benchmark"]["input_fingerprint"]}
+    for case in resolved["confirmation"]:
+        if case["input_fingerprint"] not in search_inputs:
+            del case["expected"]
+    reference_copy = trusted / ("reference-solution" + reference_binary.suffix)
+    shutil.copy2(reference_binary, reference_copy)
+    resolved["reference_binary"] = reference_copy.name
     write_json(trusted / "contract.json", resolved)
     write_json(root / "execution-contract.json", contract)
     bench = resolved["benchmark"]
@@ -807,6 +823,9 @@ def main():
             if key in seen:
                 continue
             seen.add(key)
+            if "expected" not in case:  # Hidden confirmation case: recompute from the reference.
+                case = {**case, "expected": execute(root / contract["reference_binary"], case,
+                                                    contract["case_timeout_seconds"], root)[0]}
             actual, _ = execute(binary, case, contract["case_timeout_seconds"], root)
             if not equal_output(case["expected"], actual, contract["comparison"]):
                 print(
@@ -824,6 +843,21 @@ def main():
                 return 1
             count += 1
         print(json.dumps({"correct": True, "cases": count}))
+    elif sys.argv[1] == "verify":
+        # protocol.benchmark_verify: ["{python}", "{trusted}/contract_tool.py", "verify", "{output}", "{build}"]
+        case, build = contract["benchmark"], Path(sys.argv[3])
+        actual = {"stdout": blob(Path(sys.argv[2]).read_bytes())}
+        for name in case["capture_files"]:
+            path = build / relative(name)
+            if not path.is_file() or path.stat().st_size > MAX_OUTPUT:
+                raise ContractError("output_size_or_missing", case["name"], "Missing or oversized contracted output",
+                                    output=name)
+            actual[name] = blob(path.read_bytes())
+        if not equal_output(case["expected"], actual, contract["comparison"]):
+            print(json.dumps({"correct": False, "case": case["name"], "reason": "Timed output mismatch",
+                              "mismatch": mismatch_diagnostic(case["expected"], actual, contract["comparison"])}))
+            return 1
+        print(json.dumps({"correct": True, "case": case["name"]}))
     else:
         raise RuntimeError("Unknown contract operation")
     return 0

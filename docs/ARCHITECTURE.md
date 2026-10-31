@@ -34,6 +34,33 @@ et modèle. Une reprise vérifie ces identités. Les anciennes clés du conseill
 sont refusées à l'exécution ; `compatibility.py` ne contient que refus, copie
 explicite et lecture historique.
 
+## Protocole d'évaluation 2
+
+Les nouvelles campagnes figent `protocol.version = 2` ; une configuration figée
+sans version garde le protocole 1, y compris à la reprise.
+
+- **Faute ou panne.** Le binaire est compilé depuis un export exact du commit et
+  s'exécute hors du worktree. Un délai dépassé, une écriture dans les sources, un
+  exécutable modifié ou un code de sortie du candidat reçoivent 0. Seul
+  l'outillage (runner, sonde, stockage) produit le code 70 et un score absent.
+- **Disjoncteur.** La recherche s'arrête après `budget.infrastructure_breaker`
+  pannes consécutives (3 par défaut). En confirmation, une panne n'écarte que le
+  finaliste concerné ; sans référence, la confirmation est réessayée.
+- **Mesures vérifiées.** Chaque exécution chronométrée est comparée à la sortie
+  stable de la référence, avec une tolérance numérique de 1e-9, ou au
+  vérificateur `protocol.benchmark_verify` lorsqu'il est configuré
+  (`contract_tool.py verify` pour un contrat à tolérances). Une référence instable
+  est enregistrée comme non vérifiable, jamais supposée correcte.
+- **Statistique.** Les décisions utilisent la médiane. Après la confirmation, le
+  vainqueur et la référence sont remesurés en série entrelacée neuve ; la
+  promotion exige une borne basse bootstrap à 95 % du gain au moins égale à
+  `minimum_gain`. La série et sa décision sont durables.
+- **Calme.** Les compilations de développement attendent le verrou de la cible :
+  aucune ne tourne pendant une mesure.
+- **Confirmation cachée.** Les graines de confirmation du vérificateur par défaut
+  sont tirées au moment de chaque confirmation ; un contrat ne stocke plus les
+  sorties attendues de confirmation, recalculées par la référence protégée.
+
 ## Persistance
 
 `staging → planned → submitting → queued → running → confirming → completed`.

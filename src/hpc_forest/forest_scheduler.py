@@ -104,17 +104,20 @@ def run_research(controller, epoch, baseline, max_rounds=None):
                     db.settle_tokens(slot, 0)
                 continue  # A shorter idle tree can still fit; retry after another result.
             except (ForestError, OSError, ValueError) as exc:
-                if slot:
-                    row = db.one("SELECT mission FROM trials WHERE slot_id=? AND state='pending'", (slot,))
-                    if row:
-                        abandoned = Mission(**json.loads(row["mission"]))
-                        controller._complete_generation(abandoned, slot,
-                            Generated(0, {"llm_calls": 0, "generation_not_started": "setup_failure"},
-                                      error=str(exc), infrastructure_error=True), baseline)
-                        counts[role] += 1
-                    else:
+                failure = None
+                row = slot and db.one("SELECT mission FROM trials WHERE slot_id=? AND state='pending'", (slot,))
+                if row:
+                    abandoned = Mission(**json.loads(row["mission"]))
+                    failure = controller._complete_generation(abandoned, slot,
+                        Generated(0, {"llm_calls": 0, "generation_not_started": "setup_failure"},
+                                  error=str(exc), infrastructure_error=True), baseline)
+                    counts[role] += 1
+                else:
+                    if slot:
                         db.settle_tokens(slot, 0)
-                fatal = "infrastructure_error"
+                    failure = controller.infrastructure_failure()
+                # Protocol 2 stops only once its breaker trips; this tree waits for another result.
+                fatal = fatal or failure
                 db.event("research_setup_failed", {"role": role, "reason": str(exc)})
                 return  # Drain the other admitted models rather than cancelling their trials.
             if not context:

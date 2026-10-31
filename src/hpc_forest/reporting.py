@@ -191,11 +191,18 @@ def report(root: Path, output: Path | None = None) -> Path:
             "",
         ]
         if best:
+            # Protocol 2 decides on medians and records a confidence bound of the gain.
+            timing = (f"Temps médian confirmé : {best['median_seconds']:.6f} s ; "
+                      f"référence médiane : {best['reference_median_seconds']:.6f} s."
+                      if best.get("statistic") == "median" else
+                      f"Temps confirmé : {best['mean_seconds']:.6f} s ; "
+                      f"référence confirmée : {best['reference_seconds']:.6f} s.")
+            bound = best.get("improvement_lower_bound")
             lines += [
                 f"Commit retenu après confirmation : `{best['commit']}`.",
-                f"Temps confirmé : {best['mean_seconds']:.6f} s ; "
-                f"référence confirmée : {best['reference_seconds']:.6f} s.",
-                f"Réduction mesurée : {best['improvement_fraction']:.1%}. "
+                timing,
+                f"Réduction mesurée : {best['improvement_fraction']:.1%}"
+                + (f" (borne basse à 95 % : {bound:.1%})" if bound is not None else "") + ". "
                 f"Référence conservée : {'oui' if best['is_baseline'] else 'non'}.",
                 "",
             ]

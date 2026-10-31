@@ -7,6 +7,7 @@ import json
 from .active_contract import enabled, settings
 from .active_state import state
 from .core import atomic_json
+from .support.spreadsheet import inert_row
 
 
 def summary(db):
@@ -80,5 +81,5 @@ def export(db, output):
         with (output / name).open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=fields)
             writer.writeheader()
-            writer.writerows(rows)
+            writer.writerows(inert_row(row) for row in rows)  # Rationales are model text.
     return result

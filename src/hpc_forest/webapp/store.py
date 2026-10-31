@@ -8,7 +8,7 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
-from .paths import AppError
+from .paths import NotFound
 
 
 class Store:
@@ -48,7 +48,7 @@ class Store:
         with self.connect() as db:
             row = db.execute("SELECT * FROM records WHERE id=?", (identifier,)).fetchone()
         if row is None or (kind is not None and row["kind"] != kind):
-            raise AppError("Projet ou mission introuvable.")
+            raise NotFound("Projet ou mission introuvable.")
         return {**json.loads(row["payload"]), "id": row["id"], "kind": row["kind"],
                 "created": row["created"], "updated": row["updated"]}
 
@@ -66,7 +66,7 @@ class Store:
                 "UPDATE records SET payload=?,updated=? WHERE id=? AND kind=?",
                 (json.dumps(payload, ensure_ascii=False), time.time(), identifier, kind))
             if cursor.rowcount != 1:
-                raise AppError("Projet ou mission introuvable.")
+                raise NotFound("Projet ou mission introuvable.")
         return self.get(identifier, kind)
 
     def mutate(self, identifier: str, change, *, kind: str) -> dict:
@@ -76,7 +76,7 @@ class Store:
             row = db.execute("SELECT payload FROM records WHERE id=? AND kind=?",
                              (identifier, kind)).fetchone()
             if row is None:
-                raise AppError("Projet ou mission introuvable.")
+                raise NotFound("Projet ou mission introuvable.")
             payload = change(json.loads(row["payload"]))
             db.execute("UPDATE records SET payload=?,updated=? WHERE id=? AND kind=?",
                        (json.dumps(payload, ensure_ascii=False, allow_nan=False), time.time(), identifier, kind))
@@ -97,7 +97,7 @@ class Store:
             row = db.execute("SELECT payload FROM records WHERE id=? AND kind=?",
                              (identifier, kind)).fetchone()
             if row is None:
-                raise AppError("Projet ou mission introuvable.")
+                raise NotFound("Projet ou mission introuvable.")
             payload = json.loads(row["payload"])
             if payload.get("state") != expected:
                 return False

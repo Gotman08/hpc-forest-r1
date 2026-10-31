@@ -154,7 +154,7 @@ Voir le [journal des changements](CHANGELOG.md).
 python -m pip install -e ".[web,dev]"
 python -m pytest
 python -m ruff check src tests
-node --test tests/test_web_frontend.mjs
+node --test "tests/*.mjs"
 ```
 
 Les tests locaux n’appellent aucun modèle hébergé et n’allouent aucun job HPC.

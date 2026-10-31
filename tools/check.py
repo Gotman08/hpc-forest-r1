@@ -43,7 +43,9 @@ def main() -> int:
     if not node and Path("C:/Program Files/nodejs/node.exe").is_file():
         node = "C:/Program Files/nodejs/node.exe"
     if node:
-        commands.append([node, "--test", "tests/test_web_frontend.mjs"])
+        # List every interface test explicitly; older Node versions do not expand globs.
+        commands.append([node, "--test", *sorted(p.relative_to(root).as_posix()
+                                                  for p in (root / "tests").glob("*.mjs"))])
     results = []
     for index, command in enumerate(commands, 1):
         completed = subprocess.run(

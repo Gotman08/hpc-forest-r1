@@ -6,15 +6,19 @@ import difflib
 import hashlib
 import io
 import json
+import logging
 import math
 import sqlite3
 from pathlib import Path
 
 from hpc_forest.search.diagnostics import diagnostics
+from hpc_forest.support.spreadsheet import inert_row
 
 from ..compatibility import historical_advisor
-from .paths import AppError, contained, database_uri, relative_name
+from .paths import AppError, NotFound, contained, database_uri, relative_name
 from .store import Store
+
+LOGGER = logging.getLogger(__name__)
 
 TEXT_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".cu", ".cuh",
                  ".py", ".sh", ".md", ".txt", ".json", ".toml"}
@@ -228,7 +232,10 @@ class Campaigns:
                     "id", "kind", "name", "state", "created", "started", "host", "target",
                     "speedup", "seconds", "reference_seconds", "trial_count", "read_only",
                     "mission_id", "project_id"]})
-            except (AppError, OSError):
+            except Exception as exc:
+                # One unexpected registry must not hide every campaign behind a server error.
+                if not isinstance(exc, (AppError, OSError)):
+                    LOGGER.warning("Campaign %s is unreadable: %s", record["id"], type(exc).__name__)
                 result.append({"id": record["id"], "kind": "campaign", "name": record["name"],
                                "state": "unavailable", "created": record["created"],
                                "read_only": True, "speedup": None,
@@ -240,7 +247,7 @@ class Campaigns:
         data = _read(self.root(identifier))
         row = next((row for row in data["trials"] if row["id"] == trial_id), None)
         if row is None:
-            raise AppError("Cette variante n'est pas dans la campagne affichée.")
+            raise NotFound("Cette variante n'est pas dans la campagne affichée.")
         trial = _trial(row)
         root = self.root(identifier)
         folder = contained(root, "worktrees/" + relative_name(trial_id))
@@ -264,7 +271,7 @@ class Campaigns:
         trial = self.trial(identifier, trial_id)
         name = relative_name(name)
         if name not in trial["files"]:
-            raise AppError("Ce fichier n'est pas disponible dans cette variante.")
+            raise NotFound("Ce fichier n'est pas disponible dans cette variante.")
         root = self.root(identifier)
         file = contained(root, "worktrees/" + relative_name(trial_id) + "/" + name)
         content = file.read_text(encoding="utf-8", errors="replace")
@@ -303,8 +310,5 @@ class Campaigns:
             selected = (trial["generator"] or config.get("codex", {})) if config.get("backend") == "codex" else {}
             trial.update(generator_model=selected.get("model"), generator_effort=selected.get("reasoning_effort"),
                          expansion=trial["selection"].get("expansion"), selection_seconds=trial["selection"].get("seconds"))
-            for key, value in trial.items():
-                if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
-                    trial[key] = "'" + value
-            writer.writerow(trial)
+            writer.writerow(inert_row(trial))
         return "\ufeff" + output.getvalue()

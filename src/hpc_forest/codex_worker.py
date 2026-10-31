@@ -105,10 +105,16 @@ class RomeoFiles:
 
     async def call(self, name, /, **arguments):
         response = await self.session.call_tool(name, arguments)
-        data = response.structuredContent
-        if data is None:
-            data = json.loads(next(c.text for c in response.content if c.type == "text"))
-        if response.isError or not isinstance(data, dict) or data.get("ok") is not True:
+        # A tool error is free text, not JSON: report it as a retryable transport
+        # failure instead of a decoding error that stops the relay.
+        data = None if response.isError else response.structuredContent
+        if data is None and not response.isError:
+            text = next((c.text for c in response.content if c.type == "text"), None)
+            try:
+                data = json.loads(text) if text is not None else None
+            except ValueError:
+                data = None
+        if not isinstance(data, dict) or data.get("ok") is not True:
             raise InfrastructureError(f"ROMEO file operation failed: {name}")
         return data
 

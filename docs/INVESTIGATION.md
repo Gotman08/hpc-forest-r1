@@ -208,7 +208,7 @@ restent interdites ; les résultats antérieurs restent lisibles.
 ## Validation reproductible
 
 Contrôles logiciels : `python -m pytest`, `python -m ruff check src tests`,
-`node --test tests/test_web_frontend.mjs`. `tests/test_diagnostics.py` distingue
+`node --test "tests/*.mjs"`. `tests/test_diagnostics.py` distingue
 les vrais sous-processus et échanges MCP des captures synthétiques de commandes
 de profileurs. Son test GCC POSIX compile réellement une petite fixture et
 vérifie les rapports et l'assembleur produits.

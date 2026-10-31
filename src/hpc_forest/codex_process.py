@@ -200,13 +200,17 @@ def usage_from_events(path: Path, *, observe_only: bool = False,
             event = json.loads(line)
         except ValueError:
             continue
+        if not isinstance(event, dict):
+            continue  # Merged stderr can hold bare JSON scalars; Codex events are objects.
         if event.get("type") == "turn.completed" and isinstance(event.get("usage"), dict):
             usage_events.append(event["usage"])
         failure = event.get("error")
         if (event.get("type") == "turn.failed" and isinstance(failure, dict)
                 and isinstance(failure.get("message"), str)):
             turn_failures.append(failure["message"])
-        item = event.get("item", {})
+        item = event.get("item")
+        if not isinstance(item, dict):
+            item = {}
         if event.get("type") in {"item.started", "item.completed", "item.updated"}:
             if item.get("type") == "error" and (allow_romeo_mcp or allow_documentation or diagnostic_tools):
                 message = str(item.get("message", ""))

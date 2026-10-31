@@ -75,6 +75,17 @@ def files_under(root):
                 yield path
 
 
+def artifact_bytes(root) -> int:
+    """Collected size; a temporary file a tool removes meanwhile is not a failure."""
+    total = 0
+    for path in files_under(root):
+        try:
+            total += path.stat().st_size
+        except FileNotFoundError:
+            pass
+    return total
+
+
 class Diagnostics:
     def __init__(self, root: Path, binding: dict, request=None):
         self.root = root.resolve(strict=True)
@@ -159,7 +170,7 @@ class Diagnostics:
                                 failure = "budget_exhausted"
                                 _kill_owned(process)
                                 break
-                            if sum(p.stat().st_size for p in files_under(directory)) > self.policy["max_bytes"]:
+                            if artifact_bytes(directory) > self.policy["max_bytes"]:
                                 failure = "artifact_limit"
                                 _kill_owned(process)
                                 break
@@ -172,7 +183,7 @@ class Diagnostics:
                             _kill_owned(process)
                         process.wait(timeout=10)
                 record["returncode"] = process.returncode
-                if sum(p.stat().st_size for p in files_under(directory)) > self.policy["max_bytes"]:
+                if artifact_bytes(directory) > self.policy["max_bytes"]:
                     failure = "artifact_limit"
                 if process.returncode and not failure:
                     with log.open("rb") as stream:
@@ -181,7 +192,10 @@ class Diagnostics:
                     failure = "permission_denied" if any(t in text for t in (
                         "permission", "not permitted", "err_nvgpuctrperm", "perf_event_paranoid")) else "collector_failed"
             except OSError as exc:
-                log.write_text(str(exc), encoding="utf8")
+                record["error"] = f"{type(exc).__name__}: {exc}"
+                # The tool's own output is the evidence: only an empty log receives the error.
+                if not log.is_file() or not log.stat().st_size:
+                    log.write_text(str(exc), encoding="utf8")
                 failure = "unavailable"
             finally:
                 record.update(seconds=time.monotonic() - started, failure=failure)

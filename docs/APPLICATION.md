@@ -306,7 +306,7 @@ anciens calculs restent dans les archives locales de leur propriétaire.
 python -m pip install -e ".[web,dev]" httpx
 python -m pytest
 python -m ruff check src tests
-node --test tests/test_web_frontend.mjs
+node --test "tests/*.mjs"
 python -m build --wheel
 ```
 

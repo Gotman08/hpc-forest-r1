@@ -2,6 +2,7 @@
 import copy
 import json
 import time
+import uuid
 
 import pytest
 from test_active_architecture import campaign, decision  # noqa: F401
@@ -180,3 +181,17 @@ def test_idle_recovery_respects_final_reserve_and_exhausted_trees(corrected):  #
     corrected.db.set("active_unavailable:1", {})
     corrected.db.set("deadline", time.time() + 1)
     assert not life.resume_after_idle_review(corrected.db, 1, ["T1", "T2"])
+
+
+def test_finished_turn_survives_non_utf8_stderr_in_the_native_log(tmp_path):
+    start, thread = request_for(first_turn()), str(uuid.uuid4())
+    output = tmp_path / "first"
+    output.mkdir()
+
+    def invoke():
+        started = json.dumps({"type": "thread.started", "thread_id": thread}).encode()
+        (output / "codex.jsonl").write_bytes("Expériences".encode("cp1252") + b"\n" + started)
+        return {"data": {"fixture": True}, "error": None}
+
+    result = run_turn(start, "1" * 64, output, invoke)
+    assert result["conversation"]["thread_id"] == thread

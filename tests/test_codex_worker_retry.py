@@ -363,3 +363,26 @@ def test_interrupted_response_write_leaves_no_truncated_cache(fixture, monkeypat
     response = wait_response(channel, request, request_sha)
     assert response["infrastructure_error"] and "not replayed" in response["error"]
     assert calls == [request["nonce"]]
+
+
+class ToolSession:
+    def __init__(self, response):
+        self.response, self.calls = response, 0
+
+    async def call_tool(self, name, arguments):
+        self.calls += 1
+        return self.response
+
+
+@pytest.mark.parametrize("error,content", [
+    (True, [SimpleNamespace(type="text", text="Error executing tool upload_to_romeo: timed out")]),
+    (False, []),
+    (False, [SimpleNamespace(type="text", text="not JSON")]),
+])
+def test_romeo_tool_errors_are_retried_as_transport_failures(tmp_path, error, content):
+    files = codex_worker.RomeoFiles(tmp_path / "codex.toml")
+    files.session = ToolSession(SimpleNamespace(isError=error, structuredContent=None, content=content))
+    with pytest.raises(InfrastructureError, match="after 2 attempts"):
+        asyncio.run(codex_worker.retry_transfer(
+            lambda: files.call("upload_to_romeo", local_path="x", remote_path="y"), attempts=2, retry_delay=0))
+    assert files.session.calls == 2

@@ -390,6 +390,51 @@ def test_executor_deadline_partial_logs_and_resource_lock(diagnostic_campaign):
         service._locked(lambda _: pytest.fail("No overlap with official evaluation"))
 
 
+def test_vanished_artifacts_neither_stop_a_collector_nor_replace_its_log(diagnostic_campaign, monkeypatch):
+    from hpc_forest import diagnostics as module
+
+    root, _ = diagnostic_campaign
+    request = request_for(root)
+    service = Diagnostics(root, request["diagnostics"], request)
+    directory = root / "diagnostics/vanishing"
+    directory.mkdir()
+    listed = module.files_under
+
+    def with_removed_temporary(base):
+        yield directory / "removed-by-the-tool.tmp"  # Listed, then deleted before stat().
+        yield from listed(base)
+
+    monkeypatch.setattr(module, "files_under", with_removed_temporary)
+    run, records = service._executor(directory, time.time() + 30, directory)
+    run([sys.executable, "-c", "print('profiler evidence')"], "tool")
+    assert records[0]["failure"] is None
+    assert "profiler evidence" in (directory / "tool.log").read_text(encoding="utf8")
+
+
+def test_storage_error_keeps_the_tool_output_as_evidence(diagnostic_campaign, monkeypatch):
+    from hpc_forest import diagnostics as module
+
+    root, _ = diagnostic_campaign
+    request = request_for(root)
+    service = Diagnostics(root, request["diagnostics"], request)
+    directory = root / "diagnostics/denied"
+    directory.mkdir()
+    listed = module.files_under
+
+    def denied_after_output(base):
+        log = directory / "tool.log"
+        if log.is_file() and b"profiler evidence" in log.read_bytes():
+            raise PermissionError("Synthetic storage refusal")
+        return listed(base)
+
+    monkeypatch.setattr(module, "files_under", denied_after_output)
+    run, records = service._executor(directory, time.time() + 30, directory)
+    with pytest.raises(DiagnosticFailure, match="inspect preserved"):
+        run([sys.executable, "-u", "-c", "import time; print('profiler evidence'); time.sleep(5)"], "tool")
+    assert records[0]["failure"] == "unavailable" and "PermissionError" in records[0]["error"]
+    assert "profiler evidence" in (directory / "tool.log").read_text(encoding="utf8")
+
+
 def test_romeo_worker_enables_the_actual_native_services(tmp_path, monkeypatch):
     from contextlib import asynccontextmanager
 

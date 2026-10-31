@@ -136,7 +136,9 @@ def run_turn(request: dict, request_sha: str, output: Path, invoke) -> dict:
             state["usage_cumulative"] = conversation_usage(response, previous, turn["turn"])
             events = []
             log = output / "codex.jsonl"
-            for line in log.read_text(encoding="utf-8").splitlines() if log.is_file() else []:
+            # MCP servers share this log through stderr: a stray non-UTF-8 byte
+            # must not turn a finished, charged turn into an interrupted one.
+            for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if log.is_file() else []:
                 try:
                     event = json.loads(line)
                 except ValueError:

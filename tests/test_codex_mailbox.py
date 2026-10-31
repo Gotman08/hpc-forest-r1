@@ -495,3 +495,13 @@ def test_worker_end_of_window_budget_stop_is_not_classified_as_transport_failure
     assert generated.usage["llm_calls"] == 0
     assert generated.usage["generation_not_started"] == "search_deadline"
 
+
+
+def test_usage_ignores_stderr_noise_merged_into_the_native_log(tmp_path):
+    path = tmp_path / "codex.jsonl"
+    events = [{"type": "item.completed", "item": "not an object"},
+              {"type": "turn.completed", "usage": {"input_tokens": 120, "output_tokens": 30}}]
+    noise = [b"null", b"42", b'"plain stderr"', "Exp\u00e9riences".encode("cp1252")]
+    path.write_bytes(b"\n".join([*noise, *(json.dumps(e).encode() for e in events)]))
+    usage, tools = usage_from_events(path)
+    assert usage["tokens"] == 150 and usage["token_accounting"] == "exact" and not tools

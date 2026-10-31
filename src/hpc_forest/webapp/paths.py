@@ -17,6 +17,10 @@ class AppError(ValueError):
     """An actionable error safe to show to the application user."""
 
 
+class NotFound(AppError):
+    """A requested record or evidence item does not exist (HTTP 404)."""
+
+
 def filesystem_path(path: Path) -> Path:
     """Keep nested evidence usable beyond Windows' legacy MAX_PATH boundary."""
     if os.name != "nt":

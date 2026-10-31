@@ -18,7 +18,7 @@ from ..core import FileLock
 from ..model_policy import EFFORT, MODEL, catalog
 from .campaigns import Campaigns
 from .execution import Missions, public_mission
-from .paths import MAX_FILE, MAX_FILES, MAX_UPLOAD, AppError, contained
+from .paths import MAX_FILE, MAX_FILES, MAX_UPLOAD, AppError, NotFound, contained
 from .projects import Projects, project_view
 from .store import Store
 
@@ -123,7 +123,7 @@ def create_app(data_dir: Path, campaign_roots: list[Path] | None = None,
 
     @app.exception_handler(AppError)
     async def application_error(_request, exc):
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse({"error": str(exc)}, status_code=404 if isinstance(exc, NotFound) else 400)
 
     @app.exception_handler(OSError)
     async def storage_error(_request, exc):

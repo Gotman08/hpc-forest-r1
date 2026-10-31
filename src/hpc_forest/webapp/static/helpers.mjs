@@ -46,6 +46,16 @@ export function routeFor(record) {
   if (record.kind === "prepared") return "#/mission/prepared/" + id;
   return "#/mission/campaign/" + id;
 }
+export function errorMessage(payload) {
+  if (typeof payload?.error === "string" && payload.error) return payload.error;
+  const detail = payload?.detail;
+  // FastAPI validation errors are a list of objects: name the fields, never "[object Object]".
+  if (Array.isArray(detail)) {
+    const fields = [...new Set(detail.map(item => (Array.isArray(item?.loc) ? item.loc.slice(1) : []).join(".")).filter(Boolean))];
+    return "Requête invalide" + (fields.length ? " : " + fields.join(", ") : "") + ".";
+  }
+  return typeof detail === "string" && detail ? detail : "L’action n’a pas abouti.";
+}
 export async function api(path, options = {}) {
   const response = await fetch("/api" + path, {
     ...options,
@@ -55,7 +65,7 @@ export async function api(path, options = {}) {
   let payload;
   try { payload = await response.json(); }
   catch { throw new Error("Le serveur n’a pas renvoyé une réponse lisible."); }
-  if (!response.ok) throw new Error(payload.error || payload.detail || "L’action n’a pas abouti.");
+  if (!response.ok) throw new Error(errorMessage(payload));
   return payload;
 }
 export function safeJSON(value) { return escapeHTML(JSON.stringify(value, null, 2)); }

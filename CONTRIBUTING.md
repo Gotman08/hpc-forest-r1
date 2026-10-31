@@ -15,7 +15,7 @@ Pour une installation de développement avec résolution des dépendances :
 python -m pip install -e ".[web,dev]"
 ```
 
-Node.js est nécessaire pour les tests de l’interface ; GCC/G++ pour les tests
+Node.js 22 ou plus récent est nécessaire pour les tests de l’interface ; GCC/G++ pour les tests
 de compilation. Le [workflow de validation](.github/workflows/validation.yml)
 décrit les profils Windows Python 3.13 et Linux Python 3.12.
 
@@ -26,7 +26,7 @@ Depuis la racine du dépôt :
 ```powershell
 python -m pytest
 python -m ruff check src tests tools
-node --test tests/test_web_frontend.mjs
+node --test "tests/*.mjs"
 ```
 
 Pour obtenir les journaux, les empreintes des sources et un reçu consolidé :

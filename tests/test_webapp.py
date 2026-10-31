@@ -3,6 +3,7 @@ import csv
 import hashlib
 import io
 import json
+import shutil
 import sqlite3
 import stat
 import zipfile
@@ -348,7 +349,7 @@ def test_api_rejects_cross_site_writes_and_rebinding(client):
     assert client.get("/api/info", headers={"Host": "malicious.example"}).status_code == 403
     assert client.post("/api/projects", headers={"X-Forest-Request": "1", "Origin": "https://other.example"}).status_code == 403
     assert client.post("/api/projects", headers={"X-Forest-Request": "1", "Content-Length": str(100 * 1024**2)}).status_code == 413
-    assert client.get("/api/projects/unknown").status_code == 400
+    assert client.get("/api/projects/unknown").status_code == 404
     assert client.get("/assets/../../pyproject.toml").status_code == 404
     streamed = client.put("/api/projects/unknown/contract", headers={"X-Forest-Request": "1", "Content-Type": "application/json"},
                            content=iter([b"x" * (1024 * 1024), b"x"]))
@@ -391,6 +392,35 @@ def test_history_preserves_synced_missions_without_local_preparation(client, pre
     assert store.get(synced["id"], "mission") == synced
     assert store.get(campaign["id"], "campaign") == campaign
     assert store.get(launched["id"], "prepared") == launched
+
+
+def test_one_malformed_registry_does_not_hide_the_other_campaigns(tmp_path, client, campaign):
+    odd = tmp_path / "odd-campaign"
+    shutil.copytree(campaign, odd)
+    db = sqlite3.connect(odd / "registry.sqlite3")
+    try:
+        db.execute("UPDATE metadata SET value=? WHERE key='forest_plan:1'",
+                   (json.dumps({"children": [{"subject": "Plan child without a role"}]}),))
+        db.commit()
+    finally:
+        db.close()
+    broken = client.app.state.campaigns.register(odd)
+    response = client.get("/api/campaigns")
+    assert response.status_code == 200
+    states = {item["id"]: item["state"] for item in response.json()}
+    assert len(states) == 2 and states[broken["id"]] == "unavailable"
+    assert client.get("/api/history").status_code == 200
+
+
+def test_missing_records_and_evidence_are_not_found_errors(client):
+    assert client.get("/api/missions/unknown").status_code == 404
+    campaign = client.get("/api/campaigns").json()[0]["id"]
+    assert client.get(f"/api/campaigns/{campaign}/trials/unknown").status_code == 404
+    missing = client.get(f"/api/campaigns/{campaign}/trials/a/source", params={"path": "src/absent.cpp"})
+    assert missing.status_code == 404 and missing.json()["error"]
+    # Validation errors keep FastAPI's field list for the interface to name.
+    invalid = client.get(f"/api/campaigns/{campaign}/trials/a/source")
+    assert invalid.status_code == 422 and isinstance(invalid.json()["detail"], list)
 
 
 def test_api_malformed_contract_and_paths_are_errors_not_crashes(client):

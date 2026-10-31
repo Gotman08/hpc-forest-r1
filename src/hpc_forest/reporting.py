@@ -22,6 +22,7 @@ from .model_skills import campaign_traces
 from .registry import Registry
 from .submission import delivery_manifest
 from .support.budgets import mandatory_final_g
+from .support.spreadsheet import inert_row
 
 
 def report(root: Path, output: Path | None = None) -> Path:
@@ -140,7 +141,7 @@ def report(root: Path, output: Path | None = None) -> Path:
             with (output / "search-generators.csv").open("w", encoding="utf-8-sig", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=list(model_rows[0]))
                 writer.writeheader()
-                writer.writerows(model_rows)
+                writer.writerows(inert_row(row) for row in model_rows)
         fields = [
             "id",
             "epoch",
@@ -165,8 +166,9 @@ def report(root: Path, output: Path | None = None) -> Path:
             writer = csv.DictWriter(stream, fieldnames=fields, extrasaction="ignore")
             writer.writeheader()
             for row in rows:
-                writer.writerow({**row, **{k: json.dumps(row[k]) for k in
-                    ("sources", "advice_ids", "authorized_import_ids", "selection")}})
+                # Reasons can quote compiler or model output.
+                writer.writerow(inert_row({**row, **{k: json.dumps(row[k]) for k in
+                    ("sources", "advice_ids", "authorized_import_ids", "selection")}}))
         best = db.get("best_confirmed")
         lines = [
             "# Rapport de campagne HPC Forest",

@@ -1,5 +1,6 @@
 """Regression cases for late results, source-grounded analysis and bounded closure."""
 import copy
+import csv
 import json
 import time
 
@@ -297,3 +298,36 @@ def test_trees_created_by_one_decision_receive_distinct_roles(corrected):
     # Each continuation imports only its own measured source, never the other tree's program.
     imports = state(corrected.db, 1)["imports"]
     assert imports[created[0]] == [one.id] and imports[created[1]] == [two.id]
+
+
+def test_exported_decision_rationales_never_become_spreadsheet_formulas(corrected, tmp_path):
+    from hpc_forest.active_reporting import export
+
+    trial(corrected, "T1")
+    snapshot = freeze(corrected, 1)
+    value = action("suspend", "T1")
+    value["rationale"] = '=HYPERLINK("https://example.invalid","open")'
+    apply(corrected.db, 1, "formula", snapshot, validate_decision(decision(snapshot, value), snapshot, set()))
+    export(corrected.db, tmp_path)
+    with (tmp_path / "active-decisions.csv").open(encoding="utf-8-sig", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert [row["rationale"] for row in rows] == ["'" + value["rationale"]]
+
+
+def test_protection_envelope_is_shared_by_every_progress(corrected):
+    from hpc_forest.independent_budget import forecast_independent
+
+    one = trial(corrected, "T1", 6)
+    life.observe(corrected.db, 1, one.id)
+    current = state(corrected.db, 1)
+    # Room for one protected follow-up in the whole campaign.
+    current["lifecycle"]["protection_limit_seconds"] = 1.5 * forecast_independent(
+        corrected.db, ["T9"])["candidate_work_seconds"]
+    corrected.db.set(key(1), current)
+    descendant(corrected, one, 0)
+    assert state(corrected.db, 1)["lifecycle"]["protected_seconds_reserved"] > 0
+    assert not life.protection_admissible(corrected.db, 1, "T1")
+    two = trial(corrected, "T2", 6)
+    life.observe(corrected.db, 1, two.id)
+    assert state(corrected.db, 1)["lifecycle"]["protections"]["T2"]["remaining"]
+    assert not life.protection_admissible(corrected.db, 1, "T2")

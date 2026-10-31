@@ -227,3 +227,12 @@ def test_expired_local_generation_never_contacts_metadata_or_model(tmp_path, con
         config, tmp_path,
     )
     assert result.tokens == 0 and result.usage["llm_calls"] == 0
+
+
+def test_spreadsheet_cells_never_start_a_formula():
+    from hpc_forest.support.spreadsheet import inert, inert_row
+
+    for text in ('=HYPERLINK("x")', "+1", "-2", "@SUM(A1)", "\tcmd", "\rcmd"):
+        assert inert(text) == "'" + text
+    row = {"reason": "=danger", "score": -0.5, "note": "measured"}
+    assert inert_row(row) == {"reason": "'=danger", "score": -0.5, "note": "measured"}

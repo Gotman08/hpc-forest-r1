@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {escapeHTML, seconds, speedup, finite, routeFor} from "../src/hpc_forest/webapp/static/helpers.mjs";
+import {escapeHTML, seconds, speedup, finite, routeFor, errorMessage} from "../src/hpc_forest/webapp/static/helpers.mjs";
 import {layoutTree, forestMarkup} from "../src/hpc_forest/webapp/static/graph.mjs";
 import {missionView, resultsView, trialPane, preparedView} from "../src/hpc_forest/webapp/static/views.mjs";
 import {modelFields,effortSelection,requiresDsh} from "../src/hpc_forest/webapp/static/models.mjs";
@@ -190,4 +190,12 @@ test("Prepared DeepSeek mission requires the gateway configuration before launch
   assert(preparedView(mission,info).includes("Configurez la connexion dsh-romeo"));
   info.connection.dsh_romeo_configured=true;
   assert(!preparedView(mission,info).includes('data-action="launch" disabled'));
+});
+
+test("API errors name the invalid fields instead of showing objects", () => {
+  assert.equal(errorMessage({error: "Projet ou mission introuvable."}), "Projet ou mission introuvable.");
+  assert.equal(errorMessage({detail: [{loc: ["query", "path"], msg: "Field required"}]}), "Requête invalide : path.");
+  assert.equal(errorMessage({detail: [{msg: "Field required"}]}), "Requête invalide.");
+  assert.equal(errorMessage({detail: "Not Found"}), "Not Found");
+  assert.equal(errorMessage(null), "L’action n’a pas abouti.");
 });

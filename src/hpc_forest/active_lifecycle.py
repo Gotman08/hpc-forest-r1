@@ -141,8 +141,10 @@ def protection_admissible(db, epoch, role):
         return False
     forecast = forecast_independent(db, [role])
     cost = forecast.get("candidate_work_seconds", forecast["next_work_seconds"])
+    # The envelope bounds every protected follow-up of the campaign, not each progress:
+    # a new progress must not reopen time that earlier protections already consumed.
     return (forecast["can_admit"] and cost <= max(0, (life["protection_limit_seconds"] or 0)
-            - item.get("reserved_seconds", 0.0)))
+            - life.get("protected_seconds_reserved", 0.0)))
 
 
 def waiting_for_analysis(db, epoch, role):
